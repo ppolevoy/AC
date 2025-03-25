@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Страница не найдена | Faktura Apps{% endblock %}
+
+{% block page_title %}Ошибка 404{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-code">404</div>
+    <div class="error-message">Страница не найдена</div>
+    <div class="error-description">Запрашиваемая страница не существует. Возможно, она была удалена или перемещена.</div>
+    <a href="{{ url_for('main.index') }}" class="back-button">Вернуться на главную</a>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+faktura-app/
+├── app/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── server.py
+│   │   ├── application.py
+│   │   └── event.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── routes.py
+│   │   └── utils.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── agent_service.py
+│   │   ├── application_service.py
+│   │   ├── server_service.py
+│   │   └── ansible_service.py
+│   ├── tasks/
+│   │   ├── __init__.py
+│   │   └── monitoring.py
+│   ├── static/
+│   │   ├── css/
+│   │   │   └── styles.css
+│   │   ├── js/
+│   │   │   ├── servers.js
+│   │   │   └── applications.js
+│   │   └── img/
+│   └── templates/
+│       ├── base.html
+│       ├── servers.html
+│       ├── applications.html
+│       └── modals/
+│           ├── update_dialog.html
+│           ├── confirm_dialog.html
+│           └── info_dialog.html
+├── scripts/
+│   └── init_db.py
+├── requirements.txt
+└── run.py

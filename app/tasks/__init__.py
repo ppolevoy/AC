@@ -1,0 +1,1 @@
+from app.tasks.monitoring import init_tasks
