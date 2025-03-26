@@ -20,6 +20,11 @@ def applications():
     """Страница со списком приложений"""
     return render_template('applications.html')
 
+@bp.route('/tasks')
+def tasks():
+    """Страница с очередью задач"""
+    return render_template('tasks.html')
+
 @bp.route('/server/<int:server_id>')
 def server_details(server_id):
     """Страница с детальной информацией о сервере"""

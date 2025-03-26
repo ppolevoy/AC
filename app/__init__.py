@@ -38,9 +38,10 @@ def create_app(config_name=None):
     from app.routes import bp as main_bp
     app.register_blueprint(main_bp)
     
-    # Инициализация задач мониторинга
-    from app.tasks import init_tasks
-    init_tasks(app)
+    # Инициализация задач (вынесено в отдельный блок, после всех импортов)
+    with app.app_context():
+        from app.tasks import init_tasks
+        init_tasks(app)
     
     return app
 
