@@ -3,12 +3,6 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
-from app import db
-from app.models.server import Server
-from app.models.application import Application
-from app.models.event import Event
-from app.services.agent_service import AgentService
-from app.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +26,12 @@ class MonitoringTasks:
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._run_monitoring, daemon=True)
         self.thread.start()
-        logger.info("Задачи мониторинга запущены")
+        
+        # Запускаем обработчик очереди задач
+        from app.tasks.queue import task_queue
+        task_queue.start_processing()
+        
+        logger.info("Задачи мониторинга и обработчик очереди задач запущены")
     
     def stop(self):
         """Остановка потока с задачами мониторинга"""
@@ -43,7 +42,12 @@ class MonitoringTasks:
         logger.info("Останавливаем задачи мониторинга...")
         self.stop_event.set()
         self.thread.join(timeout=30)
-        logger.info("Задачи мониторинга остановлены")
+        
+        # Останавливаем обработчик очереди задач
+        from app.tasks.queue import task_queue
+        task_queue.stop_processing()
+        
+        logger.info("Задачи мониторинга и обработчик очереди задач остановлены")
     
     def _run_monitoring(self):
         """Основной метод выполнения задач мониторинга"""
@@ -67,7 +71,16 @@ class MonitoringTasks:
                     except Exception as e:
                         logger.error(f"Ошибка при очистке старых событий: {str(e)}")
                 
+                # Запускаем задачу очистки старых задач в очереди
+                with self.app.app_context():
+                    try:
+                        from app.tasks.queue import task_queue
+                        task_queue.clear_completed_tasks()
+                    except Exception as e:
+                        logger.error(f"Ошибка при очистке старых задач: {str(e)}")
+                
                 # Ждем до следующего цикла опроса
+                from app.config import Config
                 logger.info(f"Следующий опрос через {Config.POLLING_INTERVAL} секунд")
                 for _ in range(Config.POLLING_INTERVAL):
                     if self.stop_event.is_set():
@@ -85,6 +98,9 @@ class MonitoringTasks:
     async def _poll_servers(self):
         """Опрос всех серверов"""
         try:
+            from app.models.server import Server
+            from app.services.agent_service import AgentService
+            
             servers = Server.query.all()
             
             if not servers:
@@ -123,6 +139,10 @@ class MonitoringTasks:
     def _clean_old_events(self):
         """Очистка старых событий"""
         try:
+            from app import db
+            from app.models.event import Event
+            from app.config import Config
+            
             # Определяем дату, старше которой события нужно удалить
             cutoff_date = datetime.utcnow() - timedelta(days=Config.CLEAN_EVENTS_OLDER_THAN)
             
@@ -134,6 +154,7 @@ class MonitoringTasks:
                 logger.info(f"Удалено {deleted_count} старых событий")
                 
         except Exception as e:
+            from app import db
             db.session.rollback()
             logger.error(f"Ошибка при очистке старых событий: {str(e)}")
             import traceback
@@ -142,7 +163,7 @@ class MonitoringTasks:
 # Глобальный экземпляр задач мониторинга
 monitoring_tasks = None
 
-def init_tasks(app):
+def init_monitoring(app):
     """Инициализация задач мониторинга при запуске приложения"""
     global monitoring_tasks
     

@@ -1569,3 +1569,541 @@ body.light-theme .add-server-btn-alt:hover {
 .back-button:hover {
     background-color: #4b8ec9;
 }
+
+/* Стили для страницы задач */
+.tasks-container {
+    margin-top: 20px;
+}
+
+.last-updated {
+    color: #888;
+    font-size: 14px;
+    text-align: right;
+}
+
+body.light-theme .last-updated {
+    color: #666;
+}
+
+/* Заголовок таблицы и элементы управления */
+.table-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+/* Группы фильтров */
+.filters {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+}
+
+.filter-group label {
+    margin-right: 10px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+body.light-theme .filter-group label {
+    color: #666;
+}
+/* Стилизация выпадающих списков */
+.select-container {
+    position: relative;
+    min-width: 120px;
+}
+
+.filter-select {
+    width: 100%;
+    background-color: #252528;
+    color: #ebe4da;
+    border: 1px solid #333336;
+    padding: 8px 30px 8px 12px;
+    border-radius: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+}
+
+body.light-theme .filter-select {
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.select-arrow {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #888;
+    font-size: 10px;
+}
+
+body.light-theme .select-arrow {
+    color: #666;
+}
+/* Статусы задач */
+.status-badge {
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-pending {
+    background-color: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+body.light-theme .status-pending {
+    background-color: rgba(243, 156, 18, 0.1);
+    color: #d35400;
+}
+
+.status-processing {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+body.light-theme .status-processing {
+    background-color: rgba(52, 152, 219, 0.1);
+    color: #2980b9;
+}
+
+.status-completed {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+body.light-theme .status-completed {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #27ae60;
+}
+
+.status-failed {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+body.light-theme .status-failed {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #c0392b;
+}
+
+/* Таблица данных */
+.data-table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid #333336;
+    background-color: #252528;
+}
+
+body.light-theme .data-table {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+}
+
+.data-table th,
+.data-table td {
+ 
+    text-align: left;
+    border-bottom: 1px solid #333336;
+}
+
+body.light-theme .data-table th,
+body.light-theme .data-table td {
+    border-bottom: 1px solid #eee;
+}
+
+.data-table th {
+    background-color: #2a2a2b;
+    color: #aaa;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+body.light-theme .data-table th {
+    background-color: #f0f0f0;
+    color: #666;
+}
+
+.data-table th:hover {
+    color: #5ca5e1;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.light-theme .data-table tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+
+
+/* Иконки сортировки */
+.sort-icon {
+    font-size: 10px;
+    margin-left: 5px;
+    color: #666;
+}
+
+/* Ширина столбцов */
+.col-id {
+    width: 110px;
+}
+
+.col-type {
+    width: 120px;
+}
+
+.col-app {
+    width: 180px;
+}
+
+.col-server {
+    width: 150px;
+}
+
+.col-status {
+    width: 110px;
+}
+
+.col-actions {
+    width: 80px;
+    text-align: center;
+}
+
+.data-table .col-created {
+    width: 185px;
+    max-width: 185px;
+    min-width: 185px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Подвал таблицы с пагинацией */
+.table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+}
+
+/* Пагинация */
+.pagination {
+    display: flex;
+    align-items: center;
+    color: #aaa;
+    font-size: 14px;
+}
+
+body.light-theme .pagination {
+    color: #666;
+}
+
+.pagination span {
+    margin: 0 10px;
+}
+
+.page-select {
+    width: 60px;
+    padding: 6px 25px 6px 10px;
+    background-color: #252528;
+    color: #ebe4da;
+    border: 1px solid #333336;
+    border-radius: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+}
+
+body.light-theme .page-select {
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+/* Кнопки пагинации */
+.pagination-controls {
+    display: flex;
+    align-items: center;
+}
+
+.pagination-info {
+    margin: 0 10px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+body.light-theme .pagination-info {
+    color: #666;
+}
+
+.pagination-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background-color: #252528;
+    border: 1px solid #333336;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+body.light-theme .pagination-btn {
+    background-color: #f5f5f5;
+    color: #666;
+    border: 1px solid #ddd;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background-color: #5ca5e1;
+    color: white;
+    border-color: #5ca5e1;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-icon {
+    font-size: 12px;
+}
+
+/* Действия с задачами */
+.task-action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background-color: transparent;
+    border: 1px solid #333336;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+body.light-theme .task-action-btn {
+    border: 1px solid #ddd;
+    color: #666;
+}
+
+.task-action-btn:hover {
+    background-color: rgba(92, 165, 225, 0.2);
+    color: #5ca5e1;
+    border-color: #5ca5e1;
+}
+
+.action-icon {
+    font-size: 14px;
+    font-style: normal;
+}
+
+/* Кнопка обновления */
+.refresh-icon {
+    font-size: 16px;
+    font-style: normal;
+}
+
+/* Анимация вращения */
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.rotating {
+    animation: rotate 1s linear infinite;
+}
+
+/* Статусы задач */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-pending {
+    background-color: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+body.light-theme .status-pending {
+    background-color: rgba(243, 156, 18, 0.1);
+    color: #d35400;
+}
+
+.status-processing {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+body.light-theme .status-processing {
+    background-color: rgba(52, 152, 219, 0.1);
+    color: #2980b9;
+}
+
+.status-completed {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+body.light-theme .status-completed {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #27ae60;
+}
+
+.status-failed {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+body.light-theme .status-failed {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #c0392b;
+}
+
+/* ID задачи */
+.task-id-cell {
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* Детали задачи */
+.task-info-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.task-info-section {
+    background-color: #2a2a2b;
+    border: 1px solid #333336;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+body.light-theme .task-info-section {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+}
+
+.task-info-section h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #333336;
+    color: #5ca5e1;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+body.light-theme .task-info-section h4 {
+    border-bottom: 1px solid #eee;
+}
+
+.task-params {
+    background-color: #252528;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+body.light-theme .task-params {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.task-result {
+    background-color: #252528;
+    border-radius: 4px;
+    padding: 10px;
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+body.light-theme .task-result {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.task-error {
+    background-color: rgba(231, 76, 60, 0.2);
+    border-radius: 4px;
+    padding: 10px;
+    color: #e74c3c;
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+body.light-theme .task-error {
+    background-color: rgba(231, 76, 60, 0.1);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .table-header-controls {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .filters {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .table-footer {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .pagination,
+    .pagination-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+}

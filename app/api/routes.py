@@ -11,6 +11,8 @@ from app.services.agent_service import AgentService
 from app.services.ansible_service import AnsibleService
 from app.api import bp
 
+from app.tasks.queue import task_queue, Task
+
 logger = logging.getLogger(__name__)
 
 # Вспомогательная функция для запуска асинхронных операций в синхронном коде
@@ -476,27 +478,24 @@ def update_application(app_id):
                 'error': f"Сервер для приложения {app.name} не найден"
             }), 404
         
-        # Запускаем процесс обновления приложения
-        # Передаем имя сервера, но update_application сам найдет ID по имени
-        success, message = run_async(AnsibleService.update_application(
-            server_name=server.name,
-            app_name=app.name,
-            app_id=app.id,
-            distr_url=data['distr_url'],
-            restart_mode=data['restart_mode'],
-            playbook_path=app.update_playbook_path
-        ))
+        # Создаем задачу и добавляем ее в очередь
+        task = Task(
+            task_type="update",
+            params={
+                "distr_url": data['distr_url'],
+                "restart_mode": data['restart_mode']
+            },
+            server_id=server.id,
+            application_id=app.id
+        )
         
-        if success:
-            return jsonify({
-                'success': True,
-                'message': message
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': message
-            }), 500
+        task_queue.add_task(task)
+        
+        return jsonify({
+            'success': True,
+            'message': f"Обновление приложения {app.name} поставлено в очередь",
+            'task_id': task.id
+        })
     except Exception as e:
         logger.error(f"Ошибка при обновлении приложения {app_id}: {str(e)}")
         return jsonify({
@@ -539,24 +538,21 @@ def manage_application(app_id):
                 'error': f"Сервер для приложения {app.name} не найден"
             }), 404
         
-        # Запускаем процесс управления приложением
-        success, message = run_async(AnsibleService.manage_application(
-            server_name=server.name,
-            app_name=app.name,
-            app_id=app.id,
-            action=action
-        ))
+        # Создаем задачу и добавляем ее в очередь
+        task = Task(
+            task_type=action,
+            params={},
+            server_id=server.id,
+            application_id=app.id
+        )
         
-        if success:
-            return jsonify({
-                'success': True,
-                'message': message
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': message
-            }), 500
+        task_queue.add_task(task)
+        
+        return jsonify({
+            'success': True,
+            'message': f"{action} для приложения {app.name} поставлен в очередь",
+            'task_id': task.id
+        })
     except Exception as e:
         logger.error(f"Ошибка при управлении приложением {app_id}: {str(e)}")
         return jsonify({
@@ -613,20 +609,22 @@ def bulk_manage_applications():
                 })
                 continue
             
-            # Запускаем процесс управления приложением
-            # Передаем имя сервера, но process_async сам найдет ID по имени
-            success, message = run_async(AnsibleService.manage_application(
-                server_name=server.name,
-                app_name=app.name,
-                app_id=app.id,
-                action=action
-            ))
+            # Создаем задачу и добавляем ее в очередь
+            task = Task(
+                task_type=action,
+                params={},
+                server_id=server.id,
+                application_id=app.id
+            )
+            
+            task_queue.add_task(task)
             
             results.append({
                 'app_id': app_id,
                 'app_name': app.name,
-                'success': success,
-                'message': message
+                'success': True,
+                'message': f"{action} для приложения {app.name} поставлен в очередь",
+                'task_id': task.id
             })
         
         return jsonify({
@@ -698,6 +696,84 @@ def get_grouped_applications():
         })
     except Exception as e:
         logger.error(f"Ошибка при получении сгруппированных приложений: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+        
+@bp.route('/tasks', methods=['GET'])
+def get_tasks():
+    """Получение списка задач"""
+    try:
+        status = request.args.get('status')
+        application_id = request.args.get('application_id', type=int)
+        server_id = request.args.get('server_id', type=int)
+        
+        tasks = task_queue.get_tasks(status, application_id, server_id)
+        result = []
+        
+        for task in tasks:
+            task_data = task.to_dict()
+            
+            # Добавляем имена приложения и сервера вместо ID
+            if task.application_id:
+                app = Application.query.get(task.application_id)
+                task_data['application_name'] = app.name if app else None
+            else:
+                task_data['application_name'] = None
+                
+            if task.server_id:
+                server = Server.query.get(task.server_id)
+                task_data['server_name'] = server.name if server else None
+            else:
+                task_data['server_name'] = None
+                
+            result.append(task_data)
+        
+        return jsonify({
+            'success': True,
+            'tasks': result
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка задач: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/tasks/<task_id>', methods=['GET'])
+def get_task(task_id):
+    """Получение информации о конкретной задаче"""
+    try:
+        task = task_queue.get_task(task_id)
+        
+        if not task:
+            return jsonify({
+                'success': False,
+                'error': f"Задача с id {task_id} не найдена"
+            }), 404
+        
+        task_data = task.to_dict()
+        
+        # Добавляем имена приложения и сервера вместо ID
+        if task.application_id:
+            app = Application.query.get(task.application_id)
+            task_data['application_name'] = app.name if app else None
+        else:
+            task_data['application_name'] = None
+            
+        if task.server_id:
+            server = Server.query.get(task.server_id)
+            task_data['server_name'] = server.name if server else None
+        else:
+            task_data['server_name'] = None
+        
+        return jsonify({
+            'success': True,
+            'task': task_data
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении информации о задаче {task_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
