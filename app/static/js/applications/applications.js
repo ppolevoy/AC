@@ -511,440 +511,634 @@ document.addEventListener('DOMContentLoaded', function() {
      * Модальное окно с информацией о приложении
      * @param {string} appId - ID приложения
      */
-    async function showAppInfoModal(appId) {
-        try {
-            const response = await fetch(`/api/applications/${appId}`);
-            const data = await response.json();
-            
-            if (!data.success) {
-                console.error('Ошибка при получении информации о приложении:', data.error);
-                showError('Не удалось получить информацию о приложении');
-                return;
-            }
-            
-            const app = data.application;
-            
-            // Клонируем шаблон модального окна
-            const modalTemplate = document.getElementById('app-info-modal-template');
-            if (!modalTemplate) {
-                console.error('Шаблон модального окна не найден');
-                return;
-            }
-            
-            const modalContent = document.importNode(modalTemplate.content, true);
-            
-            // Заполняем информацию о приложении
-            modalContent.querySelector('.app-name').textContent = app.name;
-            modalContent.querySelector('.app-type').textContent = app.app_type || 'Не указан';
-            modalContent.querySelector('.app-status').textContent = app.status || 'Неизвестно';
-            modalContent.querySelector('.app-version').textContent = app.version || 'Не указана';
-            modalContent.querySelector('.app-server').textContent = app.server_name || 'Не указан';
-            modalContent.querySelector('.app-ip').textContent = app.ip || 'Не указан';
-            modalContent.querySelector('.app-port').textContent = app.port || 'Не указан';
-            modalContent.querySelector('.app-path').textContent = app.path || 'Не указан';
-            modalContent.querySelector('.app-log-path').textContent = app.log_path || 'Не указан';
-            modalContent.querySelector('.app-distr-path').textContent = app.distr_path || 'Не указан';
-            
-            // Путь к playbook для обновления
-            const playbookInput = modalContent.querySelector('.app-playbook-path');
-            if (playbookInput) {
-                playbookInput.value = app.update_playbook_path || '';
-            }
-            
-            // Заполняем список событий
-            const eventsList = modalContent.querySelector('.events-list');
-            if (eventsList) {
-                if (app.events && app.events.length > 0) {
-                    const eventsTable = document.createElement('table');
-                    eventsTable.className = 'events-table';
-                    
-                    // Заголовок таблицы
-                    const headerRow = document.createElement('tr');
-                    headerRow.innerHTML = `
-                        <th>Дата</th>
-                        <th>Тип</th>
-                        <th>Статус</th>
-                    `;
-                    eventsTable.appendChild(headerRow);
-                    
-                    // Строки с событиями
-                    app.events.forEach(event => {
-                        const eventRow = document.createElement('tr');
-                        eventRow.className = `event-row ${event.status}`;
-                        
-                        const eventDate = new Date(event.timestamp);
-                        
-                        eventRow.innerHTML = `
-                            <td>${eventDate.toLocaleString()}</td>
-                            <td>${event.event_type}</td>
-                            <td>${event.status}</td>
-                        `;
-                        
-                        eventRow.setAttribute('title', event.description || '');
-                        eventsTable.appendChild(eventRow);
-                    });
-                    
-                    eventsList.appendChild(eventsTable);
-                } else {
-                    eventsList.innerHTML = '<p>Нет записей о событиях</p>';
-                }
-            }
-            
-            // Обработчик сохранения пути к playbook
-            const savePlaybookBtn = modalContent.querySelector('#save-playbook-path');
-            if (savePlaybookBtn && playbookInput) {
-                savePlaybookBtn.addEventListener('click', async function() {
-                    const playbookPath = playbookInput.value.trim();
-                    
-                    try {
-                        const response = await fetch(`/api/applications/${appId}/update_playbook`, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                playbook_path: playbookPath
-                            })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            showNotification('Путь к плейбуку успешно сохранен');
-                        } else {
-                            console.error('Ошибка при сохранении пути к плейбуку:', data.error);
-                            showError(data.error || 'Не удалось сохранить путь к плейбуку');
-                        }
-                    } catch (error) {
-                        console.error('Ошибка при сохранении пути к плейбуку:', error);
-                        showError('Не удалось сохранить путь к плейбуку');
-                    }
-                });
-            }
-            
-            // Отображаем модальное окно
-            window.showModal(`Информация о приложении: ${app.name}`, modalContent);
-            
-        } catch (error) {
-            console.error('Ошибка при получении информации о приложении:', error);
-            showError('Не удалось получить информацию о приложении');
-        }
-    }
-    
+	async function showAppInfoModal(appId) {
+		try {
+			const response = await fetch(`/api/applications/${appId}`);
+			const data = await response.json();
+			
+			if (!data.success) {
+				console.error('Ошибка при получении информации о приложении:', data.error);
+				showError('Не удалось получить информацию о приложении');
+				return;
+			}
+			
+			const app = data.application;
+			
+			// Создаем секции для модального окна
+			const sections = [
+				{
+					title: 'Основная информация',
+					type: 'table',
+					rows: [
+						{ label: 'Имя:', value: app.name },
+						{ label: 'Тип:', value: app.app_type || 'Не указан' },
+						{ label: 'Статус:', value: `<span class="status-badge ${app.status === 'online' ? 'status-completed' : 'status-failed'}">${app.status || 'Неизвестно'}</span>` },
+						{ label: 'Версия:', value: app.version || 'Не указана' },
+						{ label: 'Сервер:', value: app.server_name || 'Не указан' },
+						{ label: 'IP:', value: app.ip || 'Не указан' },
+						{ label: 'Порт:', value: app.port || 'Не указан' }
+					]
+				},
+				{
+					title: 'Пути и расположение',
+					type: 'table',
+					rows: [
+						{ label: 'Путь приложения:', value: app.path || 'Не указан' },
+						{ label: 'Путь к логам:', value: app.log_path || 'Не указан' },
+						{ label: 'Путь к дистрибутиву:', value: app.distr_path || 'Не указан' }
+					]
+				}
+			];
+			
+			// Добавляем секцию с настройками обновления
+			const settingsSection = {
+				title: 'Настройки обновления',
+				type: 'html',
+				content: `
+					<div class="form-group">
+						<label for="update-playbook-path">Путь к Ansible playbook:</label>
+						<div class="input-with-button">
+							<input type="text" id="update-playbook-path" class="form-control" value="${app.update_playbook_path || ''}">
+							<button type="button" id="save-playbook-path" class="action-btn">Сохранить</button>
+						</div>
+					</div>
+				`
+			};
+			sections.push(settingsSection);
+			
+			// Добавляем секцию с событиями, если они есть
+			if (app.events && app.events.length > 0) {
+				let eventsHtml = '<table class="events-table"><thead><tr><th>Дата</th><th>Тип</th><th>Статус</th></tr></thead><tbody>';
+				
+				app.events.forEach(event => {
+					const eventDate = new Date(event.timestamp);
+					eventsHtml += `
+						<tr class="event-row ${event.status}" title="${event.description || ''}">
+							<td>${eventDate.toLocaleString()}</td>
+							<td>${event.event_type}</td>
+							<td>${event.status}</td>
+						</tr>
+					`;
+				});
+				
+				eventsHtml += '</tbody></table>';
+				
+				const eventsSection = {
+					title: 'Последние события',
+					type: 'html',
+					content: eventsHtml
+				};
+				sections.push(eventsSection);
+			} else {
+				const eventsSection = {
+					title: 'Последние события',
+					type: 'html',
+					content: '<p>Нет записей о событиях</p>'
+				};
+				sections.push(eventsSection);
+			}
+			
+			// Отображаем модальное окно
+			ModalUtils.showInfoModal(`Информация о приложении: ${app.name}`, sections);
+			
+			// Добавляем обработчик для кнопки сохранения пути к playbook
+			document.getElementById('save-playbook-path').addEventListener('click', async function() {
+				const playbookPath = document.getElementById('update-playbook-path').value.trim();
+				
+				try {
+					const response = await fetch(`/api/applications/${appId}/update_playbook`, {
+						method: 'PUT',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify({
+							playbook_path: playbookPath
+						})
+					});
+					
+					const data = await response.json();
+					
+					if (data.success) {
+						showNotification('Путь к плейбуку успешно сохранен');
+					} else {
+						console.error('Ошибка при сохранении пути к плейбуку:', data.error);
+						showError(data.error || 'Не удалось сохранить путь к плейбуку');
+					}
+				} catch (error) {
+					console.error('Ошибка при сохранении пути к плейбуку:', error);
+					showError('Не удалось сохранить путь к плейбуку');
+				}
+			});
+		} catch (error) {
+			console.error('Ошибка при получении информации о приложении:', error);
+			showError('Не удалось получить информацию о приложении');
+		}
+	}    
     /**
      * Модальное окно подтверждения действия
      * @param {Array} appIds - Массив ID приложений
      * @param {string} action - Действие (start, stop, restart)
      */
-    function showConfirmActionModal(appIds, action) {
-        if (!appIds || appIds.length === 0) {
-            showError('Не выбрано ни одного приложения');
-            return;
-        }
-        
-        // Получаем название действия с помощью функции из utils.js
-        const actionName = getActionName(action);
-        
-        // Клонируем шаблон модального окна
-        const modalTemplate = document.getElementById('confirm-action-modal-template');
-        if (!modalTemplate) {
-            console.error('Шаблон модального окна не найден');
-            return;
-        }
-        
-        const modalContent = document.importNode(modalTemplate.content, true);
-        
-        // Устанавливаем название действия
-        const actionNameElem = modalContent.querySelector('.action-name');
-        if (actionNameElem) {
-            actionNameElem.textContent = actionName;
-        }
-        
-        // Заполняем список приложений
-        const appList = modalContent.querySelector('.app-list');
-        if (appList) {
-            const appListUl = document.createElement('ul');
-            
-            appIds.forEach(appId => {
-                const app = getAppById(appId);
-                if (app) {
-                    const li = document.createElement('li');
-                    li.textContent = `${app.name} (${app.server_name || 'Неизвестный сервер'})`;
-                    appListUl.appendChild(li);
-                }
-            });
-            
-            appList.appendChild(appListUl);
-        }
-        
-        // Обработчик для кнопки подтверждения
-        const confirmBtn = modalContent.querySelector('.confirm-btn');
-        if (confirmBtn) {
-            confirmBtn.textContent = `Подтвердить (${appIds.length})`;
-            
-            confirmBtn.addEventListener('click', async function() {
-                try {
-                    const response = await fetch('/api/applications/bulk/manage', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            action: action,
-                            app_ids: appIds
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        window.closeModal();
-                        
-                        // Анализируем результаты
-                        const successCount = data.results.filter(r => r.success).length;
-                        const errorCount = data.results.length - successCount;
-                        
-                        if (errorCount === 0) {
-                            showNotification(`Действие "${actionName}" успешно выполнено для всех выбранных приложений`);
-                        } else if (successCount === 0) {
-                            showError(`Не удалось выполнить действие "${actionName}" ни для одного из выбранных приложений`);
-                        } else {
-                            showNotification(`Действие "${actionName}" выполнено для ${successCount} из ${data.results.length} приложений`);
-                        }
-                        
-                        // Обновляем список приложений
-                        loadApplications();
-                    } else {
-                        console.error('Ошибка при выполнении действия:', data.error);
-                        showError(data.error || `Не удалось выполнить действие "${actionName}"`);
-                    }
-                } catch (error) {
-                    console.error('Ошибка при выполнении действия:', error);
-                    showError(`Не удалось выполнить действие "${actionName}"`);
-                }
-            });
-        }
-        
-        // Отображаем модальное окно
-        window.showModal(`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} приложения`, modalContent);
+	function showConfirmActionModal(appIds, action) {
+		if (!appIds || appIds.length === 0) {
+			showError('Не выбрано ни одного приложения');
+			return;
+		}
+		
+		// Получаем названия действий
+		const actionNames = {
+			'start': 'запустить',
+			'stop': 'остановить',
+			'restart': 'перезапустить'
+		};
+		
+		const actionName = actionNames[action] || action;
+		
+		// Получаем информацию о приложениях
+		const appItems = appIds.map(appId => {
+			const app = getAppById(appId);
+			return app ? `${app.name} (${app.server_name || 'Неизвестный сервер'})` : `App ID: ${appId}`;
+		});
+		
+		// Функция, которая будет выполнена при подтверждении
+		const confirmAction = async function() {
+			try {
+				const response = await fetch('/api/applications/bulk/manage', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({
+						action: action,
+						app_ids: appIds
+					})
+				});
+				
+				const data = await response.json();
+				
+				if (data.success) {
+					// Анализируем результаты
+					const successCount = data.results.filter(r => r.success).length;
+					const errorCount = data.results.length - successCount;
+					
+					if (errorCount === 0) {
+						showNotification(`Действие "${actionName}" успешно выполнено для всех выбранных приложений`);
+					} else if (successCount === 0) {
+						showError(`Не удалось выполнить действие "${actionName}" ни для одного из выбранных приложений`);
+					} else {
+						showNotification(`Действие "${actionName}" выполнено для ${successCount} из ${data.results.length} приложений`);
+					}
+					
+					// Обновляем список приложений
+					loadApplications();
+				} else {
+					console.error('Ошибка при выполнении действия:', data.error);
+					showError(data.error || `Не удалось выполнить действие "${actionName}"`);
+				}
+			} catch (error) {
+				console.error('Ошибка при выполнении действия:', error);
+				showError(`Не удалось выполнить действие "${actionName}"`);
+			}
+		};
+		
+		// Отображаем модальное окно подтверждения
+		ModalUtils.showConfirmModal(
+			`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} приложения`, // Заголовок
+			`Вы уверены, что хотите <span class="action-name">${actionName}</span> выбранные приложения?`, // Сообщение
+			appItems, // Список элементов
+			confirmAction, // Функция подтверждения
+			`Подтвердить (${appIds.length})`, // Текст кнопки
+			'confirm-btn' // Класс кнопки
+		);
+	}
+    
+/**
+ * Показывает модальное окно для обновления приложений
+ * @param {Array} appIds - Массив ID приложений
+ */
+function showUpdateModal(appIds) {
+    if (!appIds || appIds.length === 0) {
+        showError('Не выбрано ни одного приложения');
+        return;
     }
     
-    /**
-     * Модальное окно обновления приложения
-     * @param {Array} appIds - Массив ID приложений
-     */
-    function showUpdateModal(appIds) {
-        if (!appIds || appIds.length === 0) {
-            showError('Не выбрано ни одного приложения');
-            return;
-        }
-        
-        // Клонируем шаблон модального окна
-        const modalTemplate = document.getElementById('update-modal-template');
-        if (!modalTemplate) {
-            console.error('Шаблон модального окна не найден');
-            return;
-        }
-        
-        const modalContent = document.importNode(modalTemplate.content, true);
-        
-        const updateForm = modalContent.querySelector('#update-form');
-        const tabsContainer = modalContent.querySelector('#update-tabs');
-        
-        // Если выбрано несколько приложений, которые не относятся к одной группе,
-        // создаем вкладки для каждого приложения
-        if (appIds.length > 1) {
-            const appGroups = {};
-            
-            // Группируем приложения по имени группы
-            appIds.forEach(appId => {
-                const app = getAppById(appId);
-                if (app) {
-                    const groupName = app.group_name || app.name;
-                    if (!appGroups[groupName]) {
-                        appGroups[groupName] = [];
-                    }
-                    appGroups[groupName].push(app);
-                }
-            });
-            
-            // Если есть несколько групп, создаем вкладки
-            if (Object.keys(appGroups).length > 1) {
-                // Показываем контейнер с вкладками
-                if (tabsContainer) {
-                    tabsContainer.style.display = 'flex';
-                }
-                
-                // Создаем вкладки
-                Object.keys(appGroups).forEach((groupName, index) => {
-                    const tab = document.createElement('div');
-                    tab.className = `modal-tab ${index === 0 ? 'active' : ''}`;
-                    tab.textContent = groupName;
-                    tab.setAttribute('data-group', groupName);
-                    tabsContainer.appendChild(tab);
-                    
-                    // Обработчик клика по вкладке
-                    tab.addEventListener('click', function() {
-                        const activeTab = tabsContainer.querySelector('.modal-tab.active');
-                        if (activeTab) {
-                            activeTab.classList.remove('active');
-                        }
-                        tab.classList.add('active');
-                        
-                        // Обновляем форму для выбранной группы
-                        updateFormForGroup(groupName);
-                    });
-                });
-                
-                // Функция для обновления формы в зависимости от выбранной группы
-                function updateFormForGroup(groupName) {
-                    const apps = appGroups[groupName];
-                    const appIds = apps.map(app => app.id);
-                    
-                    // Обновляем скрытое поле с ID приложений
-                    let appIdsInput = updateForm.querySelector('input[name="app-ids"]');
-                    if (!appIdsInput) {
-                        appIdsInput = document.createElement('input');
-                        appIdsInput.type = 'hidden';
-                        appIdsInput.name = 'app-ids';
-                        updateForm.appendChild(appIdsInput);
-                    }
-                    appIdsInput.value = appIds.join(',');
-                    
-                    // Обновляем заголовок формы
-                    const formTitle = updateForm.querySelector('.form-title');
-                    if (formTitle) {
-                        formTitle.textContent = `Обновление ${apps.length} приложений группы "${groupName}"`;
-                    }
-                    
-                    // Если приложения одного типа, предлагаем путь к дистрибутиву по умолчанию
-                    const firstApp = apps[0];
-                    if (firstApp && firstApp.distr_path) {
-                        const distrUrlInput = updateForm.querySelector('#distr-url');
-                        if (distrUrlInput) {
-                            distrUrlInput.value = firstApp.distr_path;
-                            distrUrlInput.placeholder = 'URL или путь к дистрибутиву';
-                        }
-                    }
-                }
-                
-                // Инициализируем форму для первой группы
-                updateFormForGroup(Object.keys(appGroups)[0]);
-            } else {
-                // Если все приложения одной группы, создаем простую форму
-                setupSingleUpdateForm(appIds);
-            }
-        } else {
-            // Если выбрано только одно приложение, создаем простую форму
-            setupSingleUpdateForm(appIds);
-        }
-        
-        // Настройка формы для одного приложения или одной группы
-        function setupSingleUpdateForm(appIds) {
-            // Скрываем контейнер с вкладками
-            if (tabsContainer) {
-                tabsContainer.style.display = 'none';
-            }
-            
-            // Добавляем скрытое поле с ID приложений
-            const appIdsInput = document.createElement('input');
-            appIdsInput.type = 'hidden';
-            appIdsInput.name = 'app-ids';
-            appIdsInput.value = appIds.join(',');
-            updateForm.appendChild(appIdsInput);
-            
-            // Если это одно приложение, предлагаем путь к дистрибутиву по умолчанию
-            if (appIds.length === 1) {
-                const app = getAppById(appIds[0]);
-                if (app && app.distr_path) {
-                    const distrUrlInput = updateForm.querySelector('#distr-url');
-                    if (distrUrlInput) {
-                        distrUrlInput.value = app.distr_path;
-                        distrUrlInput.placeholder = 'URL или путь к дистрибутиву';
-                    }
-                }
-            }
-        }
-        
-        // Обработчик отправки формы
-        if (updateForm) {
-            updateForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const appIdsInput = updateForm.querySelector('input[name="app-ids"]');
-                const distrUrlInput = updateForm.querySelector('#distr-url');
-                const restartModeInputs = updateForm.querySelectorAll('input[name="restart-mode"]');
-                
-                if (!appIdsInput || !distrUrlInput) {
-                    showError('Ошибка в форме обновления');
-                    return;
-                }
-                
-                const appIds = appIdsInput.value.split(',').map(id => parseInt(id.trim()));
-                const distrUrl = distrUrlInput.value.trim();
-                
-                let restartMode = 'restart'; // По умолчанию
-                for (const input of restartModeInputs) {
-                    if (input.checked) {
-                        restartMode = input.value;
-                        break;
-                    }
-                }
-                
-                if (!distrUrl) {
-                    showError('Укажите URL дистрибутива');
-                    return;
-                }
-                
-                try {
-                    // Создаем массив запросов для всех приложений
-                    const updatePromises = appIds.map(appId => 
-                        fetch(`/api/applications/${appId}/update`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                distr_url: distrUrl,
-                                restart_mode: restartMode
-                            })
-                        }).then(response => response.json())
-                    );
-                    
-                    // Ждем выполнения всех запросов
-                    const results = await Promise.all(updatePromises);
-                    
-                    // Анализируем результаты
-                    const successCount = results.filter(result => result.success).length;
-                    const errorCount = results.length - successCount;
-                    
-                    // Закрываем модальное окно
-                    window.closeModal();
-                    
-                    if (errorCount === 0) {
-                        showNotification(`Обновление успешно запущено для всех выбранных приложений`);
-                    } else if (successCount === 0) {
-                        showError(`Не удалось запустить обновление ни для одного из выбранных приложений`);
-                    } else {
-                        showNotification(`Обновление запущено для ${successCount} из ${results.length} приложений`);
-                    }
-                    
-                    // Обновляем список приложений
-                    loadApplications();
-                    
-                } catch (error) {
-                    console.error('Ошибка при обновлении приложений:', error);
-                    showError('Не удалось запустить обновление приложений');
-                }
-            });
-        }
-        
-        // Отображаем модальное окно
-        const title = appIds.length === 1 ? 
-            `Обновление приложения: ${getAppById(appIds[0])?.name || 'Приложение'}` : 
-            `Обновление ${appIds.length} приложений`;
-        
-        window.showModal(title, modalContent);
+    // Определяем заголовок модального окна
+    let title = '';
+    if (appIds.length === 1) {
+        const app = getAppById(appIds[0]);
+        title = `Обновление приложения: ${app ? app.name : 'Приложение'}`;
+    } else {
+        title = `Обновление ${appIds.length} приложений`;
     }
+    
+    // Для обычного случая (одно приложение или одна группа) используем стандартную форму
+    if (appIds.length === 1) {
+        showSimpleUpdateModal(appIds[0], title);
+        return;
+    }
+    
+    // Группируем приложения по имени группы
+    const appGroups = {};
+    appIds.forEach(appId => {
+        const app = getAppById(appId);
+        if (app) {
+            const groupName = app.group_name || app.name;
+            if (!appGroups[groupName]) {
+                appGroups[groupName] = [];
+            }
+            appGroups[groupName].push(app);
+        }
+    });
+    
+    // Если есть только одна группа, показываем простую форму
+    if (Object.keys(appGroups).length === 1) {
+        const groupName = Object.keys(appGroups)[0];
+        const groupApps = appGroups[groupName];
+        const groupAppIds = groupApps.map(app => app.id);
+        
+        showSimpleUpdateModal(groupAppIds, `Обновление группы: ${groupName}`);
+        return;
+    }
+    
+    // Если есть несколько групп, создаем модальное окно с вкладками
+    showTabsUpdateModal(appGroups, title);
+}
+
+/**
+ * Показывает простое модальное окно обновления для одного приложения или группы
+ * @param {number|Array} appIds - ID приложения или массив ID
+ * @param {string} title - Заголовок модального окна
+ */
+function showSimpleUpdateModal(appIds, title) {
+    const appIdsArray = Array.isArray(appIds) ? appIds : [appIds];
+    
+    // Определяем значение дистрибутива по умолчанию
+    let defaultDistrPath = '';
+    if (appIdsArray.length === 1) {
+        const app = getAppById(appIdsArray[0]);
+        if (app && app.distr_path) {
+            defaultDistrPath = app.distr_path;
+        }
+    }
+    
+    // Определяем поля формы
+    const formFields = [
+        {
+            id: 'distr-url',
+            name: 'distr_url',
+            label: 'URL дистрибутива:',
+            type: 'text',
+            value: defaultDistrPath,
+            required: true
+        },
+        {
+            id: 'restart-mode',
+            name: 'restart_mode',
+            label: 'Режим обновления:',
+            type: 'radio',
+            value: 'restart',
+            options: [
+                { value: 'restart', text: 'В рестарт' },
+                { value: 'immediate', text: 'Сейчас' }
+            ]
+        },
+        {
+            id: 'app-ids',
+            name: 'app_ids',
+            type: 'hidden',
+            value: appIdsArray.join(',')
+        }
+    ];
+    
+    // Функция, которая будет выполнена при отправке формы
+    const submitAction = processUpdateForm;
+    
+    // Отображаем модальное окно с формой
+    ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
+}
+
+/**
+ * Показывает модальное окно обновления с вкладками для групп приложений
+ * @param {Object} appGroups - Объект групп приложений
+ * @param {string} title - Заголовок модального окна
+ */
+function showTabsUpdateModal(appGroups, title) {
+    // Создаем контейнер с содержимым модального окна
+    const modalContent = document.createElement('div');
+    
+    // Создаем контейнер для вкладок
+    const tabsContainer = document.createElement('div');
+    tabsContainer.className = 'modal-tabs';
+    modalContent.appendChild(tabsContainer);
+    
+    // Создаем форму
+    const form = document.createElement('form');
+    form.id = 'update-form';
+    form.className = 'modal-form';
+    modalContent.appendChild(form);
+    
+    // Создаем вкладки
+    Object.keys(appGroups).forEach((groupName, index) => {
+        const tab = document.createElement('div');
+        tab.className = `modal-tab ${index === 0 ? 'active' : ''}`;
+        tab.textContent = groupName;
+        tab.setAttribute('data-group', groupName);
+        tabsContainer.appendChild(tab);
+    });
+    
+    // Создаем скрытое поле для хранения ID приложений
+    const appIdsInput = document.createElement('input');
+    appIdsInput.type = 'hidden';
+    appIdsInput.id = 'app-ids';
+    appIdsInput.name = 'app_ids';
+    form.appendChild(appIdsInput);
+    
+    // Создаем поле для URL дистрибутива
+    const distrUrlGroup = document.createElement('div');
+    distrUrlGroup.className = 'form-group';
+    
+    const distrUrlLabel = document.createElement('label');
+    distrUrlLabel.setAttribute('for', 'distr-url');
+    distrUrlLabel.textContent = 'URL дистрибутива:';
+    distrUrlGroup.appendChild(distrUrlLabel);
+    
+    const distrUrlInput = document.createElement('input');
+    distrUrlInput.type = 'text';
+    distrUrlInput.id = 'distr-url';
+    distrUrlInput.name = 'distr_url';
+    distrUrlInput.className = 'form-control';
+    distrUrlInput.required = true;
+    distrUrlGroup.appendChild(distrUrlInput);
+    
+    form.appendChild(distrUrlGroup);
+    
+    // Создаем поле для режима обновления
+    const restartModeGroup = document.createElement('div');
+    restartModeGroup.className = 'form-group';
+    
+    const restartModeLabel = document.createElement('label');
+    restartModeLabel.textContent = 'Режим обновления:';
+    restartModeGroup.appendChild(restartModeLabel);
+    
+    const radioGroup = document.createElement('div');
+    radioGroup.className = 'radio-group';
+    
+    const restartLabel = document.createElement('label');
+    restartLabel.className = 'radio-label';
+    
+    const restartInput = document.createElement('input');
+    restartInput.type = 'radio';
+    restartInput.id = 'restart-mode-restart';
+    restartInput.name = 'restart_mode';
+    restartInput.value = 'restart';
+    restartInput.checked = true;
+    restartLabel.appendChild(restartInput);
+    restartLabel.appendChild(document.createTextNode(' В рестарт'));
+    
+    radioGroup.appendChild(restartLabel);
+    
+    const immediateLabel = document.createElement('label');
+    immediateLabel.className = 'radio-label';
+    
+    const immediateInput = document.createElement('input');
+    immediateInput.type = 'radio';
+    immediateInput.id = 'restart-mode-immediate';
+    immediateInput.name = 'restart_mode';
+    immediateInput.value = 'immediate';
+    immediateLabel.appendChild(immediateInput);
+    immediateLabel.appendChild(document.createTextNode(' Сейчас'));
+    
+    radioGroup.appendChild(immediateLabel);
+    
+    restartModeGroup.appendChild(radioGroup);
+    
+    form.appendChild(restartModeGroup);
+    
+    // Создаем кнопки действий
+    const formActions = document.createElement('div');
+    formActions.className = 'form-actions';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = 'Отмена';
+    cancelBtn.onclick = window.closeModal;
+    formActions.appendChild(cancelBtn);
+    
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'submit-btn';
+    submitBtn.textContent = 'Обновить';
+    formActions.appendChild(submitBtn);
+    
+    form.appendChild(formActions);
+    
+    // Создаем хранилище состояний для каждой группы
+    const groupStates = {};
+    
+    // Инициализируем состояния для каждой группы
+    Object.keys(appGroups).forEach(groupName => {
+        const apps = appGroups[groupName];
+        const firstApp = apps[0];
+        
+        // Индивидуальное начальное состояние для каждой группы
+        groupStates[groupName] = {
+            appIds: apps.map(app => app.id),
+            distrUrl: firstApp && firstApp.distr_path ? firstApp.distr_path : '',
+            restartMode: 'restart' // По умолчанию "В рестарт"
+        };
+    });
+    
+    // Функция для сохранения текущего состояния группы
+    function saveCurrentGroupState() {
+        const currentGroup = tabsContainer.querySelector('.modal-tab.active');
+        if (currentGroup) {
+            const groupName = currentGroup.getAttribute('data-group');
+            groupStates[groupName] = {
+                appIds: groupStates[groupName].appIds, // ID приложений не меняются
+                distrUrl: distrUrlInput.value,
+                restartMode: form.querySelector('input[name="restart_mode"]:checked').value
+            };
+        }
+    }
+    
+    // Функция для загрузки состояния для указанной группы
+    function loadGroupState(groupName) {
+        const state = groupStates[groupName];
+        
+        // Устанавливаем ID приложений
+        appIdsInput.value = state.appIds.join(',');
+        
+        // Устанавливаем URL дистрибутива
+        distrUrlInput.value = state.distrUrl;
+        
+        // Устанавливаем режим обновления (безопасным способом)
+        const restartRadio = form.querySelector('input[name="restart_mode"][value="restart"]');
+        const immediateRadio = form.querySelector('input[name="restart_mode"][value="immediate"]');
+        
+        if (state.restartMode === 'immediate' && immediateRadio) {
+            immediateRadio.checked = true;
+            if (restartRadio) restartRadio.checked = false;
+        } else if (restartRadio) {
+            restartRadio.checked = true;
+            if (immediateRadio) immediateRadio.checked = false;
+        }
+    }
+    
+    // Отображаем модальное окно ПЕРЕД инициализацией состояния
+    window.showModal(title, modalContent);
+    
+    // После добавления элементов в DOM, загружаем состояние для первой группы
+    const firstGroup = Object.keys(appGroups)[0];
+    loadGroupState(firstGroup);
+    
+    // Добавляем обработчики для вкладок
+    tabsContainer.querySelectorAll('.modal-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            // Сохраняем текущее состояние перед переключением
+            saveCurrentGroupState();
+            
+            // Убираем активный класс со всех вкладок
+            tabsContainer.querySelectorAll('.modal-tab').forEach(t => {
+                t.classList.remove('active');
+            });
+            
+            // Делаем текущую вкладку активной
+            this.classList.add('active');
+            
+            // Загружаем состояние для выбранной группы
+            const groupName = this.getAttribute('data-group');
+            loadGroupState(groupName);
+        });
+    });
+    
+	form.addEventListener('submit', function(e) {
+		e.preventDefault();
+		
+		// Сохраняем текущее состояние перед отправкой
+		saveCurrentGroupState();
+		
+		// Собираем данные из всех групп
+		const formDataArray = Object.keys(groupStates).map(groupName => {
+			const state = groupStates[groupName];
+			
+			// Пропускаем группы без URL
+			if (!state.distrUrl) {
+				return null;
+			}
+			
+			return {
+				app_ids: state.appIds.join(','),
+				distr_url: state.distrUrl,
+				restart_mode: state.restartMode
+			};
+		}).filter(data => data !== null); // Удаляем пустые элементы
+		
+		// Проверяем, заполнены ли все группы
+		if (formDataArray.length === 0) {
+			showError('Укажите URL дистрибутива хотя бы для одной группы');
+			return;
+		}
+		
+		// Обрабатываем все группы
+		processUpdateForm(formDataArray, true); // true означает закрыть окно после обработки
+	});
+}
+
+	/**
+	 * Обрабатывает данные формы обновления
+	 * @param {Object|Array} formData - Данные формы или массив данных форм
+	 * @param {boolean} closeAfterSubmit - Закрыть модальное окно после отправки
+	 */
+	async function processUpdateForm(formData, closeAfterSubmit = true) {
+		try {
+			let successCount = 0;
+			let totalCount = 0;
+			
+			// Проверяем, является ли formData массивом
+			if (Array.isArray(formData)) {
+				// Обрабатываем массив данных форм
+				const allPromises = [];
+				
+				formData.forEach(data => {
+					if (data.app_ids && data.distr_url) {
+						const appIds = data.app_ids.split(',').map(id => parseInt(id.trim()));
+						
+						// Создаем запросы для всех приложений в этой группе
+						appIds.forEach(appId => {
+							const promise = fetch(`/api/applications/${appId}/update`, {
+								method: 'POST',
+								headers: {
+									'Content-Type': 'application/json'
+								},
+								body: JSON.stringify({
+									distr_url: data.distr_url,
+									restart_mode: data.restart_mode
+								})
+							}).then(response => response.json());
+							
+							allPromises.push(promise);
+							totalCount++;
+						});
+					}
+				});
+				
+				// Ждем выполнения всех запросов
+				const results = await Promise.all(allPromises);
+				
+				// Подсчитываем успешные запросы
+				successCount = results.filter(result => result.success).length;
+			} else {
+				// Обрабатываем одиночную форму
+				const appIds = formData.app_ids.split(',').map(id => parseInt(id.trim()));
+				
+				// Создаем массив запросов для всех приложений
+				const updatePromises = appIds.map(appId => 
+					fetch(`/api/applications/${appId}/update`, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify({
+							distr_url: formData.distr_url,
+							restart_mode: formData.restart_mode
+						})
+					}).then(response => response.json())
+				);
+				
+				// Ждем выполнения всех запросов
+				const results = await Promise.all(updatePromises);
+				
+				// Подсчитываем успешные запросы
+				successCount = results.filter(result => result.success).length;
+				totalCount = results.length;
+			}
+			
+			// Закрываем модальное окно, если нужно
+			if (closeAfterSubmit) {
+				window.closeModal();
+			}
+			
+			// Анализируем результаты
+			if (successCount === totalCount) {
+				showNotification(`Обновление успешно запущено для всех выбранных приложений`);
+			} else if (successCount === 0) {
+				showError(`Не удалось запустить обновление ни для одного из выбранных приложений`);
+			} else {
+				showNotification(`Обновление запущено для ${successCount} из ${totalCount} приложений`);
+			}
+			
+			// Обновляем список приложений
+			loadApplications();
+		} catch (error) {
+			console.error('Ошибка при обновлении приложений:', error);
+			showError('Не удалось запустить обновление приложений');
+			
+			// Закрываем модальное окно, если нужно
+			if (closeAfterSubmit) {
+				window.closeModal();
+			}
+		}
+	}
 });
         

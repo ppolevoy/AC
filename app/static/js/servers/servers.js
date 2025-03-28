@@ -194,37 +194,36 @@ async function refreshServer(serverId) {
  * Отображение модального окна добавления сервера
  */
 function showAddServerModal() {
-    const modalContent = `
-        <form id="add-server-form">
-            <div class="form-group">
-                <label for="server-name">Имя сервера:</label>
-                <input type="text" id="server-name" name="name" class="form-control" required>
-            </div>
-            <div class="form-group">
-                <label for="server-ip">IP-адрес:</label>
-                <input type="text" id="server-ip" name="ip" class="form-control" required pattern="^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
-            </div>
-            <div class="form-group">
-                <label for="server-port">Порт:</label>
-                <input type="number" id="server-port" name="port" class="form-control" required min="1" max="65535">
-            </div>
-            <div class="form-actions">
-                <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
-                <button type="submit" class="submit-btn">Добавить</button>
-            </div>
-        </form>
-    `;
+    // Определяем поля формы
+    const formFields = [
+        {
+            id: 'server-name',
+            name: 'name',
+            label: 'Имя сервера:',
+            type: 'text',
+            required: true
+        },
+        {
+            id: 'server-ip',
+            name: 'ip',
+            label: 'IP-адрес:',
+            type: 'text',
+            pattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$',
+            required: true
+        },
+        {
+            id: 'server-port',
+            name: 'port',
+            label: 'Порт:',
+            type: 'number',
+            min: 1,
+            max: 65535,
+            required: true
+        }
+    ];
     
-    window.showModal('Добавление сервера', modalContent);
-    
-    // Добавляем обработчик отправки формы
-    document.getElementById('add-server-form').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const name = document.getElementById('server-name').value;
-        const ip = document.getElementById('server-ip').value;
-        const port = document.getElementById('server-port').value;
-        
+    // Функция, которая будет выполнена при отправке формы
+    const submitAction = async function(formData) {
         try {
             const response = await fetch('/api/servers', {
                 method: 'POST',
@@ -232,17 +231,16 @@ function showAddServerModal() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    name,
-                    ip,
-                    port: parseInt(port)
+                    name: formData.name,
+                    ip: formData.ip,
+                    port: parseInt(formData.port)
                 })
             });
             
             const data = await response.json();
             
             if (data.success) {
-                // Закрываем модальное окно и обновляем список серверов
-                window.closeModal();
+                // Обновляем список серверов
                 loadServers();
                 showNotification('Сервер успешно добавлен');
             } else {
@@ -253,7 +251,10 @@ function showAddServerModal() {
             console.error('Ошибка при добавлении сервера:', error);
             showError('Не удалось добавить сервер');
         }
-    });
+    };
+    
+    // Отображаем модальное окно с формой
+    ModalUtils.showFormModal('Добавление сервера', formFields, submitAction, 'Добавить');
 }
 
 /**
@@ -265,73 +266,79 @@ async function showEditServerModal(serverId) {
         const response = await fetch(`/api/servers/${serverId}`);
         const data = await response.json();
         
-        if (data.success) {
-            const server = data.server;
-            
-            const modalContent = `
-                <form id="edit-server-form">
-                    <div class="form-group">
-                        <label for="server-name">Имя сервера:</label>
-                        <input type="text" id="server-name" name="name" class="form-control" value="${server.name}" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="server-ip">IP-адрес:</label>
-                        <input type="text" id="server-ip" name="ip" class="form-control" value="${server.ip}" required pattern="^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
-                    </div>
-                    <div class="form-group">
-                        <label for="server-port">Порт:</label>
-                        <input type="number" id="server-port" name="port" class="form-control" value="${server.port}" required min="1" max="65535">
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
-                        <button type="submit" class="submit-btn">Сохранить</button>
-                    </div>
-                </form>
-            `;
-            
-            window.showModal('Редактирование сервера', modalContent);
-            
-            // Добавляем обработчик отправки формы
-            document.getElementById('edit-server-form').addEventListener('submit', async function(e) {
-                e.preventDefault();
-                
-                const name = document.getElementById('server-name').value;
-                const ip = document.getElementById('server-ip').value;
-                const port = document.getElementById('server-port').value;
-                
-                try {
-                    const response = await fetch(`/api/servers/${serverId}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            name,
-                            ip,
-                            port: parseInt(port)
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Закрываем модальное окно и обновляем список серверов
-                        window.closeModal();
-                        loadServers();
-                        showNotification('Сервер успешно обновлен');
-                    } else {
-                        console.error('Ошибка при обновлении сервера:', data.error);
-                        showError(data.error || 'Не удалось обновить сервер');
-                    }
-                } catch (error) {
-                    console.error('Ошибка при обновлении сервера:', error);
-                    showError('Не удалось обновить сервер');
-                }
-            });
-        } else {
+        if (!data.success) {
             console.error('Ошибка при получении информации о сервере:', data.error);
             showError('Не удалось получить информацию о сервере');
+            return;
         }
+        
+        const server = data.server;
+        
+        // Определяем поля формы
+        const formFields = [
+            {
+                id: 'server-name',
+                name: 'name',
+                label: 'Имя сервера:',
+                type: 'text',
+                value: server.name,
+                required: true
+            },
+            {
+                id: 'server-ip',
+                name: 'ip',
+                label: 'IP-адрес:',
+                type: 'text',
+                value: server.ip,
+                pattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$',
+                required: true
+            },
+            {
+                id: 'server-port',
+                name: 'port',
+                label: 'Порт:',
+                type: 'number',
+                value: server.port,
+                min: 1,
+                max: 65535,
+                required: true
+            }
+        ];
+        
+        // Функция, которая будет выполнена при отправке формы
+        const submitAction = async function(formData) {
+            try {
+                const response = await fetch(`/api/servers/${serverId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: formData.name,
+                        ip: formData.ip,
+                        port: parseInt(formData.port)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Закрываем модальное окно и обновляем список серверов
+                    window.closeModal();
+                    loadServers();
+                    showNotification('Сервер успешно обновлен');
+                } else {
+                    console.error('Ошибка при обновлении сервера:', data.error);
+                    showError(data.error || 'Не удалось обновить сервер');
+                }
+            } catch (error) {
+                console.error('Ошибка при обновлении сервера:', error);
+                showError('Не удалось обновить сервер');
+            }
+        };
+        
+        // Отображаем модальное окно с формой
+        ModalUtils.showFormModal('Редактирование сервера', formFields, submitAction, 'Сохранить');
     } catch (error) {
         console.error('Ошибка при получении информации о сервере:', error);
         showError('Не удалось получить информацию о сервере');
@@ -343,19 +350,8 @@ async function showEditServerModal(serverId) {
  * @param {string} serverId - ID сервера
  */
 function showDeleteServerModal(serverId) {
-    const modalContent = `
-        <p>Вы уверены, что хотите удалить этот сервер?</p>
-        <p>Вместе с сервером будут удалены все связанные с ним приложения и события.</p>
-        <div class="form-actions">
-            <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
-            <button type="button" class="delete-btn" id="confirm-delete-btn">Удалить</button>
-        </div>
-    `;
-    
-    window.showModal('Удаление сервера', modalContent);
-    
-    // Добавляем обработчик для кнопки подтверждения удаления
-    document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
+    // Функция, которая будет выполнена при подтверждении
+    const confirmAction = async function() {
         try {
             const response = await fetch(`/api/servers/${serverId}`, {
                 method: 'DELETE'
@@ -376,5 +372,15 @@ function showDeleteServerModal(serverId) {
             console.error('Ошибка при удалении сервера:', error);
             showError('Не удалось удалить сервер');
         }
-    });
+    };
+    
+    // Отображаем модальное окно подтверждения
+    ModalUtils.showConfirmModal(
+        'Удаление сервера', // Заголовок
+        '<p>Вы уверены, что хотите удалить этот сервер?</p><p>Вместе с сервером будут удалены все связанные с ним приложения и события.</p>', // Сообщение
+        [], // Список элементов (пустой)
+        confirmAction, // Функция подтверждения
+        'Удалить', // Текст кнопки
+        'delete-btn' // Класс кнопки
+    );
 }

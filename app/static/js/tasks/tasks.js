@@ -257,86 +257,126 @@ document.addEventListener('DOMContentLoaded', function() {
      * Отображение деталей задачи в модальном окне
      * @param {string} taskId - ID задачи
      */
-    async function showTaskDetails(taskId) {
-        try {
-            const response = await fetch(`/api/tasks/${taskId}`);
-            const data = await response.json();
-            
-            if (!data.success) {
-                console.error('Ошибка при получении информации о задаче:', data.error);
-                showError('Не удалось получить информацию о задаче');
-                return;
-            }
-            
-            const task = data.task;
-            
-            // Клонируем шаблон модального окна
-            const modalTemplate = document.getElementById('task-info-modal-template');
-            if (!modalTemplate) {
-                console.error('Шаблон модального окна не найден');
-                return;
-            }
-            
-            const modalContent = document.importNode(modalTemplate.content, true);
-            
-            // Заполняем информацию о задаче
-            modalContent.querySelector('.task-id').textContent = task.id;
-            modalContent.querySelector('.task-type').textContent = formatTaskType(task.task_type);
-            
-            // Статус с цветовым индикатором
-            const statusElement = modalContent.querySelector('.task-status');
-            let statusText = task.status;
-            
-            if (task.status === 'pending') {
-                statusElement.classList.add('status-pending');
-                statusText = 'Ожидает';
-            } else if (task.status === 'processing') {
-                statusElement.classList.add('status-processing');
-                statusText = 'Выполняется';
-            } else if (task.status === 'completed') {
-                statusElement.classList.add('status-completed');
-                statusText = 'Завершена';
-            } else if (task.status === 'failed') {
-                statusElement.classList.add('status-failed');
-                statusText = 'Ошибка';
-            }
-            
-            statusElement.textContent = statusText;
-            
-            // Приложение и сервер
-            modalContent.querySelector('.task-app').textContent = task.application_name || '-';
-            modalContent.querySelector('.task-server').textContent = task.server_name || '-';
-            
-            // Временные метки
-            modalContent.querySelector('.task-created').textContent = task.created_at ? formatDate(new Date(task.created_at)) : '-';
-            modalContent.querySelector('.task-started').textContent = task.started_at ? formatDate(new Date(task.started_at)) : '-';
-            modalContent.querySelector('.task-completed').textContent = task.completed_at ? formatDate(new Date(task.completed_at)) : '-';
-            
-            // Параметры задачи
-            const paramsElement = modalContent.querySelector('.task-params');
-            paramsElement.textContent = JSON.stringify(task.params, null, 2) || '{}';
-            
-            // Результат выполнения
-            const resultElement = modalContent.querySelector('.task-result');
-            resultElement.textContent = task.result || 'Нет данных';
-            
-            // Ошибка (если есть)
-            const errorSection = modalContent.querySelector('.error-section');
-            const errorElement = modalContent.querySelector('.task-error');
-            
-            if (task.error) {
-                errorSection.style.display = 'block';
-                errorElement.textContent = task.error;
-            } else {
-                errorSection.style.display = 'none';
-            }
-            
-            // Отображаем модальное окно
-            window.showModal(`Детали задачи: ${formatTaskType(task.task_type)}`, modalContent);
-            
-        } catch (error) {
-            console.error('Ошибка при получении информации о задаче:', error);
-            showError('Не удалось получить информацию о задаче');
-        }
-    }
+	async function showTaskDetails(taskId) {
+		try {
+			const response = await fetch(`/api/tasks/${taskId}`);
+			const data = await response.json();
+			
+			if (!data.success) {
+				console.error('Ошибка при получении информации о задаче:', data.error);
+				showError('Не удалось получить информацию о задаче');
+				return;
+			}
+			
+			const task = data.task;
+			
+			// Создаем секции для модального окна
+			const sections = [
+				{
+					title: 'Основная информация',
+					type: 'table',
+					rows: [
+						{ label: 'ID:', value: task.id },
+						{ label: 'Тип:', value: formatTaskType(task.task_type) },
+						{ 
+							label: 'Статус:', 
+							value: `<span class="status-badge ${getStatusClass(task.status)}">${formatTaskStatus(task.status)}</span>` 
+						},
+						{ label: 'Приложение:', value: task.application_name || '-' },
+						{ label: 'Сервер:', value: task.server_name || '-' }
+					]
+				},
+				{
+					title: 'Временные метки',
+					type: 'table',
+					rows: [
+						{ label: 'Создана:', value: task.created_at ? formatDate(new Date(task.created_at)) : '-' },
+						{ label: 'Начата:', value: task.started_at ? formatDate(new Date(task.started_at)) : '-' },
+						{ label: 'Завершена:', value: task.completed_at ? formatDate(new Date(task.completed_at)) : '-' }
+					]
+				}
+			];
+			
+			// Добавляем секцию с параметрами задачи
+			const paramsSection = {
+				title: 'Параметры',
+				type: 'html',
+				content: `<pre class="task-params">${JSON.stringify(task.params, null, 2) || '{}'}</pre>`
+			};
+			sections.push(paramsSection);
+			
+			// Добавляем секцию с результатом выполнения
+			const resultSection = {
+				title: 'Результат',
+				type: 'html',
+				content: `<div class="task-result">${task.result || 'Нет данных'}</div>`
+			};
+			sections.push(resultSection);
+			
+			// Добавляем секцию с ошибкой, если она есть
+			if (task.error) {
+				const errorSection = {
+					title: 'Ошибка',
+					type: 'html',
+					content: `<div class="task-error">${task.error}</div>`
+				};
+				sections.push(errorSection);
+			}
+			
+			// Отображаем модальное окно
+			ModalUtils.showInfoModal(`Детали задачи: ${formatTaskType(task.task_type)}`, sections);
+		} catch (error) {
+			console.error('Ошибка при получении информации о задаче:', error);
+			showError('Не удалось получить информацию о задаче');
+		}
+	}
+	
+	// Вспомогательные функции для форматирования данных
+	function formatTaskType(type) {
+		const types = {
+			'start': 'Запуск',
+			'stop': 'Остановка',
+			'restart': 'Перезапуск',
+			'update': 'Обновление'
+		};
+		
+		return types[type] || type;
+	}
+
+	function formatTaskStatus(status) {
+		const statuses = {
+			'pending': 'Ожидает',
+			'processing': 'Выполняется',
+			'completed': 'Завершена',
+			'failed': 'Ошибка'
+		};
+		
+		return statuses[status] || status;
+	}
+
+	function getStatusClass(status) {
+		const classes = {
+			'pending': 'status-pending',
+			'processing': 'status-processing',
+			'completed': 'status-completed',
+			'failed': 'status-failed'
+		};
+		
+		return classes[status] || '';
+	}
+
+	function formatDate(date) {
+		if (!(date instanceof Date) || isNaN(date)) {
+			return '-';
+		}
+		
+		return date.toLocaleString('ru-RU', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		});
+	}	
 });
