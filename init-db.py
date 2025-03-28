@@ -33,9 +33,9 @@ def parse_args():
                       help='Хост PostgreSQL')
     parser.add_argument('--port', type=int, default=5417,
                       help='Порт PostgreSQL')
-    parser.add_argument('--user', type=str, default='fakadm',
+    parser.add_argument('--user', type=str, default='adm',
                       help='Имя пользователя PostgreSQL')
-    parser.add_argument('--password', type=str, default='fakadm', 
+    parser.add_argument('--password', type=str, default='adm', 
                       help='Пароль пользователя PostgreSQL')
     parser.add_argument('--dbname', type=str, default='appcontrol',
                       help='Имя базы данных')
