@@ -613,40 +613,42 @@ body.light-theme .action-icon {
     color: #888;
 }
 
-/* Actions Menu */
+/* Класс для меню действий */
+
 .actions-menu {
     position: relative;
     display: inline-block;
 }
 
 .actions-button {
+	cursor: pointer;
     background: none;
     border: none;
     color: #888;
     font-size: 18px;
     cursor: pointer;
     padding: 5px;
+    border-radius: 4px;
+    transition: background-color 0.2s, color 0.2s;	
 }
 
-body.light-theme .actions-button {
-    color: #666;
+/* Стили для активной кнопки (когда меню открыто) */
+.actions-button.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ebe4da;
 }
+
+/* Темная тема */
 
 .actions-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
+    position: fixed; 
+    z-index: 1000; /
+    min-width: 150px; 
+    display: none; 
     background-color: #2a2a2b;
-    min-width: 120px;
-    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-body.light-theme .actions-dropdown {
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
+    border: 1px solid #333336;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    overflow: hidden	
 }
 
 .actions-dropdown a {
@@ -655,23 +657,68 @@ body.light-theme .actions-dropdown {
     text-decoration: none;
     display: block;
     font-size: 14px;
-}
-
-body.light-theme .actions-dropdown a {
-    color: #333;
+    padding: 12px 15px;
+    transition: background-color 0.2s;	
 }
 
 .actions-dropdown a:hover {
     background-color: #3a3a3c;
 }
 
+/* Светлая тема */
+body.light-theme .actions-button.active {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+body.light-theme .actions-dropdown {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .actions-dropdown a {
+    color: #333;
+}
+
 body.light-theme .actions-dropdown a:hover {
     background-color: #e9e9e9;
 }
 
+/* Класс для отображения меню вверх */
+.actions-dropdown.dropdown-up {
+    bottom: 100%;
+    top: auto;
+    margin-bottom: 5px;
+}
+
+.actions-dropdown.show {
+    display: block;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    background: transparent;
+    display: none;
+}
+
+
+/* 
 .actions-menu:hover .actions-dropdown {
     display: block;
 }
+*/
 
 /* Pagination */
 .pagination {

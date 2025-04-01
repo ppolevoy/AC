@@ -13,7 +13,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let sortDirection = 'asc';
     let searchQuery = '';
 	let groupingEnabled = true;	
-    
+	let activeDropdown = null;
+	let dropdownOverlay = null;    
+	
     // DOM-элементы
     const serverDropdown = document.getElementById('server-selected');
     const serverList = document.getElementById('server-list');
@@ -43,6 +45,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Загружаем список приложений
         loadApplications();
+
+		// Инициализируем обработчики выпадающих меню
+		initDropdownHandlers();		
 
 		const groupToggleBtn = document.getElementById('group-toggle-btn');
 		if (groupToggleBtn) {
@@ -1784,6 +1789,125 @@ function createGroupRow(groupName, groupApps) {
     
     return row;
 }
+
+function initDropdownHandlers() {
+    // Создаем оверлей для закрытия меню при клике вне его
+    if (!dropdownOverlay) {
+        dropdownOverlay = document.createElement('div');
+        dropdownOverlay.className = 'dropdown-overlay';
+        document.body.appendChild(dropdownOverlay);
+        
+        // Обработчик клика на оверлей (закрывает меню)
+        dropdownOverlay.addEventListener('click', closeAllDropdowns);
+    }
+    
+    // Обработчик для кнопок меню действий
+    document.body.addEventListener('click', function(e) {
+        const actionButton = e.target.closest('.actions-button');
+        if (actionButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Закрываем другие открытые меню
+            if (activeDropdown && activeDropdown !== actionButton.nextElementSibling) {
+                closeAllDropdowns();
+            }
+            
+            // Открываем/закрываем текущее меню
+            toggleDropdown(actionButton);
+        }
+    });
+}
+
+// Функция для переключения состояния выпадающего меню
+function toggleDropdown(actionButton) {
+    const dropdown = actionButton.nextElementSibling;
+    
+    if (dropdown.classList.contains('show')) {
+        // Если меню уже открыто, закрываем его
+        closeAllDropdowns();
+    } else {
+        // Закрываем все другие меню
+        closeAllDropdowns();
+        
+        // Показываем оверлей
+        dropdownOverlay.style.display = 'block';
+        
+        // Позиционируем и показываем меню
+        positionDropdown(dropdown, actionButton);
+        
+        // Сохраняем ссылку на активное меню
+        activeDropdown = dropdown;
+    }
+}
+
+// Функция для правильного позиционирования выпадающего меню
+function positionDropdown(dropdown, actionButton) {
+    // Получаем координаты кнопки относительно viewport
+    const buttonRect = actionButton.getBoundingClientRect();
+    
+    // Определяем, есть ли место под кнопкой для выпадающего меню
+    // Обычно проверяем, хватает ли 200px вниз (примерная высота меню)
+    const spaceBelow = window.innerHeight - buttonRect.bottom;
+    const showUpwards = spaceBelow < 200;
+    
+    // Устанавливаем начальные свойства для расчета размеров
+    dropdown.style.display = 'block';
+    dropdown.style.opacity = '0';  // Скрываем, пока позиционируем
+    
+    // Сбрасываем предыдущие классы направления
+    dropdown.classList.remove('dropdown-up');
+    
+    // Устанавливаем позицию
+    if (showUpwards) {
+        // Показываем меню вверх от кнопки
+        dropdown.classList.add('dropdown-up');
+        dropdown.style.bottom = (window.innerHeight - buttonRect.top) + 'px';
+    } else {
+        // Показываем меню вниз от кнопки
+        dropdown.style.top = buttonRect.bottom + 'px';
+    }
+    
+    // Устанавливаем горизонтальное положение (справа от кнопки)
+    dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
+    
+    // Показываем меню с анимацией
+    dropdown.classList.add('show');
+    dropdown.style.opacity = '1';
+	
+    // Добавляем класс активной кнопке для визуальной индикации
+    actionButton.classList.add('active');	
+}
+
+// Функция для закрытия всех выпадающих меню
+function closeAllDropdowns() {
+    // Скрываем оверлей
+    if (dropdownOverlay) {
+        dropdownOverlay.style.display = 'none';
+    }
+    
+    // Скрываем все выпадающие меню
+    document.querySelectorAll('.actions-dropdown.show').forEach(dropdown => {
+        dropdown.classList.remove('show');
+        dropdown.style.display = '';
+        dropdown.style.top = '';
+        dropdown.style.right = '';
+        dropdown.style.bottom = '';
+		
+       // Убираем активное состояние с кнопки
+        const parentMenu = dropdown.closest('.actions-menu');
+        if (parentMenu) {
+            const actionButton = parentMenu.querySelector('.actions-button');
+            if (actionButton) {
+                actionButton.classList.remove('active');
+            }
+        }
+    });
+    
+    // Сбрасываем ссылку на активное меню
+    activeDropdown = null;
+}
+
 
 
 	
