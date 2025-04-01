@@ -453,9 +453,7 @@ tbody tr {
     transition: all 0.3s ease;
 }
 
-tbody tr:hover td {
-    background-color: #2e2e30;
-}
+
 
 body.light-theme tbody tr:hover td {
     background-color: #f5f5f5;
@@ -2353,3 +2351,20 @@ body.light-theme .group-btn.active {
 .hidden {
     display: none !important;
 }
+
+tbody > tr:not(.child-wrapper):hover > td {
+    background-color: #2e2e30 !important;
+}
+
+.child-table tbody tr:hover td {
+    background-color: #2e2e30 !important;
+}
+
+body.light-theme tbody > tr:not(.child-wrapper):hover > td {
+    background-color: #f5f5f5 !important;
+}
+
+body.light-theme .child-table tbody tr:hover td {
+    background-color: #f5f5f5 !important;
+}
+
