@@ -434,14 +434,16 @@ async function loadApplications() {
 			// Create rows for each application in the group
 			group.apps.forEach(app => {
 				const childRow = document.createElement('tr');
+				childRow.className = 'app-child-row'; // Добавляем класс для стилизации
 				childRow.setAttribute('data-app-id', app.id);
+				childRow.setAttribute('data-parent', group.name);
 				
-				// Status indicator
+				// Статус приложения
 				const statusDot = app.status === 'online' ? 
 					'<span class="service-dot"></span>' : 
 					'<span class="service-dot offline"></span>';
 				
-				// Create cells for the child row
+				// Создаем ячейки для дочерней строки
 				childRow.innerHTML = `
 					<td>
 						<div class="checkbox-container">
@@ -451,10 +453,16 @@ async function loadApplications() {
 							</label>
 						</div>
 					</td>
-					<td class="service-name">${app.name}</td>
-					<td>${app.version || '*'}</td>
+					<td class="service-name">
+						${app.name}
+						<div class="dist-details">
+							<div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+							<div>Тип: ${app.type || 'Н/Д'}</div>
+						</div>
+					</td>
+					<td>${app.version || 'Н/Д'}</td>
 					<td>${statusDot} ${app.status}</td>
-					<td>${app.server_name || '*'}</td>
+					<td>${app.server_name || 'Н/Д'}</td>
 					<td>
 						<div class="actions-menu">
 							<button class="actions-button">...</button>
@@ -468,6 +476,16 @@ async function loadApplications() {
 						</div>
 					</td>
 				`;
+				
+				// Добавляем обработчик клика непосредственно для этой строки
+				childRow.addEventListener('click', function(e) {
+					// Игнорируем клики на чекбоксы и меню действий
+					if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+						return;
+					}
+					// Переключаем класс expanded для текущей строки
+					this.classList.toggle('expanded');
+				});
 				
 				childTableBody.appendChild(childRow);
 			});
@@ -489,7 +507,61 @@ async function loadApplications() {
     updatePagination(totalPages);
 	}
 
-
+	// Создание строки группы
+	function createGroupRow(groupName, groupApps) {
+		const row = document.createElement('tr');
+		row.className = 'group-row';
+		row.setAttribute('data-group', groupName);
+		
+		// Проверяем версии в группе
+		const versions = new Set(groupApps.map(app => app.version || '*'));
+		const versionText = versions.size === 1 ? 
+			(groupApps[0].version || '*') : 
+			'<span class="version-different">*</span>';
+		
+		// Проверяем статус всех приложений в группе
+		const hasOffline = groupApps.some(app => app.status !== 'online');
+		const statusDot = hasOffline ? 
+			'<span class="service-dot offline"></span>' : 
+			'<span class="service-dot"></span>';
+		
+		// Сервер для группы (берем из первого приложения)
+		const serverName = groupApps[0].server_name || 'Н/Д';
+		
+		row.innerHTML = `
+			<td>
+				<div class="checkbox-container">
+					<label class="custom-checkbox">
+						<input type="checkbox" class="group-checkbox" data-group="${groupName}">
+						<span class="checkmark"></span>
+					</label>
+				</div>
+			</td>
+			<td class="service-name">
+				<div class="group-name-container">
+					<span class="group-toggle">▶</span>
+					<span class="group-name">${groupName} (${groupApps.length})</span>
+				</div>
+			</td>
+			<td>${versionText}</td>
+			<td>${statusDot}</td>
+			<td>${serverName}</td>
+			<td>
+				<div class="actions-menu">
+					<button class="actions-button">...</button>
+					<div class="actions-dropdown">
+						<a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+						<a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
+						<a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
+						<a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
+						<a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
+					</div>
+				</div>
+			</td>
+		`;
+		
+		return row;
+	}
 
 	// Создание строки приложения
 	function createApplicationRow(app, isChild) {
@@ -579,6 +651,25 @@ async function loadApplications() {
      * Обработчики событий для элементов таблицы
      */
 function setupTableEventHandlers() {
+    // Добавляем функцию для привязки обработчиков к дочерним строкам
+    function addChildRowHandlers() {
+        document.querySelectorAll('.app-child-row').forEach(row => {
+            // Сначала удаляем все существующие обработчики клика
+            const newRow = row.cloneNode(true);
+            row.parentNode.replaceChild(newRow, row);
+            
+            // Теперь добавляем новый обработчик
+            newRow.addEventListener('click', function(e) {
+                if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                    return;
+                }
+                this.classList.toggle('expanded');
+            });
+        });
+    }
+    
+    // Вызываем эту функцию при инициализации
+    addChildRowHandlers();
     // Раскрытие/скрытие детальной информации о приложении
     document.querySelectorAll('tbody tr').forEach(row => {
         // Пропускаем строки-обертки и группы
@@ -586,6 +677,16 @@ function setupTableEventHandlers() {
             return;
         }
         
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                return;
+            }
+            this.classList.toggle('expanded');
+        });
+    });
+    
+    // Добавляем обработчики для строк внутри дочерних таблиц
+    document.querySelectorAll('.child-table tbody tr').forEach(row => {
         row.addEventListener('click', function(e) {
             if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
                 return;
@@ -721,7 +822,7 @@ function setupAppActionButtons() {
  */
 function setupGroupActionButtons() {
     // Обработчики для кнопок в выпадающем меню групп
-    document.querySelectorAll('.group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
+    document.querySelectorAll('.group-info-btn, .group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
         // Удаляем существующие обработчики через клонирование
         const newBtn = btn.cloneNode(true);
         if (btn.parentNode) {
@@ -815,7 +916,7 @@ function updateGroupCheckboxState(groupName) {
 /**
  * Обработка действий над группой
  * @param {string} groupName - имя группы
- * @param {string} action - действие (start, stop, restart, update)
+ * @param {string} action - действие (info, start, stop, restart, update)
  */
 function handleGroupAction(groupName, action) {
     // Собираем ID всех приложений в группе
@@ -848,7 +949,7 @@ function handleGroupAction(groupName, action) {
             showError(`Неподдерживаемое действие для группы: ${action}`);
             break;
     }
-}
+}	
     
     /**
      * Активация/деактивация кнопок действий
@@ -1672,7 +1773,6 @@ function createGroupRow(groupName, groupApps) {
             <div class="actions-menu">
                 <button class="actions-button">...</button>
                 <div class="actions-dropdown">
-                    <!-- Пункт "Информация" удален -->
                     <a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
                     <a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
                     <a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>

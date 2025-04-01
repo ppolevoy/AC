@@ -2368,3 +2368,51 @@ body.light-theme .child-table tbody tr:hover td {
     background-color: #f5f5f5 !important;
 }
 
+.app-child-row.expanded .dist-details {
+    max-height: 100px;
+    padding: 10px;
+}
+
+.app-child-row .dist-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    background-color: #333336;
+    margin-top: 5px;
+    border-radius: 5px;
+    padding: 0 10px;
+    font-size: 15px;
+    color: #aaa;
+}
+
+body.light-theme .app-child-row .dist-details {
+    background-color: #f0f0f0;
+    color: #666;
+}
+
+.child-table .app-child-row .dist-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    background-color: #333336;
+    margin-top: 5px;
+    border-radius: 5px;
+    padding: 0 10px;
+    font-size: 15px;
+    color: #aaa;
+}
+
+.child-table .app-child-row .dist-details div + div {
+    margin-top: 8px;
+}
+
+.child-table .app-child-row.expanded .dist-details {
+    max-height: 100px;
+    padding: 10px;
+}
+
+body.light-theme .child-table .app-child-row .dist-details {
+    background-color: #f0f0f0;
+    color: #666;
+}
+
