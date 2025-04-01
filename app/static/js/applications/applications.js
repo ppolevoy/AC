@@ -482,65 +482,14 @@ async function loadApplications() {
 			applicationsTableBody.appendChild(wrapperRow);
 		});
 		
-		// Update pagination
-		updatePagination(totalPages);
+    setupAppActionButtons();
+    setupGroupActionButtons();
+    
+    // Обновляем пагинацию
+    updatePagination(totalPages);
 	}
 
-	// Создание строки группы
-	function createGroupRow(groupName, groupApps) {
-		const row = document.createElement('tr');
-		row.className = 'group-row';
-		row.setAttribute('data-group', groupName);
-		
-		// Проверяем версии в группе
-		const versions = new Set(groupApps.map(app => app.version || '*'));
-		const versionText = versions.size === 1 ? 
-			(groupApps[0].version || '*') : 
-			'<span class="version-different">*</span>';
-		
-		// Проверяем статус всех приложений в группе
-		const hasOffline = groupApps.some(app => app.status !== 'online');
-		const statusDot = hasOffline ? 
-			'<span class="service-dot offline"></span>' : 
-			'<span class="service-dot"></span>';
-		
-		// Сервер для группы (берем из первого приложения)
-		const serverName = groupApps[0].server_name || 'Н/Д';
-		
-		row.innerHTML = `
-			<td>
-				<div class="checkbox-container">
-					<label class="custom-checkbox">
-						<input type="checkbox" class="group-checkbox" data-group="${groupName}">
-						<span class="checkmark"></span>
-					</label>
-				</div>
-			</td>
-			<td class="service-name">
-				<div class="group-name-container">
-					<span class="group-toggle">▶</span>
-					<span class="group-name">${groupName} (${groupApps.length})</span>
-				</div>
-			</td>
-			<td>${versionText}</td>
-			<td>${statusDot}</td>
-			<td>${serverName}</td>
-			<td>
-				<div class="actions-menu">
-					<button class="actions-button">...</button>
-					<div class="actions-dropdown">
-						<a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
-						<a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
-						<a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
-						<a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
-						<a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
-					</div>
-				</div>
-			</td>
-		`;
-		
-		return row;
-	}
+
 
 	// Создание строки приложения
 	function createApplicationRow(app, isChild) {
@@ -708,12 +657,44 @@ function setupTableEventHandlers() {
         });
     });
     
-    // Обработчики для кнопок в выпадающем меню приложений
+    setupAppActionButtons();
+    
+    setupGroupActionButtons();
+}
+
+/**
+ * Устанавливает обработчики для кнопок действий приложений
+ */
+function setupAppActionButtons() {
+    // Обработчики для кнопок в выпадающем меню приложений как в основной таблице, так и в дочерней
     document.querySelectorAll('.app-info-btn, .app-start-btn, .app-stop-btn, .app-restart-btn, .app-update-btn').forEach(btn => {
-        btn.addEventListener('click', function(e) {
+        // Удаляем существующие обработчики через клонирование
+        const newBtn = btn.cloneNode(true);
+        if (btn.parentNode) {
+            btn.parentNode.replaceChild(newBtn, btn);
+        }
+        
+        // Добавляем новый обработчик
+        newBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            const action = this.className.split('-').pop().replace('-btn', '');
+            e.stopPropagation(); // Предотвращаем всплытие
+            
+            // Выделяем действие из имени класса
+            const className = this.className;
+            let action;
+            
+            if (className.includes('info-btn')) action = 'info';
+            else if (className.includes('start-btn')) action = 'start';
+            else if (className.includes('stop-btn')) action = 'stop';
+            else if (className.includes('restart-btn')) action = 'restart';
+            else if (className.includes('update-btn')) action = 'update';
+            else {
+                console.error('Неизвестное действие из класса:', className);
+                return;
+            }
+            
             const appId = this.getAttribute('data-app-id');
+            console.log(`Клик на кнопке ${action} для приложения ${appId}`);
             
             switch(action) {
                 case 'info':
@@ -727,16 +708,46 @@ function setupTableEventHandlers() {
                 case 'update':
                     showUpdateModal([appId]);
                     break;
+                default:
+                    console.error('Неизвестное действие:', action);
+                    break;
             }
         });
     });
-    
+}
+
+/**
+ * Устанавливает обработчики для кнопок действий групп
+ */
+function setupGroupActionButtons() {
     // Обработчики для кнопок в выпадающем меню групп
-    document.querySelectorAll('.group-info-btn, .group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
-        btn.addEventListener('click', function(e) {
+    document.querySelectorAll('.group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
+        // Удаляем существующие обработчики через клонирование
+        const newBtn = btn.cloneNode(true);
+        if (btn.parentNode) {
+            btn.parentNode.replaceChild(newBtn, btn);
+        }
+        
+        // Добавляем новый обработчик
+        newBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            const action = this.className.split('-').pop().replace('-btn', '');
+            e.stopPropagation(); // Предотвращаем всплытие
+            
+            // Выделяем действие из имени класса
+            const className = this.className;
+            let action;
+            
+            if (className.includes('start-btn')) action = 'start';
+            else if (className.includes('stop-btn')) action = 'stop';
+            else if (className.includes('restart-btn')) action = 'restart';
+            else if (className.includes('update-btn')) action = 'update';
+            else {
+                console.error('Неизвестное действие из класса:', className);
+                return;
+            }
+            
             const groupName = this.getAttribute('data-group');
+            console.log(`Клик на кнопке ${action} для группы ${groupName}`);
             
             handleGroupAction(groupName, action);
         });
@@ -804,13 +815,16 @@ function updateGroupCheckboxState(groupName) {
 /**
  * Обработка действий над группой
  * @param {string} groupName - имя группы
- * @param {string} action - действие (info, start, stop, restart, update)
+ * @param {string} action - действие (start, stop, restart, update)
  */
 function handleGroupAction(groupName, action) {
     // Собираем ID всех приложений в группе
     const appIds = [];
     document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`).forEach(checkbox => {
-        appIds.push(checkbox.getAttribute('data-app-id'));
+        const appId = checkbox.getAttribute('data-app-id');
+        if (appId) {
+            appIds.push(appId);
+        }
     });
     
     if (appIds.length === 0) {
@@ -818,16 +832,23 @@ function handleGroupAction(groupName, action) {
         return;
     }
     
+    console.log(`Действие ${action} для группы ${groupName}, приложения:`, appIds);
+    
     // Обрабатываем действие
-    if (action === 'info') {
-        // Здесь можно реализовать показ информации о группе
-        showNotification('Информация о группе пока не реализована');
-    } else if (action === 'update') {
-        showUpdateModal(appIds);
-    } else {
-        showConfirmActionModal(appIds, action);
+    switch(action) {
+        case 'update':
+            showUpdateModal(appIds);
+            break;
+        case 'start':
+        case 'stop':
+        case 'restart':
+            showConfirmActionModal(appIds, action);
+            break;
+        default:
+            showError(`Неподдерживаемое действие для группы: ${action}`);
+            break;
     }
-}	
+}
     
     /**
      * Активация/деактивация кнопок действий
@@ -1535,26 +1556,26 @@ function restoreTableState() {
     
     console.log('Восстановление состояния групп:', expandedGroups);
     
-    // Для каждой сохраненной группы находим соответствующую строку и раскрываем её
     expandedGroups.forEach(groupName => {
         const groupRow = document.querySelector(`.group-row[data-group="${groupName}"]`);
         if (groupRow) {
-            // Добавляем класс expanded
             groupRow.classList.add('expanded');
             
-            // Обновляем стрелку
             const toggle = groupRow.querySelector('.group-toggle');
             if (toggle) {
                 toggle.style.transform = 'rotate(90deg)';
             }
             
-            // Показываем дочерние элементы
             const wrapperRow = document.querySelector(`.child-wrapper[data-group="${groupName}"]`);
             if (wrapperRow) {
                 wrapperRow.style.display = 'table-row';
             }
         }
     });
+    
+    // Обновляем обработчики кнопок после восстановления групп
+    setupAppActionButtons();
+    setupGroupActionButtons();
 }
 
 /**
@@ -1651,7 +1672,7 @@ function createGroupRow(groupName, groupApps) {
             <div class="actions-menu">
                 <button class="actions-button">...</button>
                 <div class="actions-dropdown">
-                    <a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+                    <!-- Пункт "Информация" удален -->
                     <a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
                     <a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
                     <a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
