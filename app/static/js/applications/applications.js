@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let sortColumn = 'name';
     let sortDirection = 'asc';
     let searchQuery = '';
+	let groupingEnabled = true;	
     
     // DOM-элементы
     const serverDropdown = document.getElementById('server-selected');
@@ -42,17 +43,53 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Загружаем список приложений
         loadApplications();
+
+		const groupToggleBtn = document.getElementById('group-toggle-btn');
+		if (groupToggleBtn) {
+			groupingEnabled = groupToggleBtn.classList.contains('active');
+			
+			groupToggleBtn.addEventListener('click', function() {
+				this.classList.toggle('active');
+				groupingEnabled = this.classList.contains('active');
+				
+				// Сбрасываем страницу при изменении группировки
+				currentPage = 1;
+				filterAndDisplayApplications();
+			});
+		}
         
         // Обработчик выбора всех приложений
-        if (selectAllCheckbox) {
-            selectAllCheckbox.addEventListener('change', function() {
-                const appCheckboxes = document.querySelectorAll('.app-checkbox');
-                appCheckboxes.forEach(checkbox => {
-                    checkbox.checked = this.checked;
-                });
-                updateActionButtonsState(this.checked);
-            });
-        }
+		if (selectAllCheckbox) {
+			selectAllCheckbox.addEventListener('change', function() {
+				const isChecked = this.checked;
+				
+				// Обновляем все видимые чекбоксы приложений
+				const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
+				appCheckboxes.forEach(checkbox => {
+					if (!checkbox.closest('tr.hidden')) {
+						checkbox.checked = isChecked;
+					}
+				});
+				
+				// Обновляем все видимые чекбоксы групп
+				const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+				groupCheckboxes.forEach(checkbox => {
+					if (!checkbox.closest('tr.hidden')) {
+						checkbox.checked = isChecked;
+						checkbox.indeterminate = false;
+						
+						// Также обновляем все дочерние чекбоксы
+						const groupName = checkbox.getAttribute('data-group');
+						const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
+						childCheckboxes.forEach(childBox => {
+							childBox.checked = isChecked;
+						});
+					}
+				});
+				
+				updateActionButtonsState(isChecked);
+			});
+		}
         
         // Обработчик поиска
         if (searchInput) {
@@ -245,106 +282,242 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Фильтрация и отображение приложений
      */
-    function filterAndDisplayApplications() {
-        // Фильтрация по поисковому запросу
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            filteredApplications = allApplications.filter(app => 
-                app.name.toLowerCase().includes(query) || 
-                (app.version && app.version.toLowerCase().includes(query)) ||
-                (app.server_name && app.server_name.toLowerCase().includes(query))
-            );
-        } else {
-            filteredApplications = [...allApplications];
-        }
-        
-        // Сортировка
-        filteredApplications.sort((a, b) => {
-            let valueA, valueB;
-            
-            if (sortColumn === 'name') {
-                valueA = a.name.toLowerCase();
-                valueB = b.name.toLowerCase();
-            } else if (sortColumn === 'state') {
-                valueA = a.status ? a.status.toLowerCase() : '';
-                valueB = b.status ? b.status.toLowerCase() : '';
-            }
-            
-            if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
-            if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
-            return 0;
-        });
-        
-        // Пагинация
-        const totalPages = Math.ceil(filteredApplications.length / pageSize);
-        if (currentPage > totalPages && totalPages > 0) {
-            currentPage = totalPages;
-        }
-        
-        const startIndex = (currentPage - 1) * pageSize;
-        const endIndex = Math.min(startIndex + pageSize, filteredApplications.length);
-        const displayedApplications = filteredApplications.slice(startIndex, endIndex);
-        
-        // Очищаем текущую таблицу
-        applicationsTableBody.innerHTML = '';
-        
-        if (displayedApplications.length === 0) {
-            applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Нет приложений, соответствующих критериям поиска</td></tr>';
-            updatePagination(0);
-            return;
-        }
-        
-        // Заполняем таблицу приложений
-        displayedApplications.forEach(app => {
-            const row = document.createElement('tr');
-            
-            // Статус приложения
-            const statusDot = app.status === 'online' ? 
-                '<span class="service-dot"></span>' : 
-                '<span class="service-dot offline"></span>';
-            
-            row.innerHTML = `
-                <td>
-                    <div class="checkbox-container">
-                        <label class="custom-checkbox">
-                            <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
-                            <span class="checkmark"></span>
-                        </label>
-                    </div>
-                </td>
-                <td class="service-name">
-                    ${app.name}
-                    <div class="dist-details">
-                        <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-                        <div>Тип: ${app.type || 'Н/Д'}</div>
-                    </div>
-                </td>
-                <td>${app.version || 'Н/Д'}</td>
-                <td>${statusDot}</td>
-                <td>${app.server_name || 'Н/Д'}</td>
-                <td>
-                    <div class="actions-menu">
-                        <button class="actions-button">...</button>
-                        <div class="actions-dropdown">
-                            <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
-                            <a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
-                            <a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
-                            <a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
-                            <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
-                        </div>
-                    </div>
-                </td>
-            `;
-            
-            applicationsTableBody.appendChild(row);
-        });
-        
-        // Обновляем пагинацию
-        updatePagination(totalPages);
-        
-        // Добавляем обработчики событий для элементов таблицы
-        setupTableEventHandlers();
-    }
+	function filterAndDisplayApplications() {
+		// Фильтрация по поисковому запросу
+		if (searchQuery) {
+			const query = searchQuery.toLowerCase();
+			filteredApplications = allApplications.filter(app => 
+				app.name.toLowerCase().includes(query) || 
+				(app.version && app.version.toLowerCase().includes(query)) ||
+				(app.server_name && app.server_name.toLowerCase().includes(query))
+			);
+		} else {
+			filteredApplications = [...allApplications];
+		}
+		
+		// Сортировка
+		filteredApplications.sort((a, b) => {
+			let valueA, valueB;
+			
+			if (sortColumn === 'name') {
+				valueA = a.name.toLowerCase();
+				valueB = b.name.toLowerCase();
+			} else if (sortColumn === 'state') {
+				valueA = a.status ? a.status.toLowerCase() : '';
+				valueB = b.status ? b.status.toLowerCase() : '';
+			}
+			
+			if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+			if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+			return 0;
+		});
+		
+		// Очищаем текущую таблицу
+		applicationsTableBody.innerHTML = '';
+		
+		if (filteredApplications.length === 0) {
+			applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Нет приложений, соответствующих критериям поиска</td></tr>';
+			updatePagination(0);
+			return;
+		}
+		
+		// Если группировка включена, отображаем сгруппированные приложения
+		if (groupingEnabled) {
+			displayGroupedApplications(filteredApplications);
+		} else {
+			displayFlatApplications(filteredApplications);
+		}
+		
+		// Добавляем обработчики событий для элементов таблицы
+		setupTableEventHandlers();
+	}
+	
+	// Функция для отображения приложений без группировки
+	function displayFlatApplications(applications) {
+		// Пагинация
+		const totalPages = Math.ceil(applications.length / pageSize);
+		if (currentPage > totalPages && totalPages > 0) {
+			currentPage = totalPages;
+		}
+		
+		const startIndex = (currentPage - 1) * pageSize;
+		const endIndex = Math.min(startIndex + pageSize, applications.length);
+		const displayedApplications = applications.slice(startIndex, endIndex);
+		
+		// Отображаем приложения
+		displayedApplications.forEach(app => {
+			const row = createApplicationRow(app, false);
+			applicationsTableBody.appendChild(row);
+		});
+		
+		// Обновляем пагинацию
+		updatePagination(totalPages);
+	}
+
+	// Функция для отображения сгруппированных приложений
+	function displayGroupedApplications(applications) {
+		// Группируем приложения по имени группы
+		const groups = {};
+		
+		applications.forEach(app => {
+			const groupName = app.group_name || app.name;
+			if (!groups[groupName]) {
+				groups[groupName] = [];
+			}
+			groups[groupName].push(app);
+		});
+		
+		// Преобразуем группы в массив для сортировки
+		const groupEntries = Object.entries(groups).map(([name, apps]) => ({
+			name,
+			apps,
+			count: apps.length
+		}));
+		
+		// Сортируем группы по имени
+		groupEntries.sort((a, b) => a.name.localeCompare(b.name));
+		
+		// Сокращаем список групп на основе пагинации
+		const totalGroups = groupEntries.length;
+		const totalPages = Math.ceil(totalGroups / pageSize);
+		
+		if (currentPage > totalPages && totalPages > 0) {
+			currentPage = totalPages;
+		}
+		
+		const startIndex = (currentPage - 1) * pageSize;
+		const endIndex = Math.min(startIndex + pageSize, totalGroups);
+		const displayedGroups = groupEntries.slice(startIndex, endIndex);
+		
+		// Отображаем группы
+		displayedGroups.forEach(group => {
+			// Если в группе только одно приложение, отображаем его без группировки
+			if (group.count === 1) {
+				const appRow = createApplicationRow(group.apps[0], false);
+				applicationsTableBody.appendChild(appRow);
+				return;
+			}
+			
+			// Создаем строку группы
+			const groupRow = createGroupRow(group.name, group.apps);
+			applicationsTableBody.appendChild(groupRow);
+			
+			// Создаем строки для приложений в группе (изначально скрытые)
+			group.apps.forEach(app => {
+				const appRow = createApplicationRow(app, true);
+				appRow.classList.add('child-row', 'hidden');
+				appRow.setAttribute('data-parent', group.name);
+				applicationsTableBody.appendChild(appRow);
+			});
+		});
+		
+		// Обновляем пагинацию
+		updatePagination(totalPages);
+	}
+
+	// Создание строки группы
+	function createGroupRow(groupName, groupApps) {
+		const row = document.createElement('tr');
+		row.className = 'group-row';
+		row.setAttribute('data-group', groupName);
+		
+		// Проверяем версии в группе
+		const versions = new Set(groupApps.map(app => app.version || 'Н/Д'));
+		const versionText = versions.size === 1 ? 
+			(groupApps[0].version || 'Н/Д') : 
+			'<span class="version-different">*</span>';
+		
+		// Проверяем статус всех приложений в группе
+		const hasOffline = groupApps.some(app => app.status !== 'online');
+		const statusDot = hasOffline ? 
+			'<span class="service-dot offline"></span>' : 
+			'<span class="service-dot"></span>';
+		
+		// Сервер для группы (берем из первого приложения)
+		const serverName = groupApps[0].server_name || 'Н/Д';
+		
+		row.innerHTML = `
+			<td>
+				<div class="checkbox-container">
+					<label class="custom-checkbox">
+						<input type="checkbox" class="group-checkbox" data-group="${groupName}">
+						<span class="checkmark"></span>
+					</label>
+				</div>
+			</td>
+			<td class="service-name">
+				<div class="group-name-container">
+					<span class="group-toggle">▶</span>
+					<span class="group-name">${groupName} (${groupApps.length})</span>
+				</div>
+			</td>
+			<td>${versionText}</td>
+			<td>${statusDot}</td>
+			<td>${serverName}</td>
+			<td>
+				<div class="actions-menu">
+					<button class="actions-button">...</button>
+					<div class="actions-dropdown">
+						<a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+						<a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
+						<a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
+						<a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
+						<a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
+					</div>
+				</div>
+			</td>
+		`;
+		
+		return row;
+	}
+
+	// Создание строки приложения
+	function createApplicationRow(app, isChild) {
+		const row = document.createElement('tr');
+		row.className = isChild ? 'app-row child-row' : 'app-row';
+		row.setAttribute('data-app-id', app.id);
+		row.setAttribute('data-app-name', app.name.toLowerCase());
+		
+		// Статус приложения
+		const statusDot = app.status === 'online' ? 
+			'<span class="service-dot"></span>' : 
+			'<span class="service-dot offline"></span>';
+		
+		row.innerHTML = `
+			<td>
+				<div class="checkbox-container">
+					<label class="custom-checkbox">
+						<input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+						<span class="checkmark"></span>
+					</label>
+				</div>
+			</td>
+			<td class="service-name ${isChild ? 'child-indent' : ''}">
+				${app.name}
+				<div class="dist-details">
+					<div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+					<div>Тип: ${app.type || 'Н/Д'}</div>
+				</div>
+			</td>
+			<td>${app.version || 'Н/Д'}</td>
+			<td>${statusDot}</td>
+			<td>${app.server_name || 'Н/Д'}</td>
+			<td>
+				<div class="actions-menu">
+					<button class="actions-button">...</button>
+					<div class="actions-dropdown">
+						<a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
+						<a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
+						<a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
+						<a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
+						<a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+					</div>
+				</div>
+			</td>
+		`;
+		
+		return row;
+	}	
     
     /**
      * Обновление элементов пагинации
@@ -442,29 +615,164 @@ document.addEventListener('DOMContentLoaded', function() {
                 showUpdateModal([appId]);
             });
         });
-    }
+		
+		// Раскрытие/скрытие группы
+		document.querySelectorAll('.group-row').forEach(row => {
+			row.addEventListener('click', function(e) {
+				// Игнорируем клики на чекбоксы и кнопки действий
+				if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+					return;
+				}
+				
+				const groupName = this.getAttribute('data-group');
+				this.classList.toggle('expanded');
+				
+				// Показываем/скрываем дочерние элементы
+				const childRows = document.querySelectorAll(`.child-row[data-parent="${groupName}"]`);
+				childRows.forEach(childRow => {
+					childRow.classList.toggle('hidden');
+				});
+				
+				// Изменяем значок переключателя
+				const toggle = this.querySelector('.group-toggle');
+				if (this.classList.contains('expanded')) {
+					toggle.textContent = '▼';
+				} else {
+					toggle.textContent = '▶';
+				}
+			});
+		});
+		// Чекбокс группы выбирает/снимает все дочерние элементы
+		document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+			checkbox.addEventListener('change', function() {
+				const groupName = this.getAttribute('data-group');
+				const isChecked = this.checked;
+				
+				// Выбираем/снимаем все дочерние чекбоксы
+				const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
+				childCheckboxes.forEach(childBox => {
+					childBox.checked = isChecked;
+				});
+				
+				// Обновляем состояние "Выбрать все"
+				updateSelectAllState();
+			});
+		});
+		
+		// Чекбокс приложения обновляет состояние чекбокса группы
+		document.querySelectorAll('.child-row .app-checkbox').forEach(checkbox => {
+			checkbox.addEventListener('change', function() {
+				const parentGroup = this.closest('.child-row').getAttribute('data-parent');
+				updateGroupCheckboxState(parentGroup);
+				updateSelectAllState();
+			});
+		});
+		
+		// Кнопки действий для групп
+		document.querySelectorAll('.group-start-btn').forEach(btn => {
+			btn.addEventListener('click', function(e) {
+				e.preventDefault();
+				const groupName = this.getAttribute('data-group');
+				handleGroupAction(groupName, 'start');
+			});
+		});
+		
+		document.querySelectorAll('.group-stop-btn').forEach(btn => {
+			btn.addEventListener('click', function(e) {
+				e.preventDefault();
+				const groupName = this.getAttribute('data-group');
+				handleGroupAction(groupName, 'stop');
+			});
+		});
+		
+		document.querySelectorAll('.group-restart-btn').forEach(btn => {
+			btn.addEventListener('click', function(e) {
+				e.preventDefault();
+				const groupName = this.getAttribute('data-group');
+				handleGroupAction(groupName, 'restart');
+			});
+		});
+		
+		document.querySelectorAll('.group-update-btn').forEach(btn => {
+			btn.addEventListener('click', function(e) {
+				e.preventDefault();
+				const groupName = this.getAttribute('data-group');
+				handleGroupAction(groupName, 'update');
+			});
+		});
+	}			
     
     /**
      * Обновление состояния чекбокса "Выбрать все"
      */
-    function updateSelectAllState() {
-        const appCheckboxes = document.querySelectorAll('.app-checkbox');
-        const checkedCount = document.querySelectorAll('.app-checkbox:checked').length;
-        
-        if (checkedCount === 0) {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = false;
-        } else if (checkedCount === appCheckboxes.length) {
-            selectAllCheckbox.checked = true;
-            selectAllCheckbox.indeterminate = false;
-        } else {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = true;
-        }
-        
-        // Активация/деактивация кнопок действий в зависимости от выбранных приложений
-        updateActionButtonsState(checkedCount > 0);
-    }
+	function updateSelectAllState() {
+		const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
+		const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+		
+		// Учитываем и групповые, и обычные чекбоксы, но исключаем скрытые
+		const visibleCheckboxes = [...appCheckboxes, ...groupCheckboxes].filter(
+			checkbox => !checkbox.closest('tr.hidden')
+		);
+		
+		const checkedCount = [...visibleCheckboxes].filter(checkbox => 
+			checkbox.checked || checkbox.indeterminate
+		).length;
+		
+		if (checkedCount === 0) {
+			selectAllCheckbox.checked = false;
+			selectAllCheckbox.indeterminate = false;
+		} else if (checkedCount === visibleCheckboxes.length) {
+			selectAllCheckbox.checked = true;
+			selectAllCheckbox.indeterminate = false;
+		} else {
+			selectAllCheckbox.checked = false;
+			selectAllCheckbox.indeterminate = true;
+		}
+		
+		// Активация/деактивация кнопок действий в зависимости от выбранных приложений
+		updateActionButtonsState(checkedCount > 0);
+	}
+	
+	// Функция для обновления состояния чекбокса группы
+	function updateGroupCheckboxState(groupName) {
+		const groupCheckbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+		if (!groupCheckbox) return;
+		
+		const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
+		const checkedCount = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox:checked`).length;
+		
+		if (checkedCount === 0) {
+			groupCheckbox.checked = false;
+			groupCheckbox.indeterminate = false;
+		} else if (checkedCount === childCheckboxes.length) {
+			groupCheckbox.checked = true;
+			groupCheckbox.indeterminate = false;
+		} else {
+			groupCheckbox.checked = false;
+			groupCheckbox.indeterminate = true;
+		}
+	}
+
+	// Функция для обработки действий над группой
+	function handleGroupAction(groupName, action) {
+		// Собираем ID всех приложений в группе
+		const appIds = [];
+		document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`).forEach(checkbox => {
+			appIds.push(checkbox.getAttribute('data-app-id'));
+		});
+		
+		if (appIds.length === 0) {
+			showError('Не найдены приложения в группе');
+			return;
+		}
+		
+		// Обрабатываем действие
+		if (action === 'update') {
+			showUpdateModal(appIds);
+		} else {
+			showConfirmActionModal(appIds, action);
+		}
+	}	
     
     /**
      * Активация/деактивация кнопок действий

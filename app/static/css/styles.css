@@ -2107,3 +2107,169 @@ body.light-theme .task-error {
         justify-content: space-between;
     }
 }
+
+/* Контейнер для элементов управления */
+.controls-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+/* Стиль для лейбла чекбокса группировки */
+.group-checkbox-label {
+    display: flex;
+    align-items: center;
+    color: #aaa;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+body.light-theme .group-checkbox-label {
+    color: #666;
+}
+
+.group-checkbox-label input {
+    margin-right: 5px;
+}
+/* Таблица приложений */
+/* Фиксация ширины колонки с чекбоксами */
+.header-checkbox-container,
+.checkbox-container {
+    width: 35px;
+    min-width: 35px;
+    max-width: 35px;
+}
+
+/* Фиксированная ширина столбца статуса */
+th:nth-child(4), 
+td:nth-child(4) {
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+}
+
+
+
+/* Таблица приложений */
+
+/* Стили для строк группы */
+.group-row {
+    background-color: #2a2a2d;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+body.light-theme .group-row {
+    background-color: #f0f0f0;
+}
+
+/* Строки дочерних элементов */
+.child-row {
+    background-color: #252528;
+}
+
+body.light-theme .child-row {
+    background-color: #f5f5f5;
+}
+
+/* Отступ для дочерних элементов */
+.child-indent {
+    padding-left: 25px !important;
+    position: relative;
+}
+
+
+body.light-theme .child-indent:before {
+    background-color: #ccc;
+}
+
+/* Скрытые элементы */
+.hidden {
+    display: none !important;
+}
+
+/* Стили для переключателя группы */
+.group-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
+    font-size: 12px;
+    transition: transform 0.2s;
+    color: #888;
+    vertical-align: middle;
+}
+
+.group-row.expanded .group-toggle {
+    transform: rotate(90deg);
+}
+
+.group-name-container {
+    display: flex;
+    align-items: center;
+}
+
+.group-name {
+    font-weight: bold;
+}
+
+/* Индикатор различных версий */
+.version-different {
+    color: #e74c3c;
+}
+
+/* Кнопка группировки */
+.group-btn {
+    background-color: #333336; 
+    border: none;
+    color: #888;
+    border-radius: 4px;
+    width: auto;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+
+.group-btn:hover {
+    background-color: #45454a;
+}
+
+body.light-theme .group-btn {
+    background-color: #f0f0f0;
+    color: #666;
+    border: 1px solid #ddd;
+}
+
+body.light-theme .group-btn:hover {
+    background-color: #e0e0e0;
+}
+
+.group-btn.active {
+    background-color: #3498db;
+    color: #ebe4da;
+}
+
+.group-btn.active:hover {
+    background-color: #2980b9;
+}
+
+body.light-theme .group-btn.active {
+    background-color: #3498db;
+    color: #fff;
+}
+
+#group-icon {
+    margin-right: 5px;
+}
+/* Кнопка группировки */
+
+.hidden {
+    display: none !important;
+}
