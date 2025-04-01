@@ -245,39 +245,45 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Загрузка списка приложений
      */
-    async function loadApplications() {
-        try {
-            applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Загрузка приложений...</td></tr>';
+async function loadApplications() {
+    try {
+        // Сохраняем текущее состояние развернутых групп перед обновлением
+        saveTableState();
+        
+        applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Загрузка приложений...</td></tr>';
+        
+        // Формирование URL с параметрами
+        let url = '/api/applications';
+        const params = new URLSearchParams();
+        
+        if (selectedServerId !== 'all') {
+            params.append('server_id', selectedServerId);
+        }
+        
+        if (params.toString()) {
+            url += '?' + params.toString();
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success) {
+            allApplications = data.applications;
+            filterAndDisplayApplications();
             
-            // Формирование URL с параметрами
-            let url = '/api/applications';
-            const params = new URLSearchParams();
-            
-            if (selectedServerId !== 'all') {
-                params.append('server_id', selectedServerId);
-            }
-            
-            if (params.toString()) {
-                url += '?' + params.toString();
-            }
-            
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data.success) {
-                allApplications = data.applications;
-                filterAndDisplayApplications();
-            } else {
-                console.error('Ошибка при загрузке приложений:', data.error);
-                showError('Не удалось загрузить список приложений');
-                applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
-            }
-        } catch (error) {
-            console.error('Ошибка при загрузке приложений:', error);
+            // Восстанавливаем состояние таблицы после отображения данных
+            restoreTableState();
+        } else {
+            console.error('Ошибка при загрузке приложений:', data.error);
             showError('Не удалось загрузить список приложений');
             applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
         }
+    } catch (error) {
+        console.error('Ошибка при загрузке приложений:', error);
+        showError('Не удалось загрузить список приложений');
+        applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
     }
+}
     
     /**
      * Фильтрация и отображение приложений
@@ -354,7 +360,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		updatePagination(totalPages);
 	}
 
-	// Функция для отображения сгруппированных приложений
+	/**
+	 * Отображение сгруппированных приложений
+	 * @param {Array} applications - массив приложений для отображения
+	 */
 	function displayGroupedApplications(applications) {
 		// Группируем приложения по имени группы
 		const groups = {};
@@ -367,17 +376,17 @@ document.addEventListener('DOMContentLoaded', function() {
 			groups[groupName].push(app);
 		});
 		
-		// Преобразуем группы в массив для сортировки
+		// Convert groups to array for sorting
 		const groupEntries = Object.entries(groups).map(([name, apps]) => ({
 			name,
 			apps,
 			count: apps.length
 		}));
 		
-		// Сортируем группы по имени
+		// Sort groups by name
 		groupEntries.sort((a, b) => a.name.localeCompare(b.name));
 		
-		// Сокращаем список групп на основе пагинации
+		// Pagination
 		const totalGroups = groupEntries.length;
 		const totalPages = Math.ceil(totalGroups / pageSize);
 		
@@ -389,29 +398,91 @@ document.addEventListener('DOMContentLoaded', function() {
 		const endIndex = Math.min(startIndex + pageSize, totalGroups);
 		const displayedGroups = groupEntries.slice(startIndex, endIndex);
 		
-		// Отображаем группы
+		// Display the groups
 		displayedGroups.forEach(group => {
-			// Если в группе только одно приложение, отображаем его без группировки
+			// If only one application in group, show as regular row
 			if (group.count === 1) {
 				const appRow = createApplicationRow(group.apps[0], false);
 				applicationsTableBody.appendChild(appRow);
 				return;
 			}
 			
-			// Создаем строку группы
+			// Create the group row
 			const groupRow = createGroupRow(group.name, group.apps);
 			applicationsTableBody.appendChild(groupRow);
 			
-			// Создаем строки для приложений в группе (изначально скрытые)
+			// Create the wrapper row for child elements
+			const wrapperRow = document.createElement('tr');
+			wrapperRow.className = 'child-wrapper';
+			wrapperRow.setAttribute('data-group', group.name);
+			
+			// Create a cell that spans all columns
+			const wrapperCell = document.createElement('td');
+			wrapperCell.setAttribute('colspan', '6'); // Adjust based on your table columns
+			
+			// Create the container for the nested table
+			const childContainer = document.createElement('div');
+			childContainer.className = 'child-container';
+			
+			// Create the nested table
+			const childTable = document.createElement('table');
+			childTable.className = 'child-table';
+			
+			// Create table body
+			const childTableBody = document.createElement('tbody');
+			
+			// Create rows for each application in the group
 			group.apps.forEach(app => {
-				const appRow = createApplicationRow(app, true);
-				appRow.classList.add('child-row', 'hidden');
-				appRow.setAttribute('data-parent', group.name);
-				applicationsTableBody.appendChild(appRow);
+				const childRow = document.createElement('tr');
+				childRow.setAttribute('data-app-id', app.id);
+				
+				// Status indicator
+				const statusDot = app.status === 'online' ? 
+					'<span class="service-dot"></span>' : 
+					'<span class="service-dot offline"></span>';
+				
+				// Create cells for the child row
+				childRow.innerHTML = `
+					<td>
+						<div class="checkbox-container">
+							<label class="custom-checkbox">
+								<input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+								<span class="checkmark"></span>
+							</label>
+						</div>
+					</td>
+					<td class="service-name">${app.name}</td>
+					<td>${app.version || '*'}</td>
+					<td>${statusDot} ${app.status}</td>
+					<td>${app.server_name || '*'}</td>
+					<td>
+						<div class="actions-menu">
+							<button class="actions-button">...</button>
+							<div class="actions-dropdown">
+								<a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
+								<a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
+								<a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
+								<a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
+								<a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+							</div>
+						</div>
+					</td>
+				`;
+				
+				childTableBody.appendChild(childRow);
 			});
+			
+			// Assemble the nested structure
+			childTable.appendChild(childTableBody);
+			childContainer.appendChild(childTable);
+			wrapperCell.appendChild(childContainer);
+			wrapperRow.appendChild(wrapperCell);
+			
+			// Add wrapper row to the table
+			applicationsTableBody.appendChild(wrapperRow);
 		});
 		
-		// Обновляем пагинацию
+		// Update pagination
 		updatePagination(totalPages);
 	}
 
@@ -422,9 +493,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		row.setAttribute('data-group', groupName);
 		
 		// Проверяем версии в группе
-		const versions = new Set(groupApps.map(app => app.version || 'Н/Д'));
+		const versions = new Set(groupApps.map(app => app.version || '*'));
 		const versionText = versions.size === 1 ? 
-			(groupApps[0].version || 'Н/Д') : 
+			(groupApps[0].version || '*') : 
 			'<span class="version-different">*</span>';
 		
 		// Проверяем статус всех приложений в группе
@@ -558,221 +629,205 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Обработчики событий для элементов таблицы
      */
-    function setupTableEventHandlers() {
-        // Раскрытие/скрытие детальной информации о приложении
-        document.querySelectorAll('tbody tr').forEach(row => {
-            row.addEventListener('click', function(e) {
-                if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
-                    return;
+function setupTableEventHandlers() {
+    // Раскрытие/скрытие детальной информации о приложении
+    document.querySelectorAll('tbody tr').forEach(row => {
+        // Пропускаем строки-обертки и группы
+        if (row.classList.contains('child-wrapper') || row.classList.contains('group-row')) {
+            return;
+        }
+        
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                return;
+            }
+            this.classList.toggle('expanded');
+        });
+    });
+    
+    // Обработчики чекбоксов
+    const appCheckboxes = document.querySelectorAll('.app-checkbox');
+    appCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectAllState);
+    });
+    
+    // Раскрытие/скрытие группы
+    document.querySelectorAll('.group-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            // Игнорируем клики на чекбоксы и кнопки действий
+            if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                return;
+            }
+            
+            const groupName = this.getAttribute('data-group');
+            
+            // Переключаем класс для анимации стрелки
+            this.classList.toggle('expanded');
+            
+            // Обновляем отображение стрелки явно
+            const toggle = this.querySelector('.group-toggle');
+            if (toggle) {
+                if (this.classList.contains('expanded')) {
+                    toggle.style.transform = 'rotate(90deg)';
+                } else {
+                    toggle.style.transform = 'rotate(0deg)';
                 }
-                this.classList.toggle('expanded');
+            }
+            
+            // Находим и переключаем видимость строки-обертки с дочерними элементами
+            const wrapperRow = document.querySelector(`.child-wrapper[data-group="${groupName}"]`);
+            if (wrapperRow) {
+                wrapperRow.style.display = (wrapperRow.style.display === 'none' || wrapperRow.style.display === '') ? 'table-row' : 'none';
+            }
+        });
+    });
+    
+    // Чекбокс группы выбирает/снимает все дочерние элементы
+    document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const groupName = this.getAttribute('data-group');
+            const isChecked = this.checked;
+            
+            // Выбираем/снимаем все дочерние чекбоксы в nested table
+            const childCheckboxes = document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`);
+            childCheckboxes.forEach(childBox => {
+                childBox.checked = isChecked;
             });
+            
+            // Обновляем состояние "Выбрать все"
+            updateSelectAllState();
         });
-        
-        // Обработчики чекбоксов
-        const appCheckboxes = document.querySelectorAll('.app-checkbox');
-        appCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', updateSelectAllState);
+    });
+    
+    // Чекбокс приложения обновляет состояние чекбокса группы
+    document.querySelectorAll('.child-wrapper .app-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const parentGroup = this.closest('.child-wrapper').getAttribute('data-group');
+            updateGroupCheckboxState(parentGroup);
+            updateSelectAllState();
         });
-        
-        // Обработчики кнопок действий в выпадающем меню
-        document.querySelectorAll('.app-info-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const appId = this.getAttribute('data-app-id');
-                showAppInfoModal(appId);
-            });
+    });
+    
+    // Обработчики для кнопок в выпадающем меню приложений
+    document.querySelectorAll('.app-info-btn, .app-start-btn, .app-stop-btn, .app-restart-btn, .app-update-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const action = this.className.split('-').pop().replace('-btn', '');
+            const appId = this.getAttribute('data-app-id');
+            
+            switch(action) {
+                case 'info':
+                    showAppInfoModal(appId);
+                    break;
+                case 'start':
+                case 'stop':
+                case 'restart':
+                    showConfirmActionModal([appId], action);
+                    break;
+                case 'update':
+                    showUpdateModal([appId]);
+                    break;
+            }
         });
-        
-        document.querySelectorAll('.app-start-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const appId = this.getAttribute('data-app-id');
-                showConfirmActionModal([appId], 'start');
-            });
+    });
+    
+    // Обработчики для кнопок в выпадающем меню групп
+    document.querySelectorAll('.group-info-btn, .group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const action = this.className.split('-').pop().replace('-btn', '');
+            const groupName = this.getAttribute('data-group');
+            
+            handleGroupAction(groupName, action);
         });
-        
-        document.querySelectorAll('.app-stop-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const appId = this.getAttribute('data-app-id');
-                showConfirmActionModal([appId], 'stop');
-            });
-        });
-        
-        document.querySelectorAll('.app-restart-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const appId = this.getAttribute('data-app-id');
-                showConfirmActionModal([appId], 'restart');
-            });
-        });
-        
-        document.querySelectorAll('.app-update-btn').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const appId = this.getAttribute('data-app-id');
-                showUpdateModal([appId]);
-            });
-        });
-		
-		// Раскрытие/скрытие группы
-		document.querySelectorAll('.group-row').forEach(row => {
-			row.addEventListener('click', function(e) {
-				// Игнорируем клики на чекбоксы и кнопки действий
-				if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
-					return;
-				}
-				
-				const groupName = this.getAttribute('data-group');
-				this.classList.toggle('expanded');
-				
-				// Показываем/скрываем дочерние элементы
-				const childRows = document.querySelectorAll(`.child-row[data-parent="${groupName}"]`);
-				childRows.forEach(childRow => {
-					childRow.classList.toggle('hidden');
-				});
-				
-				// Изменяем значок переключателя
-				const toggle = this.querySelector('.group-toggle');
-				if (this.classList.contains('expanded')) {
-					toggle.textContent = '▼';
-				} else {
-					toggle.textContent = '▶';
-				}
-			});
-		});
-		// Чекбокс группы выбирает/снимает все дочерние элементы
-		document.querySelectorAll('.group-checkbox').forEach(checkbox => {
-			checkbox.addEventListener('change', function() {
-				const groupName = this.getAttribute('data-group');
-				const isChecked = this.checked;
-				
-				// Выбираем/снимаем все дочерние чекбоксы
-				const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
-				childCheckboxes.forEach(childBox => {
-					childBox.checked = isChecked;
-				});
-				
-				// Обновляем состояние "Выбрать все"
-				updateSelectAllState();
-			});
-		});
-		
-		// Чекбокс приложения обновляет состояние чекбокса группы
-		document.querySelectorAll('.child-row .app-checkbox').forEach(checkbox => {
-			checkbox.addEventListener('change', function() {
-				const parentGroup = this.closest('.child-row').getAttribute('data-parent');
-				updateGroupCheckboxState(parentGroup);
-				updateSelectAllState();
-			});
-		});
-		
-		// Кнопки действий для групп
-		document.querySelectorAll('.group-start-btn').forEach(btn => {
-			btn.addEventListener('click', function(e) {
-				e.preventDefault();
-				const groupName = this.getAttribute('data-group');
-				handleGroupAction(groupName, 'start');
-			});
-		});
-		
-		document.querySelectorAll('.group-stop-btn').forEach(btn => {
-			btn.addEventListener('click', function(e) {
-				e.preventDefault();
-				const groupName = this.getAttribute('data-group');
-				handleGroupAction(groupName, 'stop');
-			});
-		});
-		
-		document.querySelectorAll('.group-restart-btn').forEach(btn => {
-			btn.addEventListener('click', function(e) {
-				e.preventDefault();
-				const groupName = this.getAttribute('data-group');
-				handleGroupAction(groupName, 'restart');
-			});
-		});
-		
-		document.querySelectorAll('.group-update-btn').forEach(btn => {
-			btn.addEventListener('click', function(e) {
-				e.preventDefault();
-				const groupName = this.getAttribute('data-group');
-				handleGroupAction(groupName, 'update');
-			});
-		});
-	}			
+    });
+}
     
     /**
      * Обновление состояния чекбокса "Выбрать все"
      */
-	function updateSelectAllState() {
-		const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
-		const groupCheckboxes = document.querySelectorAll('.group-checkbox');
-		
-		// Учитываем и групповые, и обычные чекбоксы, но исключаем скрытые
-		const visibleCheckboxes = [...appCheckboxes, ...groupCheckboxes].filter(
-			checkbox => !checkbox.closest('tr.hidden')
-		);
-		
-		const checkedCount = [...visibleCheckboxes].filter(checkbox => 
-			checkbox.checked || checkbox.indeterminate
-		).length;
-		
-		if (checkedCount === 0) {
-			selectAllCheckbox.checked = false;
-			selectAllCheckbox.indeterminate = false;
-		} else if (checkedCount === visibleCheckboxes.length) {
-			selectAllCheckbox.checked = true;
-			selectAllCheckbox.indeterminate = false;
-		} else {
-			selectAllCheckbox.checked = false;
-			selectAllCheckbox.indeterminate = true;
-		}
-		
-		// Активация/деактивация кнопок действий в зависимости от выбранных приложений
-		updateActionButtonsState(checkedCount > 0);
-	}
+function updateSelectAllState() {
+    // Учитываем и групповые, и обычные чекбоксы
+    const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
+    const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+    
+    // Теперь нужно учитывать чекбоксы в обычных строках и в nested table
+    const allVisibleCheckboxes = [...appCheckboxes, ...groupCheckboxes].filter(
+        checkbox => !checkbox.closest('tr.hidden') && 
+                  (!checkbox.closest('.child-wrapper') || 
+                   checkbox.closest('.child-wrapper').style.display !== 'none')
+    );
+    
+    const checkedCount = allVisibleCheckboxes.filter(checkbox => 
+        checkbox.checked || checkbox.indeterminate
+    ).length;
+    
+    if (checkedCount === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (checkedCount === allVisibleCheckboxes.length) {
+        selectAllCheckbox.checked = true;
+        selectAllCheckbox.indeterminate = false;
+    } else {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = true;
+    }
+    
+    // Активация/деактивация кнопок действий
+    updateActionButtonsState(checkedCount > 0);
+}
 	
-	// Функция для обновления состояния чекбокса группы
-	function updateGroupCheckboxState(groupName) {
-		const groupCheckbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
-		if (!groupCheckbox) return;
-		
-		const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
-		const checkedCount = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox:checked`).length;
-		
-		if (checkedCount === 0) {
-			groupCheckbox.checked = false;
-			groupCheckbox.indeterminate = false;
-		} else if (checkedCount === childCheckboxes.length) {
-			groupCheckbox.checked = true;
-			groupCheckbox.indeterminate = false;
-		} else {
-			groupCheckbox.checked = false;
-			groupCheckbox.indeterminate = true;
-		}
-	}
+/**
+ * Обновление состояния чекбокса группы
+ * @param {string} groupName - имя группы
+ */
+function updateGroupCheckboxState(groupName) {
+    const groupCheckbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+    if (!groupCheckbox) return;
+    
+    const childCheckboxes = document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`);
+    const checkedCount = document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox:checked`).length;
+    
+    if (checkedCount === 0) {
+        groupCheckbox.checked = false;
+        groupCheckbox.indeterminate = false;
+    } else if (checkedCount === childCheckboxes.length) {
+        groupCheckbox.checked = true;
+        groupCheckbox.indeterminate = false;
+    } else {
+        groupCheckbox.checked = false;
+        groupCheckbox.indeterminate = true;
+    }
+}
 
-	// Функция для обработки действий над группой
-	function handleGroupAction(groupName, action) {
-		// Собираем ID всех приложений в группе
-		const appIds = [];
-		document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`).forEach(checkbox => {
-			appIds.push(checkbox.getAttribute('data-app-id'));
-		});
-		
-		if (appIds.length === 0) {
-			showError('Не найдены приложения в группе');
-			return;
-		}
-		
-		// Обрабатываем действие
-		if (action === 'update') {
-			showUpdateModal(appIds);
-		} else {
-			showConfirmActionModal(appIds, action);
-		}
-	}	
+
+/**
+ * Обработка действий над группой
+ * @param {string} groupName - имя группы
+ * @param {string} action - действие (info, start, stop, restart, update)
+ */
+function handleGroupAction(groupName, action) {
+    // Собираем ID всех приложений в группе
+    const appIds = [];
+    document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`).forEach(checkbox => {
+        appIds.push(checkbox.getAttribute('data-app-id'));
+    });
+    
+    if (appIds.length === 0) {
+        showError('Не найдены приложения в группе');
+        return;
+    }
+    
+    // Обрабатываем действие
+    if (action === 'info') {
+        // Здесь можно реализовать показ информации о группе
+        showNotification('Информация о группе пока не реализована');
+    } else if (action === 'update') {
+        showUpdateModal(appIds);
+    } else {
+        showConfirmActionModal(appIds, action);
+    }
+}	
     
     /**
      * Активация/деактивация кнопок действий
@@ -801,10 +856,11 @@ document.addEventListener('DOMContentLoaded', function() {
      * Получение списка выбранных приложений
      * @returns {Array} Массив ID выбранных приложений
      */
-    function getSelectedAppIds() {
-        const selectedCheckboxes = document.querySelectorAll('.app-checkbox:checked');
-        return Array.from(selectedCheckboxes).map(checkbox => checkbox.getAttribute('data-app-id'));
-    }
+	function getSelectedAppIds() {
+		// Теперь нужно искать чекбоксы как в основной таблице, так и во вложенных таблицах
+		const selectedCheckboxes = document.querySelectorAll('.app-checkbox:checked');
+		return Array.from(selectedCheckboxes).map(checkbox => checkbox.getAttribute('data-app-id'));
+	}
     
     /**
      * Получение информации о приложении по ID
@@ -947,78 +1003,83 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {Array} appIds - Массив ID приложений
      * @param {string} action - Действие (start, stop, restart)
      */
-	function showConfirmActionModal(appIds, action) {
-		if (!appIds || appIds.length === 0) {
-			showError('Не выбрано ни одного приложения');
-			return;
-		}
-		
-		// Получаем названия действий
-		const actionNames = {
-			'start': 'запустить',
-			'stop': 'остановить',
-			'restart': 'перезапустить'
-		};
-		
-		const actionName = actionNames[action] || action;
-		
-		// Получаем информацию о приложениях
-		const appItems = appIds.map(appId => {
-			const app = getAppById(appId);
-			return app ? `${app.name} (${app.server_name || 'Неизвестный сервер'})` : `App ID: ${appId}`;
-		});
-		
-		// Функция, которая будет выполнена при подтверждении
-		const confirmAction = async function() {
-			try {
-				const response = await fetch('/api/applications/bulk/manage', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify({
-						action: action,
-						app_ids: appIds
-					})
-				});
-				
-				const data = await response.json();
-				
-				if (data.success) {
-					// Анализируем результаты
-					const successCount = data.results.filter(r => r.success).length;
-					const errorCount = data.results.length - successCount;
-					
-					if (errorCount === 0) {
-						showNotification(`Действие "${actionName}" успешно выполнено для всех выбранных приложений`);
-					} else if (successCount === 0) {
-						showError(`Не удалось выполнить действие "${actionName}" ни для одного из выбранных приложений`);
-					} else {
-						showNotification(`Действие "${actionName}" выполнено для ${successCount} из ${data.results.length} приложений`);
-					}
-					
-					// Обновляем список приложений
-					loadApplications();
-				} else {
-					console.error('Ошибка при выполнении действия:', data.error);
-					showError(data.error || `Не удалось выполнить действие "${actionName}"`);
-				}
-			} catch (error) {
-				console.error('Ошибка при выполнении действия:', error);
-				showError(`Не удалось выполнить действие "${actionName}"`);
-			}
-		};
-		
-		// Отображаем модальное окно подтверждения
-		ModalUtils.showConfirmModal(
-			`${actionName.charAt(0).toUpperCase() + actionName.slice(1)} приложения`, // Заголовок
-			`Вы уверены, что хотите <span class="action-name">${actionName}</span> выбранные приложения?`, // Сообщение
-			appItems, // Список элементов
-			confirmAction, // Функция подтверждения
-			`Подтвердить (${appIds.length})`, // Текст кнопки
-			'confirm-btn' // Класс кнопки
-		);
-	}
+function showConfirmActionModal(appIds, action) {
+    if (!appIds || appIds.length === 0) {
+        showError('Не выбрано ни одного приложения');
+        return;
+    }
+    
+    // Получаем названия действий
+    const actionNames = {
+        'start': 'запустить',
+        'stop': 'остановить',
+        'restart': 'перезапустить'
+    };
+    
+    const actionName = actionNames[action] || action;
+    
+    // Получаем информацию о приложениях
+    const appItems = appIds.map(appId => {
+        const app = getAppById(appId);
+        return app ? `${app.name} (${app.server_name || 'Неизвестный сервер'})` : `App ID: ${appId}`;
+    });
+    
+    // Функция, которая будет выполнена при подтверждении
+    const confirmAction = async function() {
+        try {
+            // Сохраняем состояние таблицы
+            saveTableState();
+            
+            const response = await fetch('/api/applications/bulk/manage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: action,
+                    app_ids: appIds
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Анализируем результаты
+                const successCount = data.results.filter(r => r.success).length;
+                const errorCount = data.results.length - successCount;
+                
+                if (errorCount === 0) {
+                    showNotification(`Действие "${actionName}" успешно выполнено для всех выбранных приложений`);
+                } else if (successCount === 0) {
+                    showError(`Не удалось выполнить действие "${actionName}" ни для одного из выбранных приложений`);
+                } else {
+                    showNotification(`Действие "${actionName}" выполнено для ${successCount} из ${data.results.length} приложений`);
+                }
+                
+                // Обновляем список приложений
+                await loadApplications();
+                // Восстановление состояния происходит внутри loadApplications()
+                
+            } else {
+                console.error('Ошибка при выполнении действия:', data.error);
+                showError(data.error || `Не удалось выполнить действие "${actionName}"`);
+            }
+        } catch (error) {
+            console.error('Ошибка при выполнении действия:', error);
+            showError(`Не удалось выполнить действие "${actionName}"`);
+        }
+    };
+    
+    // Отображаем модальное окно подтверждения
+    ModalUtils.showConfirmModal(
+        `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} приложения`, // Заголовок
+        `Вы уверены, что хотите <span class="action-name">${actionName}</span> выбранные приложения?`, // Сообщение
+        appItems, // Список элементов
+        confirmAction, // Функция подтверждения
+        `Подтвердить (${appIds.length})`, // Текст кнопки
+        'confirm-btn' // Класс кнопки
+    );
+}
     
 /**
  * Показывает модальное окно для обновления приложений
@@ -1448,5 +1509,162 @@ function showTabsUpdateModal(appGroups, title) {
 			}
 		}
 	}
+	
+/**
+ * Сохраняет текущее состояние развернутых групп
+ */
+function saveTableState() {
+    expandedGroups = [];
+    
+    // Находим все развёрнутые группы и сохраняем их имена
+    document.querySelectorAll('.group-row.expanded').forEach(row => {
+        const groupName = row.getAttribute('data-group');
+        if (groupName) {
+            expandedGroups.push(groupName);
+        }
+    });
+    
+    console.log('Сохранено состояние групп:', expandedGroups);
+}
+
+/**
+ * Восстанавливает сохраненное состояние развернутых групп
+ */
+function restoreTableState() {
+    if (!expandedGroups || expandedGroups.length === 0) return;
+    
+    console.log('Восстановление состояния групп:', expandedGroups);
+    
+    // Для каждой сохраненной группы находим соответствующую строку и раскрываем её
+    expandedGroups.forEach(groupName => {
+        const groupRow = document.querySelector(`.group-row[data-group="${groupName}"]`);
+        if (groupRow) {
+            // Добавляем класс expanded
+            groupRow.classList.add('expanded');
+            
+            // Обновляем стрелку
+            const toggle = groupRow.querySelector('.group-toggle');
+            if (toggle) {
+                toggle.style.transform = 'rotate(90deg)';
+            }
+            
+            // Показываем дочерние элементы
+            const wrapperRow = document.querySelector(`.child-wrapper[data-group="${groupName}"]`);
+            if (wrapperRow) {
+                wrapperRow.style.display = 'table-row';
+            }
+        }
+    });
+}
+
+/**
+ * Создает строку для дочернего элемента группы
+ * @param {Object} app - данные приложения
+ * @returns {HTMLElement} - DOM элемент строки таблицы
+ */
+function createChildRow(app) {
+    const childRow = document.createElement('tr');
+    childRow.setAttribute('data-app-id', app.id);
+    childRow.className = 'app-child-row'; // Добавляем класс для стилизации
+    
+    // Статус приложения
+    const statusDot = app.status === 'online' ? 
+        '<span class="service-dot"></span>' : 
+        '<span class="service-dot offline"></span>';
+    
+    // Создаем ячейки для дочерней строки
+    childRow.innerHTML = `
+        <td>
+            <div class="checkbox-container">
+                <label class="custom-checkbox">
+                    <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </td>
+        <td class="service-name">${app.name}</td>
+        <td>${app.version || 'Н/Д'}</td>
+        <td>${statusDot} ${app.status}</td>
+        <td>${app.server_name || 'Н/Д'}</td>
+        <td>
+            <div class="actions-menu">
+                <button class="actions-button">...</button>
+                <div class="actions-dropdown">
+                    <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
+                    <a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
+                    <a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
+                    <a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
+                    <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+                </div>
+            </div>
+        </td>
+    `;
+    
+    return childRow;
+}
+
+/**
+ * Создает строку группы с правильной стилизацией стрелки
+ * @param {string} groupName - имя группы
+ * @param {Array} groupApps - приложения в группе
+ * @returns {HTMLElement} - DOM элемент строки таблицы
+ */
+function createGroupRow(groupName, groupApps) {
+    const row = document.createElement('tr');
+    row.className = 'group-row';
+    row.setAttribute('data-group', groupName);
+    
+    // Проверяем версии в группе
+    const versions = new Set(groupApps.map(app => app.version || 'Н/Д'));
+    const versionText = versions.size === 1 ? 
+        (groupApps[0].version || 'Н/Д') : 
+        '<span class="version-different">*</span>';
+    
+    // Проверяем статус всех приложений в группе
+    const hasOffline = groupApps.some(app => app.status !== 'online');
+    const statusDot = hasOffline ? 
+        '<span class="service-dot offline"></span>' : 
+        '<span class="service-dot"></span>';
+    
+    // Сервер для группы (берем из первого приложения)
+    const serverName = groupApps[0].server_name || 'Н/Д';
+    
+    row.innerHTML = `
+        <td>
+            <div class="checkbox-container">
+                <label class="custom-checkbox">
+                    <input type="checkbox" class="group-checkbox" data-group="${groupName}">
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+        </td>
+        <td class="service-name">
+            <div class="group-name-container">
+                <span class="group-toggle">▶</span>
+                <span class="group-name">${groupName} (${groupApps.length})</span>
+            </div>
+        </td>
+        <td>${versionText}</td>
+        <td>${statusDot} ${hasOffline ? 'Частично офлайн' : 'Онлайн'}</td>
+        <td>${serverName}</td>
+        <td>
+            <div class="actions-menu">
+                <button class="actions-button">...</button>
+                <div class="actions-dropdown">
+                    <a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+                    <a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
+                    <a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
+                    <a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
+                    <a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
+                </div>
+            </div>
+        </td>
+    `;
+    
+    return row;
+}
+
+
+	
 });
         
