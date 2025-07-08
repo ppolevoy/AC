@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - Очередь задач{% endblock %}
+
+{% block page_title %}Очередь задач{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+    <div class="last-updated">
+        Последнее обновление: <span id="last-updated-time">-</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="tasks-container">
+    <div class="table-header-controls">
+        <div class="filters">
+            <div class="filter-group">
+                <label for="status-filter">Статус:</label>
+                <div class="select-container">
+                    <select id="status-filter" class="filter-select">
+                        <option value="all">Все статусы</option>
+                        <option value="pending">Ожидающие</option>
+                        <option value="processing">Выполняющиеся</option>
+                        <option value="completed">Завершенные</option>
+                        <option value="failed">Неудачные</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+            
+            <div class="filter-group auto-refresh">
+                <label for="auto-refresh">Автообновление:</label>
+                <div class="select-container">
+                    <select id="auto-refresh" class="filter-select">
+                        <option value="5">5 сек</option>
+                        <option value="10">10 сек</option>
+                        <option value="30">30 сек</option>
+                        <option value="60">1 мин</option>
+                        <option value="0">Выключено</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="table-actions">
+            <button id="refresh-tasks-btn" class="action-btn" title="Обновить">
+                <i class="refresh-icon">↻</i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="data-table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th class="col-id">ID <span class="sort-icon">↕</span></th>
+                    <th class="col-type">Тип <span class="sort-icon">↕</span></th>
+                    <th class="col-app">Приложение <span class="sort-icon">↕</span></th>
+                    <th class="col-server">Сервер <span class="sort-icon">↕</span></th>
+                    <th class="col-status">Статус <span class="sort-icon">↕</span></th>
+                    <th class="col-created">Создана <span class="sort-icon">↕</span></th>
+                    <th class="col-actions">Действия</th>
+                </tr>
+            </thead>
+            <tbody id="tasks-table-body">
+                <tr>
+                    <td colspan="7" class="table-loading">Загрузка задач...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="table-footer">
+        <div class="pagination">
+            <span>Показывать</span>
+            <div class="select-container">
+                <select id="page-size" class="page-select">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span class="select-arrow">▼</span>
+            </div>
+            <span>на странице</span>
+        </div>
+        
+        <div class="pagination-controls">
+            <button class="pagination-btn" id="prev-page" disabled>
+                <i class="pagination-icon">←</i>
+            </button>
+            <span class="pagination-info">Страница <span id="current-page">1</span></span>
+            <button class="pagination-btn" id="next-page" disabled>
+                <i class="pagination-icon">→</i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Шаблон для модального окна с информацией о задаче -->
+<template id="task-info-modal-template">
+    <div class="task-info-container">
+        <div class="task-info-section">
+            <h4>Основная информация</h4>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label">ID:</td>
+                    <td class="task-id"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Тип:</td>
+                    <td class="task-type"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Статус:</td>
+                    <td class="task-status"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Приложение:</td>
+                    <td class="task-app"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Сервер:</td>
+                    <td class="task-server"></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="task-info-section">
+            <h4>Временные метки</h4>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label">Создана:</td>
+                    <td class="task-created"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Начата:</td>
+                    <td class="task-started"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Завершена:</td>
+                    <td class="task-completed"></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="task-info-section">
+            <h4>Параметры</h4>
+            <pre class="task-params"></pre>
+        </div>
+        
+        <div class="task-info-section">
+            <h4>Результат</h4>
+            <div class="task-result"></div>
+        </div>
+        
+        <div class="task-info-section error-section" style="display:none;">
+            <h4>Ошибка</h4>
+            <div class="task-error"></div>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипт для страницы задач -->
+<script src="{{ url_for('static', filename='js/tasks/tasks.js') }}"></script>
+{% endblock %}

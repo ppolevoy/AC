@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - Серверы{% endblock %}
+
+{% block page_title %}Серверы{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+    <button class="add-server-btn-alt" id="add-server-btn">
+        <span class="add-icon">+</span>
+        <span>Новый сервер</span>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="servers-section">
+    <div id="servers-container" class="servers-grid">
+        <!-- Здесь будут отображаться карточки серверов -->
+        <div class="server-loading">Загрузка серверов...</div>
+    </div>
+    
+    <!-- Пустое состояние (отображается, когда нет серверов) -->
+    <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-icon">🖥️</div>
+        <div class="empty-text">Нет подключенных серверов</div>
+        <button class="add-server-btn-alt" id="add-server-empty-btn">
+            <span class="add-icon">+</span>
+            <span>Новый сервер</span>
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипт для страницы серверов -->
+<script src="{{ url_for('static', filename='js/servers/servers.js') }}"></script>
+{% endblock %}

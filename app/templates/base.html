@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Faktura Apps{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+    <!-- Подключаем общие JavaScript файлы -->
+    <script src="{{ url_for('static', filename='js/common/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common/notifications.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common/base.js') }}"></script>
+	<script src="{{ url_for('static', filename='js/common/modal-utils.js') }}"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">F</div>
+            <div>
+                <div class="logo-text">Faktura</div>
+                <div class="logo-title">Apps Control</div>
+            </div>
+        </div>
+        
+        <div class="sidebar-menu">
+            <a href="{{ url_for('main.servers') }}" class="menu-item {% if request.endpoint == 'main.servers' %}active{% endif %}">
+                <span class="menu-icon">*</span>
+                <span>Серверы</span>
+            </a>
+            <a href="#" class="menu-item {% if request.endpoint == 'main.management' %}active{% endif %}">
+                <span class="menu-icon">*</span>
+                <span>Управление</span>
+            </a>
+			<a href="{{ url_for('main.tasks') }}" class="menu-item {% if request.endpoint == 'main.tasks' %}active{% endif %}">
+				<span class="menu-icon">*</span>
+				<span>Задачи</span>
+			</a>			
+            <a href="{{ url_for('main.applications') }}" class="menu-item {% if request.endpoint == 'main.applications' %}active{% endif %}">
+                <span class="menu-icon">*</span>
+                <span>Приложения</span>
+            </a>
+            <a href="#" class="menu-item {% if request.endpoint == 'main.settings' %}active{% endif %}">
+                <span class="menu-icon">*</span>
+                <span>Настройки</span>
+            </a>                        
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="header">
+            <div class="header-title-container">
+                <h1 class="page-title">{% block page_title %}Faktura Apps{% endblock %}</h1>
+                {% block subheader %}{% endblock %}
+            </div>
+            <div class="header-actions">
+                <button id="themeToggle" class="theme-toggle">Светлая тема</button>
+            </div>
+        </div>
+        
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Модальные окна -->
+    <div id="modal-container" class="modal-container" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Заголовок модального окна</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Содержимое модального окна -->
+            </div>
+        </div>
+    </div>
+    
+    {% block page_scripts %}{% endblock %}
+</body>
+</html>

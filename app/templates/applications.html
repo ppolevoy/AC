@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - Приложения{% endblock %}
+
+{% block page_title %}Приложения{% endblock %}
+
+{% block content %}
+<div class="cluster-info">
+    <div class="server-dropdown">
+        <button class="dropdown-button" id="server-selected">Выберите сервер <span>▾</span></button>
+        <div class="dropdown-content" id="server-list">
+            <a href="#" data-server-id="all">Все серверы</a>
+            <!-- Список серверов будет загружен динамически -->
+        </div>
+    </div>
+    
+    <hr>
+    
+<div class="search-container">
+    <div class="search-bar">
+        <input type="text" placeholder="Поиск приложения" id="search-input" class="search-input">
+        <span class="search-icon">🔍</span>
+    </div>
+    <div class="controls-container">
+        <button id="group-toggle-btn" class="group-btn active" title="Группировать">
+            <span id="group-icon"></span> Группировать
+        </button>
+        <button id="refresh-btn" class="refresh-btn" title="Обновить">⟳</button>
+    </div>
+</div>
+    
+    <div class="action-buttons">
+        <button class="action-btn start" id="start-btn">Запустить</button>
+        <button class="action-btn restart" id="restart-btn">Перезапустить</button>
+        <button class="action-btn stop" id="stop-btn">Остановить</button>
+        <button class="action-btn" id="update-btn">Обновить</button>
+        <button class="action-btn" id="unload-btn">Снять нагрузку</button>
+    </div>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>
+                        <div class="header-checkbox-container">
+                            <label class="custom-checkbox">
+                                <input type="checkbox" id="select-all">
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                    </th>
+                    <th class="sortable" data-sort="name">Имя сервиса</th>
+                    <th>Версия</th>
+                    <th class="sortable" data-sort="state">Статус</th>
+                    <th>Сервер</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="applications-table-body">
+                <!-- Список приложений будет загружен динамически -->
+                <tr>
+                    <td colspan="6" class="table-loading">Загрузка приложений...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="pagination">
+        <div class="page-size">
+            <span>Показывать</span>
+            <select class="page-select" id="page-size-select">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+        <div class="page-nav" id="pagination-controls">
+            <div class="page-number">1</div>
+            <button class="nav-btn prev-page" disabled>◀</button>
+            <button class="nav-btn next-page">▶</button>
+        </div>
+    </div>
+</div>
+
+<!-- Шаблон для модальных окон -->
+<template id="update-modal-template">
+    <div class="modal-tabs" id="update-tabs">
+        <!-- Вкладки будут добавлены динамически, если выбрано несколько приложений -->
+    </div>
+    <form id="update-form" class="modal-form">
+        <div class="form-group">
+            <label for="distr-url">URL дистрибутива:</label>
+            <input type="text" id="distr-url" name="distr-url" class="form-control" required>
+        </div>
+        <div class="form-group">
+            <label>Режим обновления:</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="restart-mode" value="restart" checked> В рестарт
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="restart-mode" value="immediate"> Сейчас
+                </label>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
+            <button type="submit" class="submit-btn">Обновить</button>
+        </div>
+    </form>
+</template>
+
+<template id="confirm-action-modal-template">
+    <p class="confirmation-text">Вы уверены, что хотите <span class="action-name"></span> выбранные приложения?</p>
+    <div class="app-list"></div>
+    <div class="form-actions">
+        <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
+        <button type="button" class="confirm-btn">Подтвердить</button>
+    </div>
+</template>
+
+<template id="app-info-modal-template">
+    <div class="app-info-container">
+        <div class="app-info-section">
+            <h4>Основная информация</h4>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label">Имя:</td>
+                    <td class="app-name"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Тип:</td>
+                    <td class="app-type"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Статус:</td>
+                    <td class="app-status"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Версия:</td>
+                    <td class="app-version"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Сервер:</td>
+                    <td class="app-server"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">IP:</td>
+                    <td class="app-ip"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Порт:</td>
+                    <td class="app-port"></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="app-info-section">
+            <h4>Пути и расположение</h4>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label">Путь приложения:</td>
+                    <td class="app-path"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Путь к логам:</td>
+                    <td class="app-log-path"></td>
+                </tr>
+                <tr>
+                    <td class="info-label">Путь к дистрибутиву:</td>
+                    <td class="app-distr-path"></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="app-info-section">
+            <h4>Настройки обновления</h4>
+            <div class="form-group">
+                <label for="update-playbook-path">Путь к Ansible playbook:</label>
+                <div class="input-with-button">
+                    <input type="text" id="update-playbook-path" class="form-control app-playbook-path">
+                    <button type="button" id="save-playbook-path" class="action-btn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="app-info-section">
+            <h4>Последние события</h4>
+            <div class="events-list"></div>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипт для страницы приложений -->
+<script src="{{ url_for('static', filename='js/applications/applications.js') }}"></script>
+{% endblock %}

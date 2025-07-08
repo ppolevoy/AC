@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - Информация о сервере{% endblock %}
+
+{% block page_title %}Сервер: <span id="server-name-display">Загрузка...</span>{% endblock %}
+
+{% block subheader %}
+<div class="subheader">
+    <div class="server-status-display" id="server-status">
+        <!-- Здесь будет отображаться статус сервера -->
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="server-details-container">
+    <div class="server-info-panel">
+        <h3 class="panel-title">Информация о сервере</h3>
+        <div id="server-info-content" class="panel-content">
+            <div class="info-loading">Загрузка информации о сервере...</div>
+        </div>
+    </div>
+    
+    <div class="apps-panel">
+        <h3 class="panel-title">Приложения на сервере</h3>
+        <div class="search-filter">
+            <input type="text" id="app-search" placeholder="Поиск приложения" class="search-input">
+        </div>
+        <div id="server-apps-content" class="panel-content">
+            <div class="info-loading">Загрузка списка приложений...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипт для страницы деталей сервера -->
+<script src="{{ url_for('static', filename='js/servers/server-details.js') }}"></script>
+{% endblock %}
