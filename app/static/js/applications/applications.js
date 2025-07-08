@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Инициализация страницы
     init();
-
+    initClickDropdowns();
     /**
      * Инициализация обработчиков событий
      */
@@ -437,63 +437,56 @@ async function loadApplications() {
 			const childTableBody = document.createElement('tbody');
 			
 			// Create rows for each application in the group
-			group.apps.forEach(app => {
-				const childRow = document.createElement('tr');
-				childRow.className = 'app-child-row'; // Добавляем класс для стилизации
-				childRow.setAttribute('data-app-id', app.id);
-				childRow.setAttribute('data-parent', group.name);
-				
-				// Статус приложения
-				const statusDot = app.status === 'online' ? 
-					'<span class="service-dot"></span>' : 
-					'<span class="service-dot offline"></span>';
-				
-				// Создаем ячейки для дочерней строки
-				childRow.innerHTML = `
-					<td>
-						<div class="checkbox-container">
-							<label class="custom-checkbox">
-								<input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
-								<span class="checkmark"></span>
-							</label>
-						</div>
-					</td>
-					<td class="service-name">
-						${app.name}
-						<div class="dist-details">
-							<div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-							<div>Тип: ${app.type || 'Н/Д'}</div>
-						</div>
-					</td>
-					<td>${app.version || 'Н/Д'}</td>
-					<td>${statusDot} ${app.status}</td>
-					<td>${app.server_name || 'Н/Д'}</td>
-					<td>
-						<div class="actions-menu">
-							<button class="actions-button">...</button>
-							<div class="actions-dropdown">
-								<a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
-								<a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
-								<a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
-								<a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
-								<a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
-							</div>
-						</div>
-					</td>
-				`;
+            group.apps.forEach(app => {
+                const childRow = document.createElement('tr');
+                childRow.className = 'app-child-row';
+                childRow.setAttribute('data-app-id', app.id);
+                childRow.setAttribute('data-parent', group.name);
+                
+                const statusDot = app.status === 'online' ? 
+                    '<span class="service-dot"></span>' : 
+                    '<span class="service-dot offline"></span>';
+                
+                childRow.innerHTML = `
+                    <td>
+                        <div class="checkbox-container">
+                            <label class="custom-checkbox">
+                                <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                    </td>
+                    <td class="service-name">
+                        ${app.name}
+                        <div class="dist-details">
+                            <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                            <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                            <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
+                        </div>
+                    </td>
+                    <td>${app.version || 'Н/Д'}</td>
+                    <td>${statusDot} ${app.status}</td>
+                    <td>${app.server_name || 'Н/Д'}</td>
+                    <td>
+                        <div class="actions-menu">
+                            <button class="actions-button">...</button>
+                            <div class="actions-dropdown">
+                                ${createActionMenuItems(app)}
+                            </div>
+                        </div>
+                    </td>
+                `;
 				
 				// Добавляем обработчик клика непосредственно для этой строки
-				childRow.addEventListener('click', function(e) {
-					// Игнорируем клики на чекбоксы и меню действий
-					if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
-						return;
-					}
-					// Переключаем класс expanded для текущей строки
-					this.classList.toggle('expanded');
-				});
-				
-				childTableBody.appendChild(childRow);
-			});
+                childRow.addEventListener('click', function(e) {
+                    if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                        return;
+                    }
+                    this.classList.toggle('expanded');
+                });
+                
+                childTableBody.appendChild(childRow);
+            });
 			
 			// Assemble the nested structure
 			childTable.appendChild(childTableBody);
@@ -580,38 +573,35 @@ async function loadApplications() {
 			'<span class="service-dot"></span>' : 
 			'<span class="service-dot offline"></span>';
 		
-		row.innerHTML = `
-			<td>
-				<div class="checkbox-container">
-					<label class="custom-checkbox">
-						<input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
-						<span class="checkmark"></span>
-					</label>
-				</div>
-			</td>
-			<td class="service-name ${isChild ? 'child-indent' : ''}">
-				${app.name}
-				<div class="dist-details">
-					<div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-					<div>Тип: ${app.type || 'Н/Д'}</div>
-				</div>
-			</td>
-			<td>${app.version || 'Н/Д'}</td>
-			<td>${statusDot}</td>
-			<td>${app.server_name || 'Н/Д'}</td>
-			<td>
-				<div class="actions-menu">
-					<button class="actions-button">...</button>
-					<div class="actions-dropdown">
-						<a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
-						<a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
-						<a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
-						<a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
-						<a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
-					</div>
-				</div>
-			</td>
-		`;
+        row.innerHTML = `
+            <td>
+                <div class="checkbox-container">
+                    <label class="custom-checkbox">
+                        <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+                        <span class="checkmark"></span>
+                    </label>
+                </div>
+            </td>
+            <td class="service-name ${isChild ? 'child-indent' : ''}">
+                ${app.name}
+                <div class="dist-details">
+                    <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                    <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                    <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
+                </div>
+            </td>
+            <td>${app.version || 'Н/Д'}</td>
+            <td>${statusDot} ${app.status || 'Н/Д'}</td>
+            <td>${app.server_name || 'Н/Д'}</td>
+            <td>
+                <div class="actions-menu">
+                    <button class="actions-button">...</button>
+                    <div class="actions-dropdown">
+                        ${createActionMenuItems(app)}
+                    </div>
+                </div>
+            </td>
+        `;
 		
 		return row;
 	}	
@@ -677,7 +667,6 @@ function setupTableEventHandlers() {
     addChildRowHandlers();
     // Раскрытие/скрытие детальной информации о приложении
     document.querySelectorAll('tbody tr').forEach(row => {
-        // Пропускаем строки-обертки и группы
         if (row.classList.contains('child-wrapper') || row.classList.contains('group-row')) {
             return;
         }
@@ -774,33 +763,32 @@ function setupTableEventHandlers() {
 function setupAppActionButtons() {
     // Обработчики для кнопок в выпадающем меню приложений как в основной таблице, так и в дочерней
     document.querySelectorAll('.app-info-btn, .app-start-btn, .app-stop-btn, .app-restart-btn, .app-update-btn').forEach(btn => {
-        // Удаляем существующие обработчики через клонирование
-        const newBtn = btn.cloneNode(true);
-        if (btn.parentNode) {
-            btn.parentNode.replaceChild(newBtn, btn);
-        }
-        
-        // Добавляем новый обработчик
-        newBtn.addEventListener('click', function(e) {
+        btn.addEventListener('click', function(e) {
             e.preventDefault();
-            e.stopPropagation(); // Предотвращаем всплытие
             
-            // Выделяем действие из имени класса
-            const className = this.className;
-            let action;
-            
-            if (className.includes('info-btn')) action = 'info';
-            else if (className.includes('start-btn')) action = 'start';
-            else if (className.includes('stop-btn')) action = 'stop';
-            else if (className.includes('restart-btn')) action = 'restart';
-            else if (className.includes('update-btn')) action = 'update';
-            else {
-                console.error('Неизвестное действие из класса:', className);
+            if (this.classList.contains('disabled')) {
                 return;
             }
             
             const appId = this.getAttribute('data-app-id');
-            console.log(`Клик на кнопке ${action} для приложения ${appId}`);
+            const action = this.getAttribute('data-action') || 
+                         (this.className.includes('info') ? 'info' :
+                          this.className.includes('start') ? 'start' :
+                          this.className.includes('stop') ? 'stop' :
+                          this.className.includes('restart') ? 'restart' :
+                          this.className.includes('update') ? 'update' : null);
+            
+            const app = getAppById(appId);
+            if (!app) {
+                console.error(`Не удалось найти приложение с ID: ${appId}`);
+                return;
+            }
+            
+            if (action !== 'info' && action !== 'update' && !isActionAvailable(app, action)) {
+                const statusMsg = app.status === 'online' ? 'уже запущено' : 'не запущено';
+                showError(`Невозможно выполнить действие "${action}" для приложения, которое ${statusMsg}`);
+                return;
+            }
             
             switch(action) {
                 case 'info':
@@ -814,9 +802,6 @@ function setupAppActionButtons() {
                 case 'update':
                     showUpdateModal([appId]);
                     break;
-                default:
-                    console.error('Неизвестное действие:', action);
-                    break;
             }
         });
     });
@@ -826,34 +811,22 @@ function setupAppActionButtons() {
  * Устанавливает обработчики для кнопок действий групп
  */
 function setupGroupActionButtons() {
-    // Обработчики для кнопок в выпадающем меню групп
+    // ОБРАБОТЧИКИ ДЛЯ ГРУППОВЫХ ДЕЙСТВИЙ
     document.querySelectorAll('.group-info-btn, .group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn').forEach(btn => {
-        // Удаляем существующие обработчики через клонирование
-        const newBtn = btn.cloneNode(true);
-        if (btn.parentNode) {
-            btn.parentNode.replaceChild(newBtn, btn);
-        }
-        
-        // Добавляем новый обработчик
-        newBtn.addEventListener('click', function(e) {
+        btn.addEventListener('click', function(e) {
             e.preventDefault();
-            e.stopPropagation(); // Предотвращаем всплытие
             
-            // Выделяем действие из имени класса
-            const className = this.className;
-            let action;
-            
-            if (className.includes('start-btn')) action = 'start';
-            else if (className.includes('stop-btn')) action = 'stop';
-            else if (className.includes('restart-btn')) action = 'restart';
-            else if (className.includes('update-btn')) action = 'update';
-            else {
-                console.error('Неизвестное действие из класса:', className);
+            if (this.classList.contains('disabled')) {
                 return;
             }
             
             const groupName = this.getAttribute('data-group');
-            console.log(`Клик на кнопке ${action} для группы ${groupName}`);
+            const action = this.getAttribute('data-action') || 
+                         (this.className.includes('info') ? 'info' :
+                          this.className.includes('start') ? 'start' :
+                          this.className.includes('stop') ? 'stop' :
+                          this.className.includes('restart') ? 'restart' :
+                          this.className.includes('update') ? 'update' : null);
             
             handleGroupAction(groupName, action);
         });
@@ -924,13 +897,9 @@ function updateGroupCheckboxState(groupName) {
  * @param {string} action - действие (info, start, stop, restart, update)
  */
 function handleGroupAction(groupName, action) {
-    // Собираем ID всех приложений в группе
     const appIds = [];
     document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`).forEach(checkbox => {
-        const appId = checkbox.getAttribute('data-app-id');
-        if (appId) {
-            appIds.push(appId);
-        }
+        appIds.push(checkbox.getAttribute('data-app-id'));
     });
     
     if (appIds.length === 0) {
@@ -938,21 +907,43 @@ function handleGroupAction(groupName, action) {
         return;
     }
     
-    console.log(`Действие ${action} для группы ${groupName}, приложения:`, appIds);
+    const appsInGroup = appIds.map(id => getAppById(id)).filter(app => app);
     
-    // Обрабатываем действие
-    switch(action) {
-        case 'update':
-            showUpdateModal(appIds);
-            break;
-        case 'start':
-        case 'stop':
-        case 'restart':
-            showConfirmActionModal(appIds, action);
-            break;
-        default:
-            showError(`Неподдерживаемое действие для группы: ${action}`);
-            break;
+    if (action !== 'info' && action !== 'update' && !isGroupActionAvailable(appsInGroup, action)) {
+        let errorMsg = 'Это действие недоступно для текущего состояния приложений в группе.';
+        
+        switch(action) {
+            case 'start':
+                errorMsg = 'Невозможно запустить: все приложения в группе уже запущены.';
+                break;
+            case 'stop':
+            case 'restart':
+                errorMsg = 'Невозможно выполнить: в группе нет запущенных приложений.';
+                break;
+        }
+        
+        showError(errorMsg);
+        return;
+    }
+    
+    if (action === 'info') {
+        showNotification('Информация о группе пока не реализована');
+    } else if (action === 'update') {
+        showUpdateModal(appIds);
+    } else {
+        const filteredAppIds = appsInGroup
+            .filter(app => isActionAvailable(app, action))
+            .map(app => app.id);
+        
+        if (filteredAppIds.length === 0) {
+            showError(`Нет приложений в группе, для которых доступно действие "${action}"`);
+            return;
+        }
+        
+        const extraMessage = filteredAppIds.length !== appIds.length ? 
+            `Будет выполнено только для приложений с подходящим статусом (${filteredAppIds.length} из ${appIds.length})` : null;
+        
+        showConfirmActionModal(filteredAppIds, action, extraMessage);
     }
 }	
     
@@ -1778,10 +1769,7 @@ function createGroupRow(groupName, groupApps) {
             <div class="actions-menu">
                 <button class="actions-button">...</button>
                 <div class="actions-dropdown">
-                    <a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
-                    <a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
-                    <a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
-                    <a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
+                    ${createGroupActionMenu(groupName, groupApps)}
                 </div>
             </div>
         </td>
@@ -1908,8 +1896,198 @@ function closeAllDropdowns() {
     activeDropdown = null;
 }
 
+/**
+ * Проверяет, доступно ли действие для приложения с определенным статусом
+ */
+function isActionAvailable(app, action) {
+    const status = (app.status || '').toLowerCase();
+    
+    switch(action) {
+        case 'start':
+            return status !== 'online';
+        case 'stop':
+        case 'restart':
+            return status === 'online';
+        case 'update':
+            return true;
+        default:
+            return true;
+    }
+}
 
+/**
+ * Проверяет доступность группового действия
+ */
+function isGroupActionAvailable(apps, action) {
+    if (!apps || apps.length === 0) {
+        return false;
+    }
+    
+    switch(action) {
+        case 'start':
+            return apps.some(app => (app.status || '').toLowerCase() !== 'online');
+        case 'stop':
+        case 'restart':
+            return apps.some(app => (app.status || '').toLowerCase() === 'online');
+        case 'update':
+            return true;
+        default:
+            return true;
+    }
+}
 
-	
+/**
+ * Создает пункты меню с учетом статуса приложения
+ */
+function createActionMenuItems(app) {
+    return `
+        <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
+        <a href="#" class="app-start-btn ${!isActionAvailable(app, 'start') ? 'disabled' : ''}" 
+           data-app-id="${app.id}" data-action="start">Запустить</a>
+        <a href="#" class="app-stop-btn ${!isActionAvailable(app, 'stop') ? 'disabled' : ''}" 
+           data-app-id="${app.id}" data-action="stop">Остановить</a>
+        <a href="#" class="app-restart-btn ${!isActionAvailable(app, 'restart') ? 'disabled' : ''}" 
+           data-app-id="${app.id}" data-action="restart">Перезапустить</a>
+        <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+    `;
+}
+
+/**
+ * Создает меню групповых действий
+ */
+function createGroupActionMenu(group, apps) {
+    return `
+        <a href="#" class="group-info-btn" data-group="${group}">Информация</a>
+        <a href="#" class="group-start-btn ${!isGroupActionAvailable(apps, 'start') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="start">Запустить все</a>
+        <a href="#" class="group-stop-btn ${!isGroupActionAvailable(apps, 'stop') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="stop">Остановить все</a>
+        <a href="#" class="group-restart-btn ${!isGroupActionAvailable(apps, 'restart') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="restart">Перезапустить все</a>
+        <a href="#" class="group-update-btn" 
+           data-group="${group}" data-action="update">Обновить все</a>
+    `;
+}
+
+/**
+ * Создает меню групповых действий
+ */
+function createGroupActionMenu(group, apps) {
+    return `
+        <a href="#" class="group-info-btn" data-group="${group}">Информация</a>
+        <a href="#" class="group-start-btn ${!isGroupActionAvailable(apps, 'start') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="start">Запустить все</a>
+        <a href="#" class="group-stop-btn ${!isGroupActionAvailable(apps, 'stop') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="stop">Остановить все</a>
+        <a href="#" class="group-restart-btn ${!isGroupActionAvailable(apps, 'restart') ? 'disabled' : ''}" 
+           data-group="${group}" data-action="restart">Перезапустить все</a>
+        <a href="#" class="group-update-btn" 
+           data-group="${group}" data-action="update">Обновить все</a>
+    `;
+}
+
+// === ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ВЫПАДАЮЩИМИ МЕНЮ ===
+
+/**
+ * Инициализация обработчиков меню
+ */
+function initClickDropdowns() {
+    console.log('Инициализация меню...'); // Для отладки
+    if (!dropdownOverlay) {
+        dropdownOverlay = document.createElement('div');
+        dropdownOverlay.className = 'dropdown-overlay';
+        document.body.appendChild(dropdownOverlay);
+        dropdownOverlay.addEventListener('click', closeAllDropdowns);
+    }
+    
+    document.body.addEventListener('click', function(e) {
+        const actionButton = e.target.closest('.actions-button');
+        if (actionButton) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleClickDropdown(actionButton);
+        }
+    });
+}
+
+/**
+ * Переключение состояния выпадающего меню
+ */
+function toggleClickDropdown(actionButton) {
+    const dropdown = actionButton.nextElementSibling;
+    
+    // Проверяем, открыто ли уже это меню (по CSS классу, а не по переменной)
+    if (dropdown.classList.contains('show')) {
+        console.log('меню уже открыто...'); // Для отладки
+        // Если меню уже открыто - закрываем его
+        //closeAllDropdowns();
+        return;
+    }
+    
+    // Закрываем все другие меню
+    closeAllDropdowns();
+    
+    // Показываем оверлей
+    dropdownOverlay.style.display = 'block';
+    
+    // Позиционируем и показываем меню
+    positionClickDropdown(dropdown, actionButton);
+    
+    // Сохраняем ссылку на активное меню
+    activeDropdown = dropdown;
+}
+
+/**
+ * Позиционирование выпадающего меню
+ */
+function positionClickDropdown(dropdown, actionButton) {
+    const buttonRect = actionButton.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - buttonRect.bottom;
+    const showUpwards = spaceBelow < 200;
+    
+    dropdown.style.display = 'block';
+    dropdown.style.opacity = '0';
+    dropdown.classList.remove('dropdown-up');
+    
+    if (showUpwards) {
+        dropdown.classList.add('dropdown-up');
+        dropdown.style.bottom = (window.innerHeight - buttonRect.top) + 'px';
+    } else {
+        dropdown.style.top = buttonRect.bottom + 'px';
+    }
+    
+    dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
+    dropdown.classList.add('show');
+    dropdown.style.opacity = '1';
+    actionButton.classList.add('active');
+}
+
+/**
+ * Закрытие всех выпадающих меню
+ */
+function closeAllDropdowns() {
+    if (dropdownOverlay) {
+        dropdownOverlay.style.display = 'none';
+    }
+    
+    document.querySelectorAll('.actions-dropdown.show').forEach(dropdown => {
+        dropdown.classList.remove('show');
+        dropdown.style.display = '';
+        dropdown.style.top = '';
+        dropdown.style.right = '';
+        dropdown.style.bottom = '';
+        
+        const parentMenu = dropdown.closest('.actions-menu');
+        if (parentMenu) {
+            const actionButton = parentMenu.querySelector('.actions-button');
+            if (actionButton) {
+                actionButton.classList.remove('active');
+            }
+        }
+    });
+    
+    activeDropdown = null;
+}
+
 });
         

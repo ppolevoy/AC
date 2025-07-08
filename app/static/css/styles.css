@@ -638,17 +638,17 @@ body.light-theme .action-icon {
     color: #ebe4da;
 }
 
-/* Темная тема */
-
+/* Базовые стили для выпадающих меню */
 .actions-dropdown {
-    position: fixed; 
-    z-index: 1000; /
-    min-width: 150px; 
-    display: none; 
+    position: fixed; /* Изменено с absolute на fixed */
+    z-index: 1000; /* Увеличен z-index */
+    min-width: 150px;
+    display: none; /* По умолчанию скрыто */
     background-color: #2a2a2b;
     border: 1px solid #333336;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-    overflow: hidden	
+    border-radius: 4px;
+    overflow: hidden;
 }
 
 .actions-dropdown a {
@@ -694,14 +694,15 @@ body.light-theme .actions-dropdown a:hover {
 
 .actions-dropdown.show {
     display: block;
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeInMenu 0.2s ease-out;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
+@keyframes fadeInMenu {
+    from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Overlay для закрытия меню при клике вне */
 .dropdown-overlay {
     position: fixed;
     top: 0;
@@ -2415,8 +2416,9 @@ body.light-theme .child-table tbody tr:hover td {
     background-color: #f5f5f5 !important;
 }
 
+/* Стили для dist-details в дочерних строках */
 .app-child-row.expanded .dist-details {
-    max-height: 100px;
+    max-height: 120px; /* Увеличено для трех строк */
     padding: 10px;
 }
 
@@ -2463,3 +2465,140 @@ body.light-theme .child-table .app-child-row .dist-details {
     color: #666;
 }
 
+/* Стили для блока dist-details с путями */
+.dist-details div {
+    word-break: break-word; /* Разрешает перенос слов в любом месте */
+    white-space: normal; /* Обеспечивает перенос строк */
+    line-height: 1.4; /* Увеличивает межстрочный интервал для лучшей читаемости */
+    max-width: 100%; /* Гарантирует, что текст не выйдет за пределы контейнера */
+}
+
+/* Отступ между строками в dist-details */
+.dist-details div + div {
+    margin-top: 6px; /* Увеличивает расстояние между строками информации */
+}
+
+/* Увеличиваем максимальную высоту при раскрытии блока */
+.app-row.expanded .dist-details,
+.app-child-row.expanded .dist-details {
+    max-height: 120px; /* Увеличиваем максимальную высоту для трех строк */
+    padding: 10px;
+}
+
+/* Гарантируем, что пути будут корректно отображаться в темной теме */
+.dist-details div {
+    color: #aaa;
+}
+
+body.light-theme .dist-details div {
+    color: #666;
+}
+
+/* Пути к файлам выделены моноширинным шрифтом для лучшей читаемости */
+.dist-details div:nth-child(1),
+.dist-details div:nth-child(2),
+.dist-details div:nth-child(3) {
+    font-family: monospace;
+    font-size: 13px;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+body.light-theme .dist-details div:nth-child(1),
+body.light-theme .dist-details div:nth-child(2),
+body.light-theme .dist-details div:nth-child(3) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* === СТИЛИ ДЛЯ НЕАКТИВНЫХ ПУНКТОВ МЕНЮ === */
+
+.actions-dropdown a.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    color: #666;
+}
+
+body.light-theme .actions-dropdown a.disabled {
+    color: #999;
+}
+
+/* Улучшенный стиль наведения для активных пунктов */
+.actions-dropdown a:not(.disabled):hover {
+    background-color: #3a3a3c;
+}
+
+body.light-theme .actions-dropdown a:not(.disabled):hover {
+    background-color: #e9e9e9;
+}
+
+/* Визуальная индикация для различных действий */
+.actions-dropdown a.app-start-btn:not(.disabled) {
+    border-left: 3px solid #00a67c;
+}
+
+.actions-dropdown a.app-stop-btn:not(.disabled) {
+    border-left: 3px solid #e74c3c;
+}
+
+.actions-dropdown a.app-restart-btn:not(.disabled) {
+    border-left: 3px solid #3498db;
+}
+
+.actions-dropdown a.app-update-btn:not(.disabled) {
+    border-left: 3px solid #f39c12;
+}
+
+/* Подсказки при наведении на неактивные пункты */
+.actions-dropdown a.disabled {
+    position: relative;
+}
+
+.actions-dropdown a.disabled:hover::after {
+    content: "Недоступно для текущего статуса";
+    position: absolute;
+    background-color: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1010;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+body.light-theme .actions-dropdown a.disabled:hover::after {
+    background-color: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+/* Специфичные сообщения для разных действий */
+.actions-dropdown a.app-start-btn.disabled:hover::after {
+    content: "Нельзя запустить уже работающее приложение";
+}
+
+.actions-dropdown a.app-stop-btn.disabled:hover::after {
+    content: "Нельзя остановить неработающее приложение";
+}
+
+.actions-dropdown a.app-restart-btn.disabled:hover::after {
+    content: "Нельзя перезапустить неработающее приложение";
+}
+
+/* Дополнительные стили для групповых действий */
+.confirm-extra-message {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #333336;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #f39c12;
+}
+
+body.light-theme .confirm-extra-message {
+    background-color: #f5f5f5;
+    color: #d35400;
+}
