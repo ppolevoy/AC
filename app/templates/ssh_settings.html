@@ -1,0 +1,617 @@
+<!-- app/templates/ssh_settings.html -->
+{% extends "base.html" %}
+
+{% block title %}SSH Settings | Faktura Apps{% endblock %}
+
+{% block page_title %}SSH Settings{% endblock %}
+
+{% block content %}
+<div class="ssh-settings-container">
+    <div class="settings-panel">
+        <h3 class="panel-title">SSH Connection Status</h3>
+        <div id="ssh-status-content" class="panel-content">
+            <div class="info-loading">Loading SSH status...</div>
+        </div>
+    </div>
+    
+    <div class="settings-panel">
+        <h3 class="panel-title">SSH Configuration</h3>
+        <div id="ssh-config-content" class="panel-content">
+            <div class="info-loading">Loading SSH configuration...</div>
+        </div>
+    </div>
+    
+    <div class="settings-panel">
+        <h3 class="panel-title">SSH Key Management</h3>
+        <div id="ssh-key-content" class="panel-content">
+            <div class="info-loading">Loading SSH key information...</div>
+        </div>
+    </div>
+    
+    <div class="settings-panel">
+        <h3 class="panel-title">Playbooks Status</h3>
+        <div id="playbooks-status-content" class="panel-content">
+            <div class="info-loading">Loading playbooks status...</div>
+        </div>
+    </div>
+    
+    <div class="settings-panel">
+        <h3 class="panel-title">Actions</h3>
+        <div class="panel-content">
+            <div class="action-buttons">
+                <button id="test-connection-btn" class="action-btn">Test Connection</button>
+                <button id="generate-key-btn" class="action-btn">Generate New Key</button>
+                <button id="refresh-status-btn" class="action-btn">Refresh Status</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.ssh-settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.settings-panel {
+    background-color: #2a2a2b;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #333336;
+}
+
+body.light-theme .settings-panel {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+}
+
+.panel-title {
+    margin-bottom: 15px;
+    color: #5ca5e1;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.panel-content {
+    color: #ebe4da;
+}
+
+body.light-theme .panel-content {
+    color: #333;
+}
+
+.info-loading {
+    text-align: center;
+    padding: 20px;
+    color: #888;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #333336;
+}
+
+body.light-theme .status-item {
+    border-bottom: 1px solid #eee;
+}
+
+.status-item:last-child {
+    border-bottom: none;
+}
+
+.status-label {
+    font-weight: 500;
+    color: #aaa;
+}
+
+body.light-theme .status-label {
+    color: #666;
+}
+
+.status-value {
+    font-family: monospace;
+    font-size: 14px;
+}
+
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+}
+
+.status-dot.success {
+    background-color: #2ecc71;
+}
+
+.status-dot.warning {
+    background-color: #f39c12;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.config-label {
+    font-weight: 500;
+    color: #aaa;
+    font-size: 14px;
+}
+
+body.light-theme .config-label {
+    color: #666;
+}
+
+.config-value {
+    font-family: monospace;
+    font-size: 14px;
+    padding: 8px;
+    background-color: #333336;
+    border-radius: 4px;
+    border: 1px solid #444;
+}
+
+body.light-theme .config-value {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.ssh-key-display {
+    background-color: #252528;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 15px;
+    border: 1px solid #333336;
+}
+
+body.light-theme .ssh-key-display {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.ssh-key-text {
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #ebe4da;
+    background-color: #1e1e1e;
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+body.light-theme .ssh-key-text {
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.playbooks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.playbook-item {
+    background-color: #333336;
+    border-radius: 4px;
+    padding: 15px;
+    border: 1px solid #444;
+}
+
+body.light-theme .playbook-item {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.playbook-name {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.playbook-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 14px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    background-color: #5ca5e1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.action-btn:hover {
+    background-color: #4b8ec9;
+}
+
+.action-btn:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+
+.action-btn.danger {
+    background-color: #e74c3c;
+}
+
+.action-btn.danger:hover {
+    background-color: #c0392b;
+}
+
+.copy-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+.copy-btn:hover {
+    background-color: #2980b9;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.alert.success {
+    background-color: rgba(46, 204, 113, 0.1);
+    border: 1px solid #2ecc71;
+    color: #2ecc71;
+}
+
+.alert.error {
+    background-color: rgba(231, 76, 60, 0.1);
+    border: 1px solid #e74c3c;
+    color: #e74c3c;
+}
+
+.alert.warning {
+    background-color: rgba(243, 156, 18, 0.1);
+    border: 1px solid #f39c12;
+    color: #f39c12;
+}
+
+body.light-theme .alert.success {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #27ae60;
+}
+
+body.light-theme .alert.error {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #c0392b;
+}
+
+body.light-theme .alert.warning {
+    background-color: rgba(243, 156, 18, 0.1);
+    color: #d35400;
+}
+
+@media (max-width: 768px) {
+    .config-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .playbooks-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Загружаем статус SSH при загрузке страницы
+    loadSSHStatus();
+    
+    // Обработчики кнопок
+    document.getElementById('test-connection-btn').addEventListener('click', testConnection);
+    document.getElementById('generate-key-btn').addEventListener('click', generateKey);
+    document.getElementById('refresh-status-btn').addEventListener('click', loadSSHStatus);
+});
+
+async function loadSSHStatus() {
+    try {
+        const response = await fetch('/api/ssh/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            renderSSHStatus(data.status);
+        } else {
+            showError('Failed to load SSH status: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error loading SSH status:', error);
+        showError('Failed to load SSH status');
+    }
+}
+
+function renderSSHStatus(status) {
+    // Render SSH status
+    renderConnectionStatus(status);
+    renderConfiguration(status.config);
+    renderKeyStatus(status.key_status);
+    renderPlaybooksStatus(status.playbooks_status);
+}
+
+function renderConnectionStatus(status) {
+    const container = document.getElementById('ssh-status-content');
+    
+    if (!status.ssh_enabled) {
+        container.innerHTML = `
+            <div class="alert warning">
+                <strong>SSH mode is disabled</strong><br>
+                Set USE_SSH_ANSIBLE=true to enable SSH mode for Ansible execution.
+            </div>
+        `;
+        return;
+    }
+    
+    const isConnected = status.connection_status?.connected || false;
+    const message = status.connection_status?.message || 'Not tested';
+    
+    container.innerHTML = `
+        <div class="status-item">
+            <span class="status-label">SSH Mode:</span>
+            <span class="status-value">
+                <span class="status-indicator">
+                    <span class="status-dot success"></span>
+                    Enabled
+                </span>
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Connection Status:</span>
+            <span class="status-value">
+                <span class="status-indicator">
+                    <span class="status-dot ${isConnected ? 'success' : 'error'}"></span>
+                    ${isConnected ? 'Connected' : 'Disconnected'}
+                </span>
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Message:</span>
+            <span class="status-value">${message}</span>
+        </div>
+    `;
+}
+
+function renderConfiguration(config) {
+    const container = document.getElementById('ssh-config-content');
+    
+    if (!config) {
+        container.innerHTML = '<div class="info-loading">SSH mode is disabled</div>';
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="config-grid">
+            <div class="config-item">
+                <span class="config-label">Host:</span>
+                <div class="config-value">${config.host}</div>
+            </div>
+            <div class="config-item">
+                <span class="config-label">User:</span>
+                <div class="config-value">${config.user}</div>
+            </div>
+            <div class="config-item">
+                <span class="config-label">Port:</span>
+                <div class="config-value">${config.port}</div>
+            </div>
+            <div class="config-item">
+                <span class="config-label">Key File:</span>
+                <div class="config-value">${config.key_file}</div>
+            </div>
+            <div class="config-item">
+                <span class="config-label">Ansible Path:</span>
+                <div class="config-value">${config.ansible_path}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderKeyStatus(keyStatus) {
+    const container = document.getElementById('ssh-key-content');
+    
+    if (!keyStatus) {
+        container.innerHTML = '<div class="info-loading">SSH mode is disabled</div>';
+        return;
+    }
+    
+    const privateKeyExists = keyStatus.private_key_exists;
+    const publicKeyExists = keyStatus.public_key_exists;
+    const permissionsOk = keyStatus.key_permissions_ok;
+    
+    let html = `
+        <div class="status-item">
+            <span class="status-label">Private Key:</span>
+            <span class="status-value">
+                <span class="status-indicator">
+                    <span class="status-dot ${privateKeyExists ? 'success' : 'error'}"></span>
+                    ${privateKeyExists ? 'Found' : 'Not found'}
+                </span>
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Public Key:</span>
+            <span class="status-value">
+                <span class="status-indicator">
+                    <span class="status-dot ${publicKeyExists ? 'success' : 'error'}"></span>
+                    ${publicKeyExists ? 'Found' : 'Not found'}
+                </span>
+            </span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Permissions:</span>
+            <span class="status-value">
+                <span class="status-indicator">
+                    <span class="status-dot ${permissionsOk ? 'success' : 'warning'}"></span>
+                    ${permissionsOk ? 'Correct' : 'Incorrect'}
+                </span>
+            </span>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function renderPlaybooksStatus(playbooks) {
+    const container = document.getElementById('playbooks-status-content');
+    
+    if (!playbooks || Object.keys(playbooks).length === 0) {
+        container.innerHTML = '<div class="info-loading">No playbooks status available</div>';
+        return;
+    }
+    
+    let html = '<div class="playbooks-grid">';
+    
+    Object.entries(playbooks).forEach(([playbook, exists]) => {
+        html += `
+            <div class="playbook-item">
+                <div class="playbook-name">${playbook}</div>
+                <div class="playbook-status">
+                    <span class="status-dot ${exists ? 'success' : 'error'}"></span>
+                    ${exists ? 'Found' : 'Not found'}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function testConnection() {
+    const btn = document.getElementById('test-connection-btn');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    
+    try {
+        const response = await fetch('/api/ssh/test');
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('SSH connection test successful: ' + data.message);
+        } else {
+            showError('SSH connection test failed: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error testing SSH connection:', error);
+        showError('Failed to test SSH connection');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+        // Refresh status after test
+        setTimeout(loadSSHStatus, 1000);
+    }
+}
+
+async function generateKey() {
+    if (!confirm('Are you sure you want to generate a new SSH key? This will overwrite the existing key.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('generate-key-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    
+    try {
+        const response = await fetch('/api/ssh/generate-key', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('SSH key generated successfully');
+            
+            // Show public key in modal
+            const publicKey = data.public_key;
+            showPublicKeyModal(publicKey);
+        } else {
+            showError('Failed to generate SSH key: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error generating SSH key:', error);
+        showError('Failed to generate SSH key');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate New Key';
+        // Refresh status after generation
+        setTimeout(loadSSHStatus, 1000);
+    }
+}
+
+function showPublicKeyModal(publicKey) {
+    const content = `
+        <div class="ssh-key-display">
+            <h4>Public SSH Key</h4>
+            <p>Add this key to ~/.ssh/authorized_keys on the target host:</p>
+            <div class="ssh-key-text">${publicKey}</div>
+            <button class="copy-btn" onclick="copyToClipboard('${publicKey.replace(/'/g, "\\'")}')">
+                Copy to Clipboard
+            </button>
+        </div>
+    `;
+    
+    window.showModal('SSH Public Key', content);
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Public key copied to clipboard');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showError('Failed to copy to clipboard');
+    });
+}
+</script>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Additional scripts for SSH settings page -->
+{% endblock %}

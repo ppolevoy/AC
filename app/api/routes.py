@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, current_app
 import asyncio
 from datetime import datetime
 import logging
+import os
 
 from app import db
 from app.models.server import Server
@@ -787,3 +788,313 @@ def test_api():
         'message': 'API работает корректно',
         'time': datetime.utcnow().isoformat()
     })        
+
+@bp.route('/ssh/test', methods=['GET'])
+def test_ssh_connection():
+    """Тестирование SSH-подключения"""
+    try:
+        from app.config import Config
+        
+        # Проверяем, включен ли SSH-режим
+        if not getattr(Config, 'USE_SSH_ANSIBLE', False):
+            return jsonify({
+                'success': False,
+                'error': 'SSH-режим отключен в конфигурации'
+            }), 400
+        
+        # Используем функцию из обновленного AnsibleService
+        from app.services.ansible_service import AnsibleService
+        
+        # Запускаем тест подключения
+        result = run_async(AnsibleService.test_ssh_connection())
+        
+        if result[0]:
+            return jsonify({
+                'success': True,
+                'message': result[1]
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result[1]
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при тестировании SSH-подключения: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/ssh/config', methods=['GET'])
+def get_ssh_config():
+    """Получение конфигурации SSH"""
+    try:
+        from app.config import Config
+        
+        # Проверяем, включен ли SSH-режим
+        if not getattr(Config, 'USE_SSH_ANSIBLE', False):
+            return jsonify({
+                'success': False,
+                'error': 'SSH-режим отключен в конфигурации'
+            }), 400
+        
+        # Возвращаем конфигурацию SSH (без приватных данных)
+        ssh_config = {
+            'host': getattr(Config, 'SSH_HOST', 'localhost'),
+            'user': getattr(Config, 'SSH_USER', 'ansible'),
+            'port': getattr(Config, 'SSH_PORT', 22),
+            'key_file': getattr(Config, 'SSH_KEY_FILE', '/app/.ssh/id_rsa'),
+            'connection_timeout': getattr(Config, 'SSH_CONNECTION_TIMEOUT', 30),
+            'command_timeout': getattr(Config, 'SSH_COMMAND_TIMEOUT', 300),
+            'ansible_path': getattr(Config, 'ANSIBLE_PATH', '/etc/ansible')
+        }
+        
+        # Проверяем существование SSH-ключа
+        import os
+        key_exists = os.path.exists(ssh_config['key_file'])
+        pub_key_exists = os.path.exists(ssh_config['key_file'] + '.pub')
+        
+        # Читаем публичный ключ, если он существует
+        public_key = None
+        if pub_key_exists:
+            try:
+                with open(ssh_config['key_file'] + '.pub', 'r') as f:
+                    public_key = f.read().strip()
+            except Exception as e:
+                logger.warning(f"Не удалось прочитать публичный ключ: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'config': ssh_config,
+            'key_status': {
+                'private_key_exists': key_exists,
+                'public_key_exists': pub_key_exists,
+                'public_key': public_key
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении конфигурации SSH: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/ssh/generate-key', methods=['POST'])
+def generate_ssh_key():
+    """Генерация нового SSH-ключа"""
+    try:
+        from app.config import Config
+        import os
+        import subprocess
+        
+        # Проверяем, включен ли SSH-режим
+        if not getattr(Config, 'USE_SSH_ANSIBLE', False):
+            return jsonify({
+                'success': False,
+                'error': 'SSH-режим отключен в конфигурации'
+            }), 400
+        
+        key_file = getattr(Config, 'SSH_KEY_FILE', '/app/.ssh/id_rsa')
+        
+        # Создаем директорию для ключей, если она не существует
+        key_dir = os.path.dirname(key_file)
+        os.makedirs(key_dir, mode=0o700, exist_ok=True)
+        
+        # Удаляем существующие ключи
+        if os.path.exists(key_file):
+            os.remove(key_file)
+        if os.path.exists(key_file + '.pub'):
+            os.remove(key_file + '.pub')
+        
+        # Генерируем новый ключ
+        cmd = [
+            'ssh-keygen',
+            '-t', 'rsa',
+            '-b', '4096',
+            '-f', key_file,
+            '-N', ''  # Без пароля
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Читаем публичный ключ
+            with open(key_file + '.pub', 'r') as f:
+                public_key = f.read().strip()
+            
+            # Устанавливаем правильные права доступа
+            os.chmod(key_file, 0o600)
+            os.chmod(key_file + '.pub', 0o644)
+            
+            logger.info(f"Новый SSH-ключ сгенерирован: {key_file}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'SSH-ключ успешно сгенерирован',
+                'public_key': public_key
+            })
+        else:
+            error_msg = result.stderr or result.stdout
+            logger.error(f"Ошибка при генерации SSH-ключа: {error_msg}")
+            return jsonify({
+                'success': False,
+                'error': f'Ошибка при генерации ключа: {error_msg}'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Ошибка при генерации SSH-ключа: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/ssh/playbooks', methods=['GET'])
+def check_playbooks():
+    """Проверка существования playbook-ов на удаленном хосте"""
+    try:
+        from app.config import Config
+        
+        # Проверяем, включен ли SSH-режим
+        if not getattr(Config, 'USE_SSH_ANSIBLE', False):
+            return jsonify({
+                'success': False,
+                'error': 'SSH-режим отключен в конфигурации'
+            }), 400
+        
+        from app.services.ssh_ansible_service import get_ssh_ansible_service
+        
+        # Получаем сервис
+        ssh_service = get_ssh_ansible_service()
+        
+        # Список playbook-ов для проверки
+        playbooks_to_check = [
+            'update-app.yml',
+            'app_start.yml',
+            'app_stop.yml',
+            'app_restart.yml'
+        ]
+        
+        # Проверяем каждый playbook
+        async def check_all_playbooks():
+            results = {}
+            for playbook in playbooks_to_check:
+                playbook_path = os.path.join(ssh_service.ssh_config.ansible_path, playbook)
+                exists = await ssh_service._remote_file_exists(playbook_path)
+                results[playbook] = {
+                    'exists': exists,
+                    'path': playbook_path
+                }
+            return results
+        
+        # Запускаем проверку
+        results = run_async(check_all_playbooks())
+        
+        return jsonify({
+            'success': True,
+            'playbooks': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при проверке playbook-ов: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@bp.route('/ssh/status', methods=['GET'])
+def get_ssh_status():
+    """Получение полного статуса SSH-подключения"""
+    try:
+        from app.config import Config
+        import os
+        
+        # Базовая информация о статусе
+        status = {
+            'ssh_enabled': getattr(Config, 'USE_SSH_ANSIBLE', False),
+            'config': {},
+            'key_status': {},
+            'connection_status': {},
+            'playbooks_status': {}
+        }
+        
+        # Если SSH отключен, возвращаем базовую информацию
+        if not status['ssh_enabled']:
+            return jsonify({
+                'success': True,
+                'status': status
+            })
+        
+        # Конфигурация SSH
+        status['config'] = {
+            'host': getattr(Config, 'SSH_HOST', 'localhost'),
+            'user': getattr(Config, 'SSH_USER', 'ansible'),
+            'port': getattr(Config, 'SSH_PORT', 22),
+            'key_file': getattr(Config, 'SSH_KEY_FILE', '/app/.ssh/id_rsa'),
+            'ansible_path': getattr(Config, 'ANSIBLE_PATH', '/etc/ansible')
+        }
+        
+        # Статус SSH-ключей
+        key_file = status['config']['key_file']
+        status['key_status'] = {
+            'private_key_exists': os.path.exists(key_file),
+            'public_key_exists': os.path.exists(key_file + '.pub'),
+            'key_permissions_ok': False
+        }
+        
+        # Проверяем права доступа к ключу
+        if status['key_status']['private_key_exists']:
+            try:
+                key_stat = os.stat(key_file)
+                status['key_status']['key_permissions_ok'] = not (key_stat.st_mode & 0o077)
+            except:
+                pass
+        
+        # Тестируем подключение
+        if status['key_status']['private_key_exists']:
+            try:
+                from app.services.ssh_ansible_service import get_ssh_ansible_service
+                ssh_service = get_ssh_ansible_service()
+                
+                # Тест подключения
+                connection_result = run_async(ssh_service.test_connection())
+                status['connection_status'] = {
+                    'connected': connection_result[0],
+                    'message': connection_result[1]
+                }
+                
+                # Если подключение успешно, проверяем playbook-и
+                if connection_result[0]:
+                    playbooks = ['update-app.yml', 'app_start.yml', 'app_stop.yml', 'app_restart.yml']
+                    playbook_results = {}
+                    
+                    for playbook in playbooks:
+                        playbook_path = os.path.join(ssh_service.ssh_config.ansible_path, playbook)
+                        exists = run_async(ssh_service._remote_file_exists(playbook_path))
+                        playbook_results[playbook] = exists
+                    
+                    status['playbooks_status'] = playbook_results
+                
+            except Exception as e:
+                status['connection_status'] = {
+                    'connected': False,
+                    'message': f'Ошибка при тестировании: {str(e)}'
+                }
+        else:
+            status['connection_status'] = {
+                'connected': False,
+                'message': 'SSH-ключ не найден'
+            }
+        
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса SSH: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

@@ -25,6 +25,11 @@ def tasks():
     """Страница с очередью задач"""
     return render_template('tasks.html')
 
+@bp.route('/settings')
+def settings():
+    """Страница настроек"""
+    return render_template('settings.html')
+
 @bp.route('/server/<int:server_id>')
 def server_details(server_id):
     """Страница с детальной информацией о сервере"""
@@ -34,14 +39,6 @@ def server_details(server_id):
 def application_details(app_id):
     """Страница с детальной информацией о приложении"""
     return render_template('application_details.html', app_id=app_id)
-
-# Добавим тестовый маршрут для проверки работы Blueprint
-@bp.route('/hello')
-def hello():
-    return jsonify({
-        'message': 'Hello from main Blueprint!',
-        'routes_working': True
-    })
 
 @bp.app_errorhandler(404)
 def page_not_found(e):

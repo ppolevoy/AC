@@ -1,0 +1,655 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки | Faktura Apps{% endblock %}
+
+{% block page_title %}Настройки{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-panel">
+        <h3 class="panel-title">Система</h3>
+        <div class="panel-content">
+            <div class="settings-section">
+                <h4>Ansible SSH</h4>
+                
+                <!-- Компактная строка со статусом -->
+                <div class="ssh-status-compact" id="ssh-status-compact">
+                    <div class="status-line" id="ssh-status-line">
+                        <span class="status-label">Ansible</span>
+                        <span class="status-spacer"></span>
+                        <span class="status-indicator" id="ssh-status-indicator">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Загрузка...</span>
+                        </span>
+                        <span class="expand-arrow" id="expand-arrow">▼</span>
+                    </div>
+                    
+                    <!-- Разворачивающаяся область с деталями -->
+                    <div class="ssh-details" id="ssh-details" style="display: none;">
+                        <div class="ssh-details-content">
+                            
+                            <!-- SSH Configuration -->
+                            <div class="detail-section">
+                                <h5>SSH Configuration</h5>
+                                <div id="ssh-config-details" class="config-details">
+                                    <div class="info-loading">Загрузка конфигурации...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- SSH Key Status -->
+                            <div class="detail-section">
+                                <h5>SSH Key Status</h5>
+                                <div id="ssh-key-details" class="key-details">
+                                    <div class="info-loading">Загрузка информации о ключах...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Available Playbooks -->
+                            <div class="detail-section">
+                                <h5>Available Playbooks</h5>
+                                <div id="playbooks-list" class="playbooks-list">
+                                    <div class="info-loading">Загрузка списка playbook-ов...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Actions -->
+                            <div class="detail-section">
+                                <h5>Actions</h5>
+                                <div class="action-buttons">
+                                    <button id="test-connection-btn" class="action-btn">Test Connection</button>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <div class="settings-panel">
+        <span>Здесь буду еще какие-то настройки</span>
+    </div>
+</div>
+
+<style>
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.settings-panel {
+    background-color: #2a2a2b;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #333336;
+}
+
+body.light-theme .settings-panel {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+}
+
+.panel-title {
+    margin-bottom: 15px;
+    color: #5ca5e1;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.panel-content {
+    color: #ebe4da;
+}
+
+body.light-theme .panel-content {
+    color: #333;
+}
+
+.settings-section {
+    margin-bottom: 25px;
+}
+
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+.settings-section h4 {
+    margin-bottom: 15px;
+    color: #aaa;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+body.light-theme .settings-section h4 {
+    color: #666;
+}
+
+/* SSH Status Compact Styles */
+.ssh-status-compact {
+    border: 1px solid #333336;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: #252528;
+}
+
+body.light-theme .ssh-status-compact {
+    border: 1px solid #ddd;
+    background-color: #f5f5f5;
+}
+
+.status-line {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.status-line:hover {
+    background-color: #2e2e30;
+}
+
+body.light-theme .status-line:hover {
+    background-color: #f0f0f0;
+}
+
+.status-label {
+    font-weight: 500;
+    color: #ebe4da;
+}
+
+body.light-theme .status-label {
+    color: #333;
+}
+
+.status-spacer {
+    flex: 1;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 15px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+}
+
+.status-dot.connected {
+    background-color: #2ecc71;
+}
+
+.status-dot.loading {
+    background-color: #f39c12;
+}
+
+.status-text {
+    font-size: 14px;
+    color: #aaa;
+}
+
+body.light-theme .status-text {
+    color: #666;
+}
+
+.expand-arrow {
+    color: #666;
+    font-size: 12px;
+    transition: transform 0.3s;
+    user-select: none;
+}
+
+.expand-arrow.expanded {
+    transform: rotate(180deg);
+}
+
+/* SSH Details Styles */
+.ssh-details {
+    border-top: 1px solid #333336;
+    animation: slideDown 0.3s ease-out;
+}
+
+body.light-theme .ssh-details {
+    border-top: 1px solid #ddd;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+    }
+}
+
+.ssh-details-content {
+    padding: 20px;
+}
+
+.detail-section {
+    margin-bottom: 20px;
+}
+
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.detail-section h5 {
+    margin-bottom: 10px;
+    color: #5ca5e1;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.config-details {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 10px;
+    background-color: #333336;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+body.light-theme .config-details {
+    background-color: #f0f0f0;
+}
+
+.config-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    font-size: 14px;
+}
+
+.config-label {
+    color: #aaa;
+}
+
+body.light-theme .config-label {
+    color: #666;
+}
+
+.config-value {
+    font-family: monospace;
+    color: #ebe4da;
+}
+
+body.light-theme .config-value {
+    color: #333;
+}
+
+.key-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.key-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: #333336;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+body.light-theme .key-status-item {
+    background-color: #f0f0f0;
+}
+
+.key-status-label {
+    color: #aaa;
+}
+
+body.light-theme .key-status-label {
+    color: #666;
+}
+
+.key-status-value {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.playbooks-list {
+    background-color: #333336;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+body.light-theme .playbooks-list {
+    background-color: #f0f0f0;
+}
+
+.playbook-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #444;
+    font-size: 14px;
+}
+
+body.light-theme .playbook-item {
+    border-bottom: 1px solid #ddd;
+}
+
+.playbook-item:last-child {
+    border-bottom: none;
+}
+
+.playbook-name {
+    font-family: monospace;
+    color: #ebe4da;
+}
+
+body.light-theme .playbook-name {
+    color: #333;
+}
+
+.playbook-path {
+    color: #666;
+    font-size: 12px;
+}
+
+.info-loading {
+    text-align: center;
+    padding: 15px;
+    color: #666;
+    font-style: italic;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.action-btn {
+    background-color: #5ca5e1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.action-btn:hover {
+    background-color: #4b8ec9;
+}
+
+.action-btn:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+
+/* General Settings Styles */
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #333336;
+    font-size: 14px;
+}
+
+body.light-theme .setting-item {
+    border-bottom: 1px solid #eee;
+}
+
+.setting-item:last-child {
+    border-bottom: none;
+}
+
+.setting-item label {
+    color: #aaa;
+    font-weight: 500;
+}
+
+body.light-theme .setting-item label {
+    color: #666;
+}
+
+.setting-item span {
+    color: #ebe4da;
+    font-family: monospace;
+}
+
+body.light-theme .setting-item span {
+    color: #333;
+}
+
+@media (max-width: 768px) {
+    .config-details {
+        grid-template-columns: 1fr;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Загружаем статус SSH при загрузке страницы
+    loadSSHStatus();
+    
+    // Обработчик для раскрытия/скрытия деталей SSH
+    const statusLine = document.getElementById('ssh-status-line');
+    const sshDetails = document.getElementById('ssh-details');
+    const expandArrow = document.getElementById('expand-arrow');
+    let isExpanded = false;
+    
+    statusLine.addEventListener('click', function() {
+        isExpanded = !isExpanded;
+        
+        if (isExpanded) {
+            sshDetails.style.display = 'block';
+            expandArrow.classList.add('expanded');
+            // Загружаем подробную информацию только при раскрытии
+            loadSSHDetails();
+        } else {
+            sshDetails.style.display = 'none';
+            expandArrow.classList.remove('expanded');
+        }
+    });
+    
+    // Обработчик кнопки тестирования
+    document.getElementById('test-connection-btn').addEventListener('click', testConnection);
+});
+
+async function loadSSHStatus() {
+    try {
+        const response = await fetch('/api/ssh/status');
+        const data = await response.json();
+        
+        if (data.success) {
+            updateSSHStatusIndicator(data.status);
+        } else {
+            updateSSHStatusIndicator({ ssh_enabled: false });
+        }
+    } catch (error) {
+        console.error('Error loading SSH status:', error);
+        updateSSHStatusIndicator({ ssh_enabled: false, error: true });
+    }
+}
+
+function updateSSHStatusIndicator(status) {
+    const statusDot = document.querySelector('.status-dot');
+    const statusText = document.querySelector('.status-text');
+    
+    if (!status.ssh_enabled) {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'SSH отключен';
+        return;
+    }
+    
+    const isConnected = status.connection_status?.connected || false;
+    
+    if (isConnected) {
+        statusDot.className = 'status-dot connected';
+        statusText.textContent = 'SSH подключен';
+    } else {
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'SSH не подключен';
+    }
+}
+
+async function loadSSHDetails() {
+    try {
+        // Загружаем конфигурацию
+        const configResponse = await fetch('/api/ssh/config');
+        const configData = await configResponse.json();
+        
+        if (configData.success) {
+            renderSSHConfig(configData.config, configData.key_status);
+        }
+        
+        // Загружаем список playbook-ов
+        const playbooksResponse = await fetch('/api/ssh/playbooks');
+        const playbooksData = await playbooksResponse.json();
+        
+        if (playbooksData.success) {
+            renderPlaybooksList(playbooksData.playbooks);
+        }
+        
+    } catch (error) {
+        console.error('Error loading SSH details:', error);
+    }
+}
+
+function renderSSHConfig(config, keyStatus) {
+    const configContainer = document.getElementById('ssh-config-details');
+    
+    if (!config) {
+        configContainer.innerHTML = '<div class="info-loading">SSH режим отключен</div>';
+        return;
+    }
+    
+    configContainer.innerHTML = `
+        <div class="config-item">
+            <span class="config-label">Host:</span>
+            <span class="config-value">${config.host}</span>
+        </div>
+        <div class="config-item">
+            <span class="config-label">User:</span>
+            <span class="config-value">${config.user}</span>
+        </div>
+        <div class="config-item">
+            <span class="config-label">Port:</span>
+            <span class="config-value">${config.port}</span>
+        </div>
+        <div class="config-item">
+            <span class="config-label">Ansible Path:</span>
+            <span class="config-value">${config.ansible_path}</span>
+        </div>
+    `;
+    
+    // Обновляем статус ключей
+    const keyContainer = document.getElementById('ssh-key-details');
+    
+    if (keyStatus) {
+        keyContainer.innerHTML = `
+            <div class="key-status-item">
+                <span class="key-status-label">Private Key:</span>
+                <div class="key-status-value">
+                    <span class="status-dot ${keyStatus.private_key_exists ? 'connected' : ''}"></span>
+                    <span>${keyStatus.private_key_exists ? 'Found' : 'Not found'}</span>
+                </div>
+            </div>
+            <div class="key-status-item">
+                <span class="key-status-label">Public Key:</span>
+                <div class="key-status-value">
+                    <span class="status-dot ${keyStatus.public_key_exists ? 'connected' : ''}"></span>
+                    <span>${keyStatus.public_key_exists ? 'Found' : 'Not found'}</span>
+                </div>
+            </div>
+            <div class="key-status-item">
+                <span class="key-status-label">Permissions:</span>
+                <div class="key-status-value">
+                    <span class="status-dot ${keyStatus.key_permissions_ok ? 'connected' : 'loading'}"></span>
+                    <span>${keyStatus.key_permissions_ok ? 'Correct' : 'Check needed'}</span>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function renderPlaybooksList(playbooks) {
+    const playbooksContainer = document.getElementById('playbooks-list');
+    
+    if (!playbooks || Object.keys(playbooks).length === 0) {
+        playbooksContainer.innerHTML = '<div class="info-loading">Список playbook-ов недоступен</div>';
+        return;
+    }
+    
+    let html = '';
+    Object.entries(playbooks).forEach(([playbook, info]) => {
+        const status = info.exists ? 'connected' : '';
+        const statusText = info.exists ? 'Found' : 'Not found';
+        
+        html += `
+            <div class="playbook-item">
+                <div class="playbook-name">${playbook}</div>
+                <div class="playbook-status">
+                    <span class="status-dot ${status}"></span>
+                    <span>${statusText}</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    playbooksContainer.innerHTML = html;
+}
+
+async function testConnection() {
+    const btn = document.getElementById('test-connection-btn');
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+    
+    try {
+        const response = await fetch('/api/ssh/test');
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('SSH connection test successful: ' + data.message);
+            // Обновляем статус после успешного теста
+            setTimeout(loadSSHStatus, 1000);
+        } else {
+            showError('SSH connection test failed: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error testing SSH connection:', error);
+        showError('Failed to test SSH connection');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+    }
+}
+</script>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Additional scripts for settings page -->
+{% endblock %}

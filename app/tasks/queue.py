@@ -1,4 +1,3 @@
-# app/tasks/queue.py
 import uuid
 import queue
 import logging
@@ -34,6 +33,7 @@ class Task:
         self.status = "pending"  # pending, processing, completed, failed
         self.result = None
         self.error = None
+        self.progress = {}  # Для отслеживания прогресса выполнения
     
     def to_dict(self):
         """Преобразование задачи в словарь для сериализации."""
@@ -48,7 +48,8 @@ class Task:
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "status": self.status,
             "result": self.result,
-            "error": self.error
+            "error": self.error,
+            "progress": self.progress
         }
 
 class TaskQueue:
@@ -447,8 +448,6 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                from app.services.ansible_service import AnsibleService
-                
                 success, message = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
@@ -507,8 +506,6 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                from app.services.ansible_service import AnsibleService
-                
                 success, message = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
@@ -567,8 +564,6 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                from app.services.ansible_service import AnsibleService
-                
                 success, message = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
@@ -596,11 +591,7 @@ class TaskQueue:
         Returns:
             str: Результат выполнения задачи
         """
-        import subprocess
-        import os
-        import logging
-        
-        logger = logging.getLogger(__name__)
+        import asyncio
         
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
@@ -609,9 +600,7 @@ class TaskQueue:
         with self.app.app_context():
             from app.models.application import Application
             from app.models.server import Server
-            from app.config import Config
-            from app import db
-            from app.models.event import Event
+            from app.services.ansible_service import AnsibleService
             
             # Получаем информацию о приложении и сервере
             app = Application.query.get(task.application_id)
@@ -628,113 +617,37 @@ class TaskQueue:
             
             restart_mode = task.params.get("restart_mode", "restart")
             
-            # Проверяем, что путь к плейбуку указан и существует
-            playbook_path = app.update_playbook_path
-            if not playbook_path:
-                # Если путь к плейбуку не указан, используем плейбук по умолчанию
-                playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
-            
-            # Проверяем существование плейбука
-            if not os.path.exists(playbook_path):
-                error_msg = f"Ansible playbook не найден по пути: {playbook_path}"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-                
-            # Записываем событие в БД о начале обновления
-            event = Event(
-                event_type='update',
-                description=f"Запуск обновления приложения {app.name} на сервере {server.name}",
-                status='pending',
-                server_id=server.id,
-                application_id=app.id
-            )
-            db.session.add(event)
-            db.session.commit()
-            
             # Сохраняем необходимые данные для использования вне контекста приложения
+            app_id = app.id
             app_name = app.name
             server_name = server.name
-            
-        # Формируем команду для запуска Ansible
-        cmd = [
-            'ansible-playbook',
-            playbook_path,
-            '-e', f"server={server_name}",
-            '-e', f"app_name={app_name}",
-            '-e', f"distr_url={distr_url}",
-            '-e', f"restart_mode={restart_mode}"
-        ]
+            playbook_path = app.update_playbook_path
         
-        logger.info(f"Запуск Ansible: {' '.join(cmd)}")
+        # Создаем event loop внутри метода
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
         try:
-            # Запускаем процесс Ansible
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            
-            # Получаем вывод процесса
-            stdout, stderr = process.communicate()
-            
-            # Проверяем результат выполнения
-            if process.returncode == 0:
-                result_msg = f"Обновление приложения {app_name} на сервере {server_name} выполнено успешно"
-                logger.info(result_msg)
-                
-                # Обновляем статус события в контексте приложения
-                with self.app.app_context():
-                    event = Event.query.filter_by(
-                        event_type='update',
-                        server_id=server.id,
-                        application_id=app.id
-                    ).order_by(Event.timestamp.desc()).first()
-                    
-                    if event:
-                        event.status = 'success'
-                        event.description = f"{event.description}\nРезультат: {result_msg}"
-                        db.session.commit()
-                
-                return result_msg
-            else:
-                error_msg = f"Ошибка при обновлении приложения {app_name} на сервере {server_name}: {stderr}"
-                logger.error(error_msg)
-                
-                # Обновляем статус события в контексте приложения
-                with self.app.app_context():
-                    event = Event.query.filter_by(
-                        event_type='update',
-                        server_id=server.id,
-                        application_id=app.id
-                    ).order_by(Event.timestamp.desc()).first()
-                    
-                    if event:
-                        event.status = 'failed'
-                        event.description = f"{event.description}\nОшибка: {error_msg}"
-                        db.session.commit()
-                
-                raise Exception(error_msg)
-                
-        except Exception as e:
-            error_msg = f"Исключение при обновлении приложения {app_name} на сервере {server_name}: {str(e)}"
-            logger.error(error_msg)
-            
-            # Обновляем статус события в контексте приложения
+            # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                event = Event.query.filter_by(
-                    event_type='update',
-                    server_id=server.id,
-                    application_id=app.id
-                ).order_by(Event.timestamp.desc()).first()
+                success, message = loop.run_until_complete(
+                    AnsibleService.update_application(
+                        server_name=server_name,
+                        app_name=app_name,
+                        app_id=app_id,
+                        distr_url=distr_url,
+                        restart_mode=restart_mode,
+                        playbook_path=playbook_path
+                    )
+                )
                 
-                if event:
-                    event.status = 'failed'
-                    event.description = f"{event.description}\nИсключение: {error_msg}"
-                    db.session.commit()
-            
-            raise e
+                if not success:
+                    raise Exception(message)
+                
+                return message
+        finally:
+            # Закрываем event loop
+            loop.close()
 
 # Создаем глобальный экземпляр очереди задач
 task_queue = TaskQueue()

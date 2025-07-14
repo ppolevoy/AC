@@ -57,12 +57,30 @@ class Config:
     
     # Настройки для группировки приложений
     APP_GROUP_PATTERN = r'(.+)_(\d+)$'  # Шаблон для определения группы и номера экземпляра
+
+    # Настройки SSH для Ansible
+    SSH_HOST = os.environ.get('SSH_HOST') or '192.168.8.46'
+    SSH_USER = os.environ.get('SSH_USER') or 'ansible'
+    SSH_PORT = int(os.environ.get('SSH_PORT') or 22)
+    SSH_KEY_FILE = os.environ.get('SSH_KEY_FILE') or '/app/.ssh/id_rsa'
+    SSH_KNOWN_HOSTS_FILE = os.environ.get('SSH_KNOWN_HOSTS_FILE') or '/app/.ssh/known_hosts'
+    SSH_CONNECTION_TIMEOUT = int(os.environ.get('SSH_CONNECTION_TIMEOUT') or 30)
+    SSH_COMMAND_TIMEOUT = int(os.environ.get('SSH_COMMAND_TIMEOUT') or 300)
+    ANSIBLE_PATH = os.environ.get('ANSIBLE_PATH') or '/etc/ansible'
+    
+    # Включение SSH-режима для Ansible
+    USE_SSH_ANSIBLE = os.environ.get('USE_SSH_ANSIBLE', 'true').lower() == 'true'    
     
     @staticmethod
     def init_app(app):
         # Создание директории для логов, если её нет
         if not os.path.exists(Config.LOG_DIR):
             os.makedirs(Config.LOG_DIR)
+        # Создание директории для SSH-ключей, если её нет
+        ssh_dir = os.path.dirname(Config.SSH_KEY_FILE)
+        if not os.path.exists(ssh_dir):
+            os.makedirs(ssh_dir, mode=0o700)
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

@@ -1,4 +1,3 @@
-# app/services/ansible_service.py
 import subprocess
 import logging
 import os
@@ -12,6 +11,7 @@ logger = logging.getLogger(__name__)
 class AnsibleService:
     """
     Сервис для запуска Ansible плейбуков
+    Поддерживает как локальный запуск, так и выполнение через SSH
     """
     
     @staticmethod
@@ -29,6 +29,63 @@ class AnsibleService:
         
         Returns:
             tuple: (успех операции (bool), информация о результате (str))
+        """
+        # Проверяем, нужно ли использовать SSH
+        if getattr(Config, 'USE_SSH_ANSIBLE', False):
+            logger.info(f"Использование SSH для выполнения Ansible playbook: {app_name}")
+            
+            # Импортируем SSH-сервис
+            from app.services.ssh_ansible_service import get_ssh_ansible_service
+            ssh_service = get_ssh_ansible_service()
+            
+            return await ssh_service.update_application(
+                server_name, app_name, app_id, distr_url, restart_mode, playbook_path
+            )
+        else:
+            logger.info(f"Использование локального выполнения Ansible playbook: {app_name}")
+            
+            # Используем старый подход с локальным выполнением
+            return await AnsibleService._local_update_application(
+                server_name, app_name, app_id, distr_url, restart_mode, playbook_path
+            )
+    
+    @staticmethod
+    async def manage_application(server_name, app_name, app_id, action):
+        """
+        Управление состоянием приложения (запуск, остановка, перезапуск)
+        
+        Args:
+            server_name: Имя сервера
+            app_name: Имя приложения
+            app_id: ID приложения в БД
+            action: Действие (start, stop, restart)
+        
+        Returns:
+            tuple: (успех операции (bool), информация о результате (str))
+        """
+        # Проверяем, нужно ли использовать SSH
+        if getattr(Config, 'USE_SSH_ANSIBLE', False):
+            logger.info(f"Использование SSH для управления приложением: {app_name}, действие: {action}")
+            
+            # Импортируем SSH-сервис
+            from app.services.ssh_ansible_service import get_ssh_ansible_service
+            ssh_service = get_ssh_ansible_service()
+            
+            return await ssh_service.manage_application(
+                server_name, app_name, app_id, action
+            )
+        else:
+            logger.info(f"Использование локального выполнения для управления приложением: {app_name}, действие: {action}")
+            
+            # Используем старый подход с локальным выполнением
+            return await AnsibleService._local_manage_application(
+                server_name, app_name, app_id, action
+            )
+    
+    @staticmethod
+    async def _local_update_application(server_name, app_name, app_id, distr_url, restart_mode, playbook_path=None):
+        """
+        Локальное выполнение Ansible плейбука для обновления приложения
         """
         # Если путь к плейбуку не указан, используем плейбук по умолчанию
         if not playbook_path:
@@ -136,18 +193,9 @@ class AnsibleService:
             return False, error_msg
     
     @staticmethod
-    async def manage_application(server_name, app_name, app_id, action):
+    async def _local_manage_application(server_name, app_name, app_id, action):
         """
-        Управление состоянием приложения (запуск, остановка, перезапуск)
-        
-        Args:
-            server_name: Имя сервера
-            app_name: Имя приложения
-            app_id: ID приложения в БД
-            action: Действие (start, stop, restart)
-        
-        Returns:
-            tuple: (успех операции (bool), информация о результате (str))
+        Локальное управление состоянием приложения (запуск, остановка, перезапуск)
         """
         # Проверяем корректность действия
         valid_actions = ['start', 'stop', 'restart']
@@ -171,7 +219,7 @@ class AnsibleService:
                 event_type=action,
                 description=f"Запуск {action} для приложения {app_name} на сервере {server_name}",
                 status='pending',
-                server_id=server.id,  # Используем ID сервера вместо имени
+                server_id=server.id,
                 application_id=app_id
             )
             db.session.add(event)
@@ -244,4 +292,25 @@ class AnsibleService:
                 event.description = f"{event.description}\nИсключение: {error_msg}"
                 db.session.commit()
             
+            return False, error_msg
+    
+    @staticmethod
+    async def test_ssh_connection():
+        """
+        Тестирование SSH-соединения (доступно только в SSH-режиме)
+        
+        Returns:
+            tuple: (успех соединения (bool), сообщение (str))
+        """
+        if not getattr(Config, 'USE_SSH_ANSIBLE', False):
+            return False, "SSH-режим отключен в конфигурации"
+        
+        try:
+            from app.services.ssh_ansible_service import get_ssh_ansible_service
+            ssh_service = get_ssh_ansible_service()
+            
+            return await ssh_service.test_connection()
+        except Exception as e:
+            error_msg = f"Ошибка при тестировании SSH-соединения: {str(e)}"
+            logger.error(error_msg)
             return False, error_msg

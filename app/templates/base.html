@@ -26,23 +26,19 @@
         
         <div class="sidebar-menu">
             <a href="{{ url_for('main.servers') }}" class="menu-item {% if request.endpoint == 'main.servers' %}active{% endif %}">
-                <span class="menu-icon">*</span>
+                <span class="menu-icon">🖥️</span>
                 <span>Серверы</span>
             </a>
-            <a href="#" class="menu-item {% if request.endpoint == 'main.management' %}active{% endif %}">
-                <span class="menu-icon">*</span>
-                <span>Управление</span>
-            </a>
-			<a href="{{ url_for('main.tasks') }}" class="menu-item {% if request.endpoint == 'main.tasks' %}active{% endif %}">
-				<span class="menu-icon">*</span>
-				<span>Задачи</span>
-			</a>			
             <a href="{{ url_for('main.applications') }}" class="menu-item {% if request.endpoint == 'main.applications' %}active{% endif %}">
-                <span class="menu-icon">*</span>
+                <span class="menu-icon">📱</span>
                 <span>Приложения</span>
             </a>
-            <a href="#" class="menu-item {% if request.endpoint == 'main.settings' %}active{% endif %}">
-                <span class="menu-icon">*</span>
+			<a href="{{ url_for('main.tasks') }}" class="menu-item {% if request.endpoint == 'main.tasks' %}active{% endif %}">
+				<span class="menu-icon">📋</span>
+				<span>Задачи</span>
+			</a>
+            <a href="{{ url_for('main.settings') }}" class="menu-item {% if request.endpoint == 'main.settings' %}active{% endif %}">
+                <span class="menu-icon">⚙️</span>
                 <span>Настройки</span>
             </a>                        
         </div>
