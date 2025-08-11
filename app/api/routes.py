@@ -952,7 +952,7 @@ def generate_ssh_key():
 
 @bp.route('/ssh/playbooks', methods=['GET'])
 def check_playbooks():
-    """Проверка существования playbook-ов на удаленном хосте"""
+    """Получение списка всех playbook файлов из ansible каталога на удаленном хосте"""
     try:
         from app.config import Config
         
@@ -968,28 +968,23 @@ def check_playbooks():
         # Получаем сервис
         ssh_service = get_ssh_ansible_service()
         
-        # Список playbook-ов для проверки
-        playbooks_to_check = [
-            'update-app.yml',
-            'app_start.yml',
-            'app_stop.yml',
-            'app_restart.yml'
-        ]
+        # Получаем список всех playbook файлов из каталога
+        async def get_all_playbook_files():
+            return await ssh_service.get_all_playbooks()
         
-        # Проверяем каждый playbook
-        async def check_all_playbooks():
-            results = {}
-            for playbook in playbooks_to_check:
-                playbook_path = os.path.join(ssh_service.ssh_config.ansible_path, playbook)
-                exists = await ssh_service._remote_file_exists(playbook_path)
-                results[playbook] = {
-                    'exists': exists,
-                    'path': playbook_path
-                }
-            return results
+        # Запускаем получение списка
+        results = run_async(get_all_playbook_files())
         
-        # Запускаем проверку
-        results = run_async(check_all_playbooks())
+        # Если список пустой, возвращаем предупреждение
+        if not results:
+            logger.warning(f"Не найдено playbook файлов в каталоге {ssh_service.ssh_config.ansible_path}")
+            return jsonify({
+                'success': True,
+                'playbooks': {},
+                'message': 'No playbook files found in ansible directory'
+            })
+        
+        logger.info(f"Найдено {len(results)} playbook файлов")
         
         return jsonify({
             'success': True,
@@ -997,7 +992,7 @@ def check_playbooks():
         })
         
     except Exception as e:
-        logger.error(f"Ошибка при проверке playbook-ов: {str(e)}")
+        logger.error(f"Ошибка при получении списка playbook-ов: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -1066,13 +1061,16 @@ def get_ssh_status():
                 
                 # Если подключение успешно, проверяем playbook-и
                 if connection_result[0]:
-                    playbooks = ['update-app.yml', 'app_start.yml', 'app_stop.yml', 'app_restart.yml']
-                    playbook_results = {}
+                    # Используем новый метод для получения всех playbooks
+                    async def get_all_playbook_files():
+                        return await ssh_service.get_all_playbooks()
                     
-                    for playbook in playbooks:
-                        playbook_path = os.path.join(ssh_service.ssh_config.ansible_path, playbook)
-                        exists = run_async(ssh_service._remote_file_exists(playbook_path))
-                        playbook_results[playbook] = exists
+                    playbook_results_dict = run_async(get_all_playbook_files())
+                    
+                    # Преобразуем для совместимости с текущим форматом
+                    playbook_results = {}
+                    for playbook_name, info in playbook_results_dict.items():
+                        playbook_results[playbook_name] = info.get('exists', False)
                     
                     status['playbooks_status'] = playbook_results
                 

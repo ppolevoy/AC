@@ -220,6 +220,56 @@ body.light-theme .status-text {
 
 body.light-theme .ssh-details {
     border-top: 1px solid #ddd;
+
+.playbooks-simple-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.playbook-item-simple {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background-color: #333336;
+    border-radius: 4px;
+    border: 1px solid #444;
+    transition: background-color 0.2s;
+}
+
+body.light-theme .playbook-item-simple {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
+
+.playbook-item-simple:hover {
+    background-color: #3a3a3d;
+}
+
+body.light-theme .playbook-item-simple:hover {
+    background-color: #ebebeb;
+}
+
+.playbook-icon {
+    font-size: 16px;
+    opacity: 0.8;
+}
+
+.playbook-name {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+    color: #ebe4da;
+}
+
+body.light-theme .playbook-name {
+    color: #333;
+}
+
+/* Убираем старые стили со статусом, если они конфликтуют */
+.playbook-status {
+    display: none;
+}
 }
 
 @keyframes slideDown {
@@ -600,26 +650,25 @@ function renderPlaybooksList(playbooks) {
     const playbooksContainer = document.getElementById('playbooks-list');
     
     if (!playbooks || Object.keys(playbooks).length === 0) {
-        playbooksContainer.innerHTML = '<div class="info-loading">Список playbook-ов недоступен</div>';
+        playbooksContainer.innerHTML = '<div class="info-loading">Playbook файлы не найдены в каталоге</div>';
         return;
     }
     
-    let html = '';
-    Object.entries(playbooks).forEach(([playbook, info]) => {
-        const status = info.exists ? 'connected' : '';
-        const statusText = info.exists ? 'Found' : 'Not found';
-        
+    let html = '<div class="playbooks-simple-list">';
+    
+    // Сортируем имена файлов для удобства
+    const sortedPlaybooks = Object.keys(playbooks).sort();
+    
+    sortedPlaybooks.forEach(playbook => {
         html += `
-            <div class="playbook-item">
-                <div class="playbook-name">${playbook}</div>
-                <div class="playbook-status">
-                    <span class="status-dot ${status}"></span>
-                    <span>${statusText}</span>
-                </div>
+            <div class="playbook-item-simple">
+                <span class="playbook-icon">📄</span>
+                <span class="playbook-name">${playbook}</span>
             </div>
         `;
     });
     
+    html += '</div>';
     playbooksContainer.innerHTML = html;
 }
 

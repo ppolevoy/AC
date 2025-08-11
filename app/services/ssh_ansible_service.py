@@ -108,7 +108,7 @@ class SSHAnsibleService:
         Создает команду SSH с необходимыми параметрами
         
         Args:
-            remote_command: Команда для выполнения на удаленном хосте
+            remote_command: Команда для выполнения на удаленном хосте (список элементов)
             
         Returns:
             list: Полная команда SSH
@@ -129,11 +129,19 @@ class SSHAnsibleService:
         if self.ssh_config.known_hosts_file:
             ssh_cmd.extend(['-o', f'UserKnownHostsFile={self.ssh_config.known_hosts_file}'])
         
-        # Добавляем хост и команду
+        # Добавляем хост
         ssh_cmd.append(f'{self.ssh_config.user}@{self.ssh_config.host}')
         
-        # Объединяем удаленную команду в одну строку
-        ssh_cmd.append(' '.join(remote_command))
+        # Обработка команды
+        if len(remote_command) == 3 and remote_command[0] == 'bash' and remote_command[1] == '-c':
+            # Для bash -c команды уже правильно сформированы
+            ssh_cmd.extend(remote_command)
+        elif len(remote_command) == 1 and isinstance(remote_command[0], str):
+            # Если передана одна строка - используем её как есть
+            ssh_cmd.append(remote_command[0])
+        else:
+            # Объединяем команду в одну строку для других случаев
+            ssh_cmd.append(' '.join(str(cmd) for cmd in remote_command))
         
         return ssh_cmd
     
@@ -448,6 +456,67 @@ class SSHAnsibleService:
                 pass
             
             return False, error_msg
+        
+    async def get_all_playbooks(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Получает список всех playbook файлов (.yml и .yaml) из ansible каталога на удаленном хосте
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: Словарь с информацией о playbook файлах
+        """
+        try:
+            logger.info(f"Получение списка всех playbooks из {self.ssh_config.ansible_path}")
+            
+            # Команда для получения списка всех .yml и .yaml файлов
+            bash_cmd = f"cd {self.ssh_config.ansible_path} && ls -1 *.yml *.yaml 2>/dev/null || true"
+            
+            ssh_cmd = self._build_ssh_command(['bash', '-c', f'"{bash_cmd}"'])
+            
+            process = await asyncio.create_subprocess_exec(
+                *ssh_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=self.ssh_config.connection_timeout
+                )
+                
+                output = stdout.decode().strip()
+                
+                if not output:
+                    logger.warning(f"Не найдено playbook файлов в {self.ssh_config.ansible_path}")
+                    return {}
+                
+                # Разбиваем по переносам строк
+                file_list = output.split('\n')
+                file_list = [f.strip() for f in file_list if f.strip()]  # Убираем пустые строки и пробелы
+                
+                # Формируем результат
+                results = {}
+                for filename in file_list:
+                    # Пропускаем строки с ошибками
+                    if 'cannot access' in filename or filename.startswith('ls:'):
+                        continue
+                        
+                    # Добавляем файл в результат (без проверки существования - ls уже подтвердил)
+                    results[filename] = {
+                        'exists': True,  # Всегда True, так как файл найден через ls
+                        'path': os.path.join(self.ssh_config.ansible_path, filename)
+                    }
+                
+                logger.info(f"Найдено {len(results)} playbook файлов: {list(results.keys())}")
+                return results
+                
+            except asyncio.TimeoutError:
+                logger.error("Таймаут при получении списка playbooks")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Исключение при получении списка playbooks: {str(e)}")
+            return {}
     
     async def _remote_file_exists(self, file_path: str) -> bool:
         """
@@ -460,8 +529,9 @@ class SSHAnsibleService:
             bool: True, если файл существует
         """
         try:
-            check_cmd = ['test', '-f', file_path]
-            ssh_cmd = self._build_ssh_command(check_cmd)
+            # Используем bash -c для корректной обработки команды test
+            check_cmd = f"test -f '{file_path}' && echo 'EXISTS' || echo 'NOT_EXISTS'"
+            ssh_cmd = self._build_ssh_command(['bash', '-c', check_cmd])
             
             process = await asyncio.create_subprocess_exec(
                 *ssh_cmd,
@@ -469,8 +539,18 @@ class SSHAnsibleService:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            await process.communicate()
-            return process.returncode == 0
+            stdout, stderr = await process.communicate()
+            
+            # Проверяем вывод
+            output = stdout.decode().strip()
+            exists = 'EXISTS' in output
+            
+            if exists:
+                logger.debug(f"Файл {file_path} существует на удаленном хосте")
+            else:
+                logger.debug(f"Файл {file_path} не найден на удаленном хосте")
+                
+            return exists
             
         except Exception as e:
             logger.error(f"Ошибка при проверке существования файла {file_path}: {str(e)}")
