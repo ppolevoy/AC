@@ -135,14 +135,28 @@ class Application(db.Model):
     def is_grouped(self):
         """Проверка, определена ли группа для приложения"""
         return hasattr(self, 'instance') and self.instance and self.instance.group_resolved
+    
+    @property
+    def effective_artifact_url(self):
+        """Получить эффективный URL артефактов через экземпляр"""
+        if hasattr(self, 'instance') and self.instance:
+            return self.instance.get_effective_artifact_url()
+        return None
+
+    @property
+    def effective_artifact_extension(self):
+        """Получить эффективное расширение артефактов через экземпляр"""
+        if hasattr(self, 'instance') and self.instance:
+            return self.instance.get_effective_artifact_extension()
+        return None    
 
     @property
     def effective_playbook_path(self):
-        """Получить эффективный путь к playbook с учетом всех уровней"""
+        """Получить эффективный путь к playbook через экземпляр"""
         if hasattr(self, 'instance') and self.instance:
             return self.instance.get_effective_playbook_path()
-        # Fallback если нет экземпляра
-        return self.update_playbook_path or Config.DEFAULT_UPDATE_PLAYBOOK
+        from app.config import Config
+        return self.update_playbook_path or getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
 
     @property
     def is_disabled(self):
