@@ -10,6 +10,8 @@ from app.models.application import Application
 from app.models.event import Event
 from app.config import Config
 
+from app.services.application_group_service import ApplicationGroupService
+
 logger = logging.getLogger(__name__)
 
 class AgentService:
@@ -241,7 +243,12 @@ class AgentService:
     
     @staticmethod
     async def update_server_applications(server_id):
-        """Обновление информации о приложениях на сервере"""
+        """
+        Обновление информации о приложениях на сервере с автоматическим определением групп.
+        """
+        from datetime import datetime
+        from app.services.application_group_service import ApplicationGroupService
+        
         server = Server.query.get(server_id)
         if not server:
             logger.error(f"Сервер с id {server_id} не найден")
@@ -262,18 +269,18 @@ class AgentService:
             return False
         
         try:
-            logger.info(f"Получены данные о приложениях с сервера {server.name}: {server_data}")
+            logger.info(f"Получены данные о приложениях с сервера {server.name}")
             
             # Создаем список существующих ID приложений на сервере для отслеживания удаленных
             existing_app_ids = set(app.id for app in Application.query.filter_by(server_id=server.id).all())
             updated_app_ids = set()
+            
             # Обрабатываем docker-приложения
             if 'docker-app' in server_data and 'applications' in server_data['docker-app']:
                 docker_apps = server_data['docker-app']['applications']
                 logger.info(f"Найдено {len(docker_apps)} docker-приложений на сервере {server.name}")
                 
                 for app_data in docker_apps:
-                    # Проверяем существует ли уже такое приложение
                     container_name = app_data.get('container_name')
                     if not container_name:
                         logger.warning(f"Пропуск docker-приложения без имени контейнера на сервере {server.name}")
@@ -285,7 +292,6 @@ class AgentService:
                     ).first()
 
                     if not app:
-                        # Создаем новое приложение
                         logger.info(f"Создание нового docker-приложения {container_name} на сервере {server.name}")
                         app = Application(
                             server_id=server.id,
@@ -293,18 +299,24 @@ class AgentService:
                             app_type='docker'
                         )
                         db.session.add(app)
+                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
                         logger.info(f"Обновление существующего docker-приложения {container_name} на сервере {server.name}")
                     
                     # Обновляем данные приложения
                     app.container_id = app_data.get('container_id')
-                    app.ip = app_data.get('ip')
-                    app.port = app_data.get('port')
+                    app.container_name = container_name
                     app.eureka_url = app_data.get('eureka_url')
                     app.compose_project_dir = app_data.get('compose_project_dir')
-                    app.status = 'online'  # Предполагаем, что все контейнеры запущены
+                    app.ip = app_data.get('ip')
+                    app.port = app_data.get('port')
+                    app.status = 'online'  # Docker-приложения, которые приходят в списке, считаем онлайн
                     
-                    # Сохраняем ID приложения как обновленное
+                    # Определяем группу приложения и создаем/обновляем экземпляр
+                    instance = ApplicationGroupService.resolve_application_group(app)
+                    if instance:
+                        logger.debug(f"Docker-приложение {container_name} привязано к группе {instance.group.name}")
+                    
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -326,7 +338,6 @@ class AgentService:
                     ).first()
                     
                     if not app:
-                        # Создаем новое приложение
                         logger.info(f"Создание нового site-приложения {name} на сервере {server.name}")
                         app = Application(
                             server_id=server.id,
@@ -334,6 +345,7 @@ class AgentService:
                             app_type='site'
                         )
                         db.session.add(app)
+                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
                         logger.info(f"Обновление существующего site-приложения {name} на сервере {server.name}")
                     
@@ -352,7 +364,11 @@ class AgentService:
                         except ValueError:
                             logger.warning(f"Некорректный формат времени запуска для приложения {name}: {app_data['start_time']}")
                     
-                    # Сохраняем ID приложения как обновленное
+                    # Определяем группу приложения и создаем/обновляем экземпляр
+                    instance = ApplicationGroupService.resolve_application_group(app)
+                    if instance:
+                        logger.debug(f"Site-приложение {name} привязано к группе {instance.group.name}")
+                    
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -374,7 +390,6 @@ class AgentService:
                     ).first()
                     
                     if not app:
-                        # Создаем новое приложение
                         logger.info(f"Создание нового service-приложения {name} на сервере {server.name}")
                         app = Application(
                             server_id=server.id,
@@ -382,6 +397,7 @@ class AgentService:
                             app_type='service'
                         )
                         db.session.add(app)
+                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
                         logger.info(f"Обновление существующего service-приложения {name} на сервере {server.name}")
                     
@@ -400,7 +416,11 @@ class AgentService:
                         except ValueError:
                             logger.warning(f"Некорректный формат времени запуска для приложения {name}: {app_data['start_time']}")
                     
-                    # Сохраняем ID приложения как обновленное
+                    # Определяем группу приложения и создаем/обновляем экземпляр
+                    instance = ApplicationGroupService.resolve_application_group(app)
+                    if instance:
+                        logger.debug(f"Service-приложение {name} привязано к группе {instance.group.name}")
+                    
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -409,16 +429,15 @@ class AgentService:
             if deleted_app_ids:
                 logger.info(f"Обнаружено {len(deleted_app_ids)} удаленных приложений на сервере {server.name}")
                 
-                # Помечаем их как неактивные, но не удаляем из БД
                 for app_id in deleted_app_ids:
                     app = Application.query.get(app_id)
                     if app:
                         logger.info(f"Приложение {app.name} не найдено на сервере {server.name}, помечаем как offline")
                         app.status = 'offline'
             
-            # Принудительно коммитим изменения
+            # Коммитим изменения
             db.session.commit()
-            logger.info(f"Информация о приложениях на сервере {server.name} успешно обновлена")
+            logger.info(f"Информация о приложениях на сервере {server.name} успешно обновлена с определением групп")
             return True
             
         except Exception as e:
@@ -427,3 +446,78 @@ class AgentService:
             import traceback
             logger.error(traceback.format_exc())
             return False
+
+    @staticmethod
+    def _process_application(server_id, app_name, app_type, app_data):
+        """
+        Обработка данных о приложении и создание/обновление записи в БД.
+        
+        Args:
+            server_id: ID сервера
+            app_name: Имя приложения
+            app_type: Тип приложения (docker, site, service)
+            app_data: Данные о приложении из JSON
+            
+        Returns:
+            Application: Созданное или обновленное приложение
+        """
+        from app.models.application_group import ApplicationGroup
+        
+        try:
+            # Проверяем существует ли уже такое приложение
+            app = Application.query.filter_by(
+                server_id=server_id,
+                name=app_name,
+                app_type=app_type
+            ).first()
+            
+            if not app:
+                # Создаем новое приложение
+                logger.info(f"Создание нового {app_type}-приложения {app_name} на сервере {server_id}")
+                app = Application(
+                    server_id=server_id,
+                    name=app_name,
+                    app_type=app_type
+                )
+                db.session.add(app)
+            else:
+                logger.info(f"Обновление существующего {app_type}-приложения {app_name} на сервере {server_id}")
+            
+            # Определяем группу приложения (только если еще не определена)
+            if not app.group_id:
+                group = app.determine_group()
+                if group:
+                    logger.info(f"Приложение {app_name} отнесено к группе '{group.name}' с экземпляром #{app.instance_number}")
+            
+            # Обновляем данные приложения в зависимости от типа
+            if app_type == 'docker':
+                app.container_id = app_data.get('container_id')
+                app.container_name = app_data.get('container_name')
+                app.ip = app_data.get('ip')
+                app.port = app_data.get('port')
+                app.eureka_url = app_data.get('eureka_url')
+                app.compose_project_dir = app_data.get('compose_project_dir')
+                app.status = 'online'  # Docker-контейнеры считаем запущенными
+            else:
+                # Для site и service приложений
+                app.path = app_data.get('path')
+                app.log_path = app_data.get('log_path')
+                app.version = app_data.get('version')
+                app.distr_path = app_data.get('distr_path')
+                app.ip = app_data.get('ip')
+                app.port = app_data.get('port')
+                app.status = app_data.get('status') or 'unknown'
+                
+                if 'start_time' in app_data and app_data['start_time']:
+                    try:
+                        app.start_time = datetime.fromisoformat(app_data['start_time'])
+                    except ValueError:
+                        logger.warning(f"Некорректный формат времени запуска для приложения {app_name}: {app_data['start_time']}")
+            
+            return app
+            
+        except Exception as e:
+            logger.error(f"Ошибка при обработке приложения {app_name}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None

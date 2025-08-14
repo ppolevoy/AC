@@ -28,7 +28,11 @@ def create_app(config_name=None):
     
     # Регистрация схем
     with app.app_context():
-        from app.models import server, application, event
+        # Импортируем модели, чтобы SQLAlchemy их зарегистрировал
+        from app.models.server import Server
+        from app.models.application import Application
+        from app.models.application_group import ApplicationGroup
+        from app.models.event import Event
     
     # Регистрация маршрутов API
     from app.api import bp as api_bp

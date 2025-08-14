@@ -70,6 +70,8 @@ class Config:
     
     # Включение SSH-режима для Ansible
     USE_SSH_ANSIBLE = os.environ.get('USE_SSH_ANSIBLE', 'true').lower() == 'true'    
+
+    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
     
     @staticmethod
     def init_app(app):
