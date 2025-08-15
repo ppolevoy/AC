@@ -15,8 +15,8 @@ def get_database_url():
     # Получаем отдельные параметры подключения
     host = os.environ.get('POSTGRES_HOST', '192.168.8.46')
     port = os.environ.get('POSTGRES_PORT', '5417')
-    user = os.environ.get('POSTGRES_USER', '')
-    password = os.environ.get('POSTGRES_PASSWORD', '')
+    user = os.environ.get('POSTGRES_USER', 'fakadm')
+    password = os.environ.get('POSTGRES_PASSWORD', 'fakadm')
     db_name = os.environ.get('POSTGRES_DB', 'appcontrol')
     
     # Формируем строку подключения

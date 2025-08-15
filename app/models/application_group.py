@@ -39,17 +39,62 @@ class ApplicationGroup(db.Model):
             )
         ).count()
     
+    def has_custom_settings(self):
+        """Проверить, есть ли у экземпляра кастомные настройки"""
+        return bool(
+            self.custom_artifact_list_url or 
+            self.custom_artifact_extension or 
+            self.custom_playbook_path
+        )
+    
+    def get_effective_artifact_url(self):
+        """Получить эффективный URL артефактов (кастомный или групповой)"""
+        if self.custom_artifact_list_url:
+            return self.custom_artifact_list_url
+        if self.group:
+            return self.group.artifact_list_url
+        return None
+    
+    def get_effective_artifact_extension(self):
+        """Получить эффективное расширение артефактов (кастомное или групповое)"""
+        if self.custom_artifact_extension:
+            return self.custom_artifact_extension
+        if self.group:
+            return self.group.artifact_extension
+        return None
+    
+    def get_effective_playbook_path(self):
+        """Получить эффективный путь к playbook (кастомный, групповой или дефолтный)"""
+        if self.custom_playbook_path:
+            return self.custom_playbook_path
+        if self.group and self.group.update_playbook_path:
+            return self.group.update_playbook_path
+        from app.config import Config
+        return getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+    
+    def is_disabled(self):
+        """Проверить, отключен ли экземпляр"""
+        # Можно добавить логику для отключения экземпляров
+        # Например, через дополнительное поле is_disabled
+        return False
+    
     def to_dict(self):
         """Преобразование в словарь для API"""
         return {
             'id': self.id,
-            'name': self.name,
-            'description': self.description,
-            'artifact_list_url': self.artifact_list_url,
-            'artifact_extension': self.artifact_extension,
-            'update_playbook_path': self.update_playbook_path,
-            'instances_count': self.get_instances_count(),
-            'custom_instances_count': self.get_custom_instances_count(),
+            'original_name': self.original_name,
+            'instance_number': self.instance_number,
+            'group_id': self.group_id,
+            'group_name': self.group.name if self.group else None,
+            'application_id': self.application_id,
+            'group_resolved': self.group_resolved,
+            'has_custom_settings': self.has_custom_settings(),
+            'custom_artifact_list_url': self.custom_artifact_list_url,
+            'custom_artifact_extension': self.custom_artifact_extension,
+            'custom_playbook_path': self.custom_playbook_path,
+            'effective_artifact_url': self.get_effective_artifact_url(),
+            'effective_artifact_extension': self.get_effective_artifact_extension(),
+            'effective_playbook_path': self.get_effective_playbook_path(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

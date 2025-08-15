@@ -63,8 +63,167 @@
                         </div>
                     </div>
                 </div>
-                
             </div>
+
+            <div class="settings-section">
+                <h4>Управление приложениями и группами</h4>
+                
+                <!-- Компактная строка со статусом -->
+                <div class="app-groups-status-compact" id="app-groups-status-compact">
+                    <div class="status-line" id="app-groups-status-line">
+                        <span class="status-label">Приложения и группы</span>
+                        <span class="status-spacer"></span>
+                        <span class="status-indicator" id="app-groups-status-indicator">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Загрузка...</span>
+                        </span>
+                        <span class="expand-arrow" id="app-groups-expand-arrow">▼</span>
+                    </div>
+                    
+                    <!-- Разворачивающаяся область с деталями -->
+                    <div class="app-groups-details" id="app-groups-details" style="display: none;">
+                        <div class="app-groups-details-content">
+                            
+                            <!-- Фильтр групп -->
+                            <div class="detail-section">
+                                <h5>Поиск групп</h5>
+                                <div class="search-container">
+                                    <input type="text" 
+                                        id="app-filter-input" 
+                                        class="form-control" 
+                                        placeholder="Введите имя группы...">
+                                </div>
+                            </div>
+                            
+                            <!-- Список групп -->
+                            <div class="detail-section">
+                                <h5>Список групп</h5>
+                                <div id="apps-list-container" class="apps-list-container">
+                                    <div class="info-loading">Загрузка списка групп...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Детали выбранного приложения -->
+                            <div class="detail-section" id="app-details-section" style="display: none;">
+                                <h5>Настройки: <span id="selected-app-name"></span></h5>
+                                
+                                <!-- Экземпляры группы -->
+                                <div class="detail-subsection">
+                                    <h6>Экземпляры группы</h6>
+                                    <div id="app-instances-container" class="app-instances-container">
+                                        <!-- Здесь будут отображаться экземпляры группы -->
+                                    </div>
+                                </div>
+                                
+                                <!-- Форма настроек -->
+                                <div class="app-settings-form">
+                                    <h6>Настройки группы</h6>
+                                    <div class="form-group">
+                                        <label for="group-artifact-url">Artifact List URL:</label>
+                                        <input type="text" 
+                                            id="group-artifact-url" 
+                                            class="form-control" 
+                                            placeholder="https://example.com/artifacts">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="group-artifact-extension">Artifact Extension:</label>
+                                        <input type="text" 
+                                            id="group-artifact-extension" 
+                                            class="form-control" 
+                                            placeholder=".jar, .war, etc.">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="group-playbook-path">Ansible Playbook Path:</label>
+                                        <input type="text" 
+                                            id="group-playbook-path" 
+                                            class="form-control" 
+                                            placeholder="/etc/ansible/update-app.yml">
+                                    </div>
+                                    <button id="save-group-settings-btn" class="action-btn">
+                                        Сохранить настройки группы
+                                    </button>
+                                </div>
+                                
+                                <!-- Настройки экземпляра -->
+                                <div class="instance-settings-form" id="instance-settings-form" style="display: none;">
+                                    <h6>Индивидуальные настройки экземпляра: <span id="selected-instance-name"></span></h6>
+                                    <div class="form-group">
+                                        <label for="instance-artifact-url">Custom Artifact List URL:</label>
+                                        <input type="text" 
+                                            id="instance-artifact-url" 
+                                            class="form-control" 
+                                            placeholder="Оставьте пустым для использования настроек группы">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="instance-artifact-extension">Custom Artifact Extension:</label>
+                                        <input type="text" 
+                                            id="instance-artifact-extension" 
+                                            class="form-control" 
+                                            placeholder="Оставьте пустым для использования настроек группы">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="instance-playbook-path">Custom Ansible Playbook Path:</label>
+                                        <input type="text" 
+                                            id="instance-playbook-path" 
+                                            class="form-control" 
+                                            placeholder="Оставьте пустым для использования настроек группы">
+                                    </div>
+                                    <button id="save-instance-settings-btn" class="action-btn">
+                                        Сохранить настройки экземпляра
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Проблемные приложения без группы -->
+                            <div class="detail-section">
+                                <h5>Приложения без группы</h5>
+                                <div id="ungrouped-apps-container" class="ungrouped-apps-container">
+                                    <div class="info-loading">Проверка приложений...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Ручное назначение группы -->
+                            <div class="detail-section" id="manual-group-assignment" style="display: none;">
+                                <h5>Назначение группы</h5>
+                                <div class="form-group">
+                                    <label for="manual-app-select">Выберите приложение:</label>
+                                    <select id="manual-app-select" class="form-control">
+                                        <option value="">-- Выберите приложение --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="manual-group-name">Имя группы:</label>
+                                    <input type="text" 
+                                        id="manual-group-name" 
+                                        class="form-control" 
+                                        placeholder="Введите имя группы">
+                                </div>
+                                <div class="form-group">
+                                    <label for="manual-instance-number">Номер экземпляра:</label>
+                                    <input type="number" 
+                                        id="manual-instance-number" 
+                                        class="form-control" 
+                                        value="0" 
+                                        min="0">
+                                </div>
+                                <button id="assign-group-btn" class="action-btn">
+                                    Назначить группу
+                                </button>
+                            </div>
+                            
+                            <!-- Статистика -->
+                            <div class="detail-section">
+                                <h5>Статистика</h5>
+                                <div id="groups-statistics" class="statistics-container">
+                                    <div class="info-loading">Загрузка статистики...</div>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+           
         </div>
     </div>
     
@@ -74,430 +233,660 @@
 </div>
 
 <style>
-.settings-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.settings-panel {
-    background-color: #2a2a2b;
-    border-radius: 8px;
-    padding: 20px;
-    border: 1px solid #333336;
-}
-
-body.light-theme .settings-panel {
-    background-color: #f9f9f9;
-    border: 1px solid #eee;
-}
-
-.panel-title {
-    margin-bottom: 15px;
-    color: #5ca5e1;
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.panel-content {
-    color: #ebe4da;
-}
-
-body.light-theme .panel-content {
-    color: #333;
-}
-
-.settings-section {
-    margin-bottom: 25px;
-}
-
-.settings-section:last-child {
-    margin-bottom: 0;
-}
-
-.settings-section h4 {
-    margin-bottom: 15px;
-    color: #aaa;
-    font-size: 16px;
-    font-weight: 500;
-}
-
-body.light-theme .settings-section h4 {
-    color: #666;
-}
-
-/* SSH Status Compact Styles */
-.ssh-status-compact {
-    border: 1px solid #333336;
-    border-radius: 6px;
-    overflow: hidden;
-    background-color: #252528;
-}
-
-body.light-theme .ssh-status-compact {
-    border: 1px solid #ddd;
-    background-color: #f5f5f5;
-}
-
-.status-line {
-    display: flex;
-    align-items: center;
-    padding: 12px 15px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.status-line:hover {
-    background-color: #2e2e30;
-}
-
-body.light-theme .status-line:hover {
-    background-color: #f0f0f0;
-}
-
-.status-label {
-    font-weight: 500;
-    color: #ebe4da;
-}
-
-body.light-theme .status-label {
-    color: #333;
-}
-
-.status-spacer {
-    flex: 1;
-}
-
-.status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-right: 15px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: #e74c3c;
-}
-
-.status-dot.connected {
-    background-color: #2ecc71;
-}
-
-.status-dot.loading {
-    background-color: #f39c12;
-}
-
-.status-text {
-    font-size: 14px;
-    color: #aaa;
-}
-
-body.light-theme .status-text {
-    color: #666;
-}
-
-.expand-arrow {
-    color: #666;
-    font-size: 12px;
-    transition: transform 0.3s;
-    user-select: none;
-}
-
-.expand-arrow.expanded {
-    transform: rotate(180deg);
-}
-
-/* SSH Details Styles */
-.ssh-details {
-    border-top: 1px solid #333336;
-    animation: slideDown 0.3s ease-out;
-}
-
-body.light-theme .ssh-details {
-    border-top: 1px solid #ddd;
-
-.playbooks-simple-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.playbook-item-simple {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background-color: #333336;
-    border-radius: 4px;
-    border: 1px solid #444;
-    transition: background-color 0.2s;
-}
-
-body.light-theme .playbook-item-simple {
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
-}
-
-.playbook-item-simple:hover {
-    background-color: #3a3a3d;
-}
-
-body.light-theme .playbook-item-simple:hover {
-    background-color: #ebebeb;
-}
-
-.playbook-icon {
-    font-size: 16px;
-    opacity: 0.8;
-}
-
-.playbook-name {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 14px;
-    color: #ebe4da;
-}
-
-body.light-theme .playbook-name {
-    color: #333;
-}
-
-/* Убираем старые стили со статусом, если они конфликтуют */
-.playbook-status {
-    display: none;
-}
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        max-height: 0;
+    .settings-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
     }
-    to {
-        opacity: 1;
-        max-height: 500px;
+
+    .settings-panel {
+        background-color: #2a2a2b;
+        border-radius: 8px;
+        padding: 20px;
+        border: 1px solid #333336;
     }
-}
 
-.ssh-details-content {
-    padding: 20px;
-}
+    body.light-theme .settings-panel {
+        background-color: #f9f9f9;
+        border: 1px solid #eee;
+    }
 
-.detail-section {
-    margin-bottom: 20px;
-}
+    .panel-title {
+        margin-bottom: 15px;
+        color: #5ca5e1;
+        font-size: 18px;
+        font-weight: 600;
+    }
 
-.detail-section:last-child {
-    margin-bottom: 0;
-}
+    .panel-content {
+        color: #ebe4da;
+    }
 
-.detail-section h5 {
-    margin-bottom: 10px;
-    color: #5ca5e1;
-    font-size: 14px;
-    font-weight: 500;
-}
+    body.light-theme .panel-content {
+        color: #333;
+    }
 
-.config-details {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 10px;
-    background-color: #333336;
-    padding: 15px;
-    border-radius: 4px;
-}
+    .settings-section {
+        margin-bottom: 25px;
+    }
 
-body.light-theme .config-details {
-    background-color: #f0f0f0;
-}
+    .settings-section:last-child {
+        margin-bottom: 0;
+    }
 
-.config-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 0;
-    font-size: 14px;
-}
+    .settings-section h4 {
+        margin-bottom: 15px;
+        color: #aaa;
+        font-size: 16px;
+        font-weight: 500;
+    }
 
-.config-label {
-    color: #aaa;
-}
+    body.light-theme .settings-section h4 {
+        color: #666;
+    }
 
-body.light-theme .config-label {
-    color: #666;
-}
+    /* SSH Status Compact Styles */
+    .ssh-status-compact {
+        border: 1px solid #333336;
+        border-radius: 6px;
+        overflow: hidden;
+        background-color: #252528;
+    }
 
-.config-value {
-    font-family: monospace;
-    color: #ebe4da;
-}
+    body.light-theme .ssh-status-compact {
+        border: 1px solid #ddd;
+        background-color: #f5f5f5;
+    }
 
-body.light-theme .config-value {
-    color: #333;
-}
+    .status-line {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
 
-.key-details {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+    .status-line:hover {
+        background-color: #2e2e30;
+    }
 
-.key-status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background-color: #333336;
-    border-radius: 4px;
-    font-size: 14px;
-}
+    body.light-theme .status-line:hover {
+        background-color: #f0f0f0;
+    }
 
-body.light-theme .key-status-item {
-    background-color: #f0f0f0;
-}
+    .status-label {
+        font-weight: 500;
+        color: #ebe4da;
+    }
 
-.key-status-label {
-    color: #aaa;
-}
+    body.light-theme .status-label {
+        color: #333;
+    }
 
-body.light-theme .key-status-label {
-    color: #666;
-}
+    .status-spacer {
+        flex: 1;
+    }
 
-.key-status-value {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
+    .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-right: 15px;
+    }
 
-.playbooks-list {
-    background-color: #333336;
-    border-radius: 4px;
-    padding: 15px;
-}
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #e74c3c;
+    }
 
-body.light-theme .playbooks-list {
-    background-color: #f0f0f0;
-}
+    .status-dot.connected {
+        background-color: #2ecc71;
+    }
 
-.playbook-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid #444;
-    font-size: 14px;
-}
+    .status-dot.loading {
+        background-color: #f39c12;
+    }
 
-body.light-theme .playbook-item {
-    border-bottom: 1px solid #ddd;
-}
+    .status-text {
+        font-size: 14px;
+        color: #aaa;
+    }
 
-.playbook-item:last-child {
-    border-bottom: none;
-}
+    body.light-theme .status-text {
+        color: #666;
+    }
 
-.playbook-name {
-    font-family: monospace;
-    color: #ebe4da;
-}
+    .expand-arrow {
+        color: #666;
+        font-size: 12px;
+        transition: transform 0.3s;
+        user-select: none;
+    }
 
-body.light-theme .playbook-name {
-    color: #333;
-}
+    .expand-arrow.expanded {
+        transform: rotate(180deg);
+    }
 
-.playbook-path {
-    color: #666;
-    font-size: 12px;
-}
+    /* SSH Details Styles */
+    .ssh-details {
+        border-top: 1px solid #333336;
+        animation: slideDown 0.3s ease-out;
+    }
 
-.info-loading {
-    text-align: center;
-    padding: 15px;
-    color: #666;
-    font-style: italic;
-}
+    body.light-theme .ssh-details {
+        border-top: 1px solid #ddd;
 
-.action-buttons {
-    display: flex;
-    gap: 10px;
-}
+    .playbooks-simple-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
 
-.action-btn {
-    background-color: #5ca5e1;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.3s;
-}
+    .playbook-item-simple {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background-color: #333336;
+        border-radius: 4px;
+        border: 1px solid #444;
+        transition: background-color 0.2s;
+    }
 
-.action-btn:hover {
-    background-color: #4b8ec9;
-}
+    body.light-theme .playbook-item-simple {
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+    }
 
-.action-btn:disabled {
-    background-color: #666;
-    cursor: not-allowed;
-}
+    .playbook-item-simple:hover {
+        background-color: #3a3a3d;
+    }
 
-/* General Settings Styles */
-.setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #333336;
-    font-size: 14px;
-}
+    body.light-theme .playbook-item-simple:hover {
+        background-color: #ebebeb;
+    }
 
-body.light-theme .setting-item {
-    border-bottom: 1px solid #eee;
-}
+    .playbook-icon {
+        font-size: 16px;
+        opacity: 0.8;
+    }
 
-.setting-item:last-child {
-    border-bottom: none;
-}
+    .playbook-name {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        color: #ebe4da;
+    }
 
-.setting-item label {
-    color: #aaa;
-    font-weight: 500;
-}
+    body.light-theme .playbook-name {
+        color: #333;
+    }
 
-body.light-theme .setting-item label {
-    color: #666;
-}
+    /* Убираем старые стили со статусом, если они конфликтуют */
+    .playbook-status {
+        display: none;
+    }
+    }
 
-.setting-item span {
-    color: #ebe4da;
-    font-family: monospace;
-}
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            max-height: 0;
+        }
+        to {
+            opacity: 1;
+            max-height: 500px;
+        }
+    }
 
-body.light-theme .setting-item span {
-    color: #333;
-}
+    .ssh-details-content {
+        padding: 20px;
+    }
 
-@media (max-width: 768px) {
+    .detail-section {
+        margin-bottom: 20px;
+    }
+
+    .detail-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .detail-section h5 {
+        margin-bottom: 10px;
+        color: #5ca5e1;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
     .config-details {
-        grid-template-columns: 1fr;
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 10px;
+        background-color: #333336;
+        padding: 15px;
+        border-radius: 4px;
     }
-    
-    .action-buttons {
-        flex-direction: column;
+
+    body.light-theme .config-details {
+        background-color: #f0f0f0;
     }
-    
-    .setting-item {
+
+    .config-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+        font-size: 14px;
+    }
+
+    .config-label {
+        color: #aaa;
+    }
+
+    body.light-theme .config-label {
+        color: #666;
+    }
+
+    .config-value {
+        font-family: monospace;
+        color: #ebe4da;
+    }
+
+    body.light-theme .config-value {
+        color: #333;
+    }
+
+    .key-details {
+        display: flex;
         flex-direction: column;
-        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .key-status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background-color: #333336;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    body.light-theme .key-status-item {
+        background-color: #f0f0f0;
+    }
+
+    .key-status-label {
+        color: #aaa;
+    }
+
+    body.light-theme .key-status-label {
+        color: #666;
+    }
+
+    .key-status-value {
+        display: flex;
+        align-items: center;
         gap: 5px;
     }
-}
+
+    .playbooks-list {
+        background-color: #333336;
+        border-radius: 4px;
+        padding: 15px;
+    }
+
+    body.light-theme .playbooks-list {
+        background-color: #f0f0f0;
+    }
+
+    .playbook-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #444;
+        font-size: 14px;
+    }
+
+    body.light-theme .playbook-item {
+        border-bottom: 1px solid #ddd;
+    }
+
+    .playbook-item:last-child {
+        border-bottom: none;
+    }
+
+    .playbook-name {
+        font-family: monospace;
+        color: #ebe4da;
+    }
+
+    body.light-theme .playbook-name {
+        color: #333;
+    }
+
+    .playbook-path {
+        color: #666;
+        font-size: 12px;
+    }
+
+    .info-loading {
+        text-align: center;
+        padding: 15px;
+        color: #666;
+        font-style: italic;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+
+    .action-btn {
+        background-color: #5ca5e1;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+
+    .action-btn:hover {
+        background-color: #4b8ec9;
+    }
+
+    .action-btn:disabled {
+        background-color: #666;
+        cursor: not-allowed;
+    }
+
+    /* General Settings Styles */
+    .setting-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #333336;
+        font-size: 14px;
+    }
+
+    body.light-theme .setting-item {
+        border-bottom: 1px solid #eee;
+    }
+
+    .setting-item:last-child {
+        border-bottom: none;
+    }
+
+    .setting-item label {
+        color: #aaa;
+        font-weight: 500;
+    }
+
+    body.light-theme .setting-item label {
+        color: #666;
+    }
+
+    .setting-item span {
+        color: #ebe4da;
+        font-family: monospace;
+    }
+
+    body.light-theme .setting-item span {
+        color: #333;
+    }
+
+    /* Стили для управления приложениями и группами */
+    .app-groups-status-compact {
+        border: 1px solid #333336;
+        border-radius: 6px;
+        overflow: hidden;
+        background-color: #252528;
+    }
+
+    body.light-theme .app-groups-status-compact {
+        border: 1px solid #ddd;
+        background-color: #f5f5f5;
+    }
+
+    .app-groups-details {
+        padding: 15px;
+        border-top: 1px solid #333336;
+        background-color: #1e1e20;
+    }
+
+    body.light-theme .app-groups-details {
+        border-top: 1px solid #ddd;
+        background-color: #fafafa;
+    }
+
+    .apps-list-container {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        background-color: #252528;
+        padding: 10px;
+    }
+
+    body.light-theme .apps-list-container {
+        border: 1px solid #ddd;
+        background-color: #fff;
+    }
+
+    .app-item {
+        padding: 8px 12px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .app-item:hover {
+        background-color: #2e2e30;
+    }
+
+    body.light-theme .app-item:hover {
+        background-color: #f0f0f0;
+    }
+
+    .app-item.selected {
+        background-color: #3a3a3c;
+        border: 1px solid #5ca5e1;
+    }
+
+    body.light-theme .app-item.selected {
+        background-color: #e8f4fd;
+        border: 1px solid #5ca5e1;
+    }
+
+    .app-item-name {
+        font-weight: 500;
+    }
+
+    .app-item-info {
+        font-size: 12px;
+        color: #888;
+    }
+
+    .app-instances-container {
+        border: 1px solid #333336;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 15px;
+        background-color: #252528;
+    }
+
+    body.light-theme .app-instances-container {
+        border: 1px solid #ddd;
+        background-color: #fff;
+    }
+
+    .instance-item {
+        padding: 8px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        border: 1px solid #333336;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    body.light-theme .instance-item {
+        border: 1px solid #e0e0e0;
+    }
+
+    .instance-item:hover {
+        background-color: #2e2e30;
+    }
+
+    body.light-theme .instance-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .instance-item.selected {
+        background-color: #3a3a3c;
+        border-color: #5ca5e1;
+    }
+
+    body.light-theme .instance-item.selected {
+        background-color: #e8f4fd;
+        border-color: #5ca5e1;
+    }
+
+    .app-settings-form,
+    .instance-settings-form {
+        background-color: #252528;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    body.light-theme .app-settings-form,
+    body.light-theme .instance-settings-form {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+
+    .ungrouped-apps-container {
+        border: 1px solid #e74c3c;
+        border-radius: 4px;
+        padding: 10px;
+        background-color: rgba(231, 76, 60, 0.1);
+    }
+
+    .ungrouped-app-item {
+        padding: 8px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        background-color: rgba(231, 76, 60, 0.2);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .fix-group-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+        background-color: #5ca5e1;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+
+    .fix-group-btn:hover {
+        background-color: #4a93cf;
+    }
+
+    .statistics-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+    }
+
+    .stat-item {
+        background-color: #252528;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        padding: 10px;
+    }
+
+    body.light-theme .stat-item {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 5px;
+    }
+
+    .stat-value {
+        font-size: 18px;
+        font-weight: 600;
+        color: #5ca5e1;
+    }
+
+    .search-container {
+        margin-bottom: 10px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        color: #aaa;
+        font-size: 14px;
+    }
+
+    body.light-theme .form-group label {
+        color: #666;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        background-color: #1e1e20;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        color: #ebe4da;
+        font-size: 14px;
+    }
+
+    body.light-theme .form-control {
+        background-color: #fff;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+
+    .detail-subsection {
+        margin-bottom: 20px;
+    }
+
+    .detail-subsection h6 {
+        margin-bottom: 10px;
+        color: #aaa;
+        font-size: 13px;
+        text-transform: uppercase;
+    }
+
+    body.light-theme .detail-subsection h6 {
+        color: #666;
+    }
 </style>
 
 <script>
@@ -701,4 +1090,5 @@ async function testConnection() {
 
 {% block page_scripts %}
 <!-- Additional scripts for settings page -->
+ <script src="{{ url_for('static', filename='js/applications/app-groups-management.js') }}"></script>
 {% endblock %}

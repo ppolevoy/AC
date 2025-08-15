@@ -11,6 +11,7 @@ from app.models.event import Event
 from app.services.agent_service import AgentService
 from app.services.ansible_service import AnsibleService
 from app.api import bp
+from app.api import app_groups_routes
 
 from app.models.application_group import ApplicationGroup, ApplicationInstance
 from app.services.application_group_service import ApplicationGroupService
