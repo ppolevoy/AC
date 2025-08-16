@@ -76,6 +76,10 @@ class ApplicationGroupService:
         """
         Определить группу для приложения и создать/обновить экземпляр.
         
+        ВАЖНО: Этот метод синхронизирует данные в двух местах:
+        1. В таблице application_instances (для новой архитектуры)
+        2. В полях group_id и instance_number таблицы applications (для обратной совместимости)
+        
         Args:
             application: Объект приложения
             
@@ -86,7 +90,7 @@ class ApplicationGroupService:
             logger.error("Попытка определить группу для None приложения")
             return None
         
-        # Проверяем, есть ли уже экземпляр
+        # Проверяем, есть ли уже экземпляр с разрешенной группой
         if hasattr(application, 'instance') and application.instance:
             if application.instance.group_resolved:
                 logger.debug(f"Группа для приложения {application.name} уже определена")
@@ -103,7 +107,14 @@ class ApplicationGroupService:
             # Получаем или создаем группу
             group = ApplicationGroupService.get_or_create_group(group_name)
             
-            # Проверяем существующий экземпляр
+            # КРИТИЧЕСКИ ВАЖНО: Синхронизируем поля в таблице applications
+            # Это обеспечивает обратную совместимость с существующим кодом
+            application.group_id = group.id
+            application.instance_number = instance_number
+            db.session.add(application)
+            logger.info(f"Обновлены поля group_id={group.id} и instance_number={instance_number} для приложения {application.name}")
+            
+            # Проверяем существующий экземпляр в application_instances
             instance = getattr(application, 'instance', None)
             
             if not instance:
@@ -126,12 +137,99 @@ class ApplicationGroupService:
                 instance.group_resolved = True
                 db.session.add(instance)
             
+            # Flush для получения ID без полного коммита
             db.session.flush()
+            
             return instance
             
         except Exception as e:
             logger.error(f"Ошибка при определении группы для приложения {application.name}: {str(e)}")
             return None
+    
+    @staticmethod
+    def sync_application_group_fields(application: Application) -> bool:
+        """
+        Синхронизировать поля group_id и instance_number между таблицами.
+        Используется для исправления рассинхронизированных данных.
+        
+        Args:
+            application: Объект приложения
+            
+        Returns:
+            bool: True если синхронизация успешна
+        """
+        try:
+            if hasattr(application, 'instance') and application.instance:
+                # Синхронизируем из ApplicationInstance в Application
+                application.group_id = application.instance.group_id
+                application.instance_number = application.instance.instance_number
+                db.session.add(application)
+                logger.info(f"Синхронизированы поля для приложения {application.name}")
+                return True
+            else:
+                # Если нет экземпляра, пытаемся создать на основе имени
+                group_name, instance_number = ApplicationGroupService.parse_application_name(application.name)
+                if group_name:
+                    group = ApplicationGroupService.get_or_create_group(group_name)
+                    application.group_id = group.id
+                    application.instance_number = instance_number
+                    db.session.add(application)
+                    logger.info(f"Установлены поля группы для приложения {application.name}")
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"Ошибка при синхронизации полей для приложения {application.name}: {str(e)}")
+            return False
+    
+    @staticmethod
+    def fix_all_applications() -> Dict[str, int]:
+        """
+        Исправить все существующие приложения без установленных group_id.
+        Используется для миграции данных.
+        
+        Returns:
+            dict: Статистика обработки
+        """
+        stats = {
+            'processed': 0,
+            'fixed': 0,
+            'errors': 0
+        }
+        
+        try:
+            # Находим все приложения без group_id
+            applications = Application.query.filter(
+                db.or_(
+                    Application.group_id.is_(None),
+                    Application.group_id == 0
+                )
+            ).all()
+            
+            logger.info(f"Найдено {len(applications)} приложений для обработки")
+            
+            for app in applications:
+                stats['processed'] += 1
+                try:
+                    instance = ApplicationGroupService.resolve_application_group(app)
+                    if instance:
+                        stats['fixed'] += 1
+                        logger.info(f"Исправлено приложение {app.name}")
+                except Exception as e:
+                    stats['errors'] += 1
+                    logger.error(f"Ошибка при обработке приложения {app.name}: {str(e)}")
+            
+            # Коммитим все изменения
+            db.session.commit()
+            
+            logger.info(f"Обработка завершена. Обработано: {stats['processed']}, "
+                       f"Исправлено: {stats['fixed']}, Ошибок: {stats['errors']}")
+            
+            return stats
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Критическая ошибка при исправлении приложений: {str(e)}")
+            raise
     
     @staticmethod
     def get_group_instances(group_name: str, server_id: Optional[int] = None) -> List[ApplicationInstance]:

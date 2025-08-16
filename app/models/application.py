@@ -36,6 +36,8 @@ class Application(db.Model):
     server_id = db.Column(db.Integer, db.ForeignKey('servers.id', ondelete='CASCADE'), nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey('application_groups.id', ondelete='SET NULL'), nullable=True)
     
+    group = db.relationship('ApplicationGroup', backref='applications')
+
     # Индекс для оптимизации запросов
     __table_args__ = (
         db.Index('idx_app_group_instance', 'group_id', 'instance_number'),
@@ -111,10 +113,13 @@ class Application(db.Model):
     @property
     def group_name(self):
         """Получить имя группы приложения"""
-        group = self.application_group
-        if group:
-            return group.name
-        # Fallback на старую логику для обратной совместимости
+        # Сначала пытаемся через прямой relationship
+        if self.group:
+            return self.group.name
+        # Потом через instance (для обратной совместимости)
+        if hasattr(self, 'instance') and self.instance and self.instance.group:
+            return self.instance.group.name
+        # Fallback на парсинг имени
         parts = self.name.split('_')
         if len(parts) > 1 and parts[-1].isdigit():
             return '_'.join(parts[:-1])
