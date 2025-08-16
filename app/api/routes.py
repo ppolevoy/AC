@@ -1222,6 +1222,10 @@ def update_application_group(group_id):
         if 'artifact_extension' in data:
             group.artifact_extension = data['artifact_extension']
             logger.info(f"Обновлен artifact_extension для группы {group.name}: {data['artifact_extension']}")
+
+#        if 'group-playbook-path' in data:
+#            group.update_playbook_path = data['group-playbook-path']
+#            logger.info(f"Обновлен playbook_path для группы {group.name}: {data['group-playbook-path']}")
         
         db.session.commit()
         
@@ -1340,10 +1344,35 @@ def reassign_application_group(app_id):
             db.session.flush()
             logger.info(f"Создана новая группа приложений: {group_name}")
         
-        # Обновляем приложение
+        # Сохраняем старое имя группы для логирования
         old_group_name = app.group.name if app.group else "без группы"
+        
+        # ВАЖНО: Синхронизируем обе таблицы
+        # 1. Обновляем поля в Application
         app.group_id = group.id
         app.instance_number = instance_number
+        
+        # 2. Обновляем или создаем ApplicationInstance
+        if hasattr(app, 'instance') and app.instance:
+            # Обновляем существующий instance
+            instance = app.instance
+            instance.group_id = group.id
+            instance.instance_number = instance_number
+            instance.original_name = app.name
+            instance.group_resolved = True
+            logger.info(f"Обновлен ApplicationInstance для приложения {app.name}")
+        else:
+            # Создаем новый instance
+            from app.models.application_group import ApplicationInstance
+            instance = ApplicationInstance(
+                original_name=app.name,
+                instance_number=instance_number,
+                group_id=group.id,
+                application_id=app.id,
+                group_resolved=True
+            )
+            db.session.add(instance)
+            logger.info(f"Создан ApplicationInstance для приложения {app.name}")
         
         db.session.commit()
         
