@@ -453,24 +453,9 @@ def update_application_playbook(app_id):
 
 @bp.route('/applications/<int:app_id>/update', methods=['POST'])
 def update_application(app_id):
-    """Обновление приложения"""
+    """Запуск обновления приложения через Ansible playbook"""
     try:
-        data = request.json
-        
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': "Отсутствуют данные"
-            }), 400
-        
-        required_fields = ['distr_url', 'restart_mode']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    'success': False,
-                    'error': f"Поле {field} обязательно"
-                }), 400
-        
+        # Получаем приложение
         app = Application.query.get(app_id)
         if not app:
             return jsonify({
@@ -478,37 +463,125 @@ def update_application(app_id):
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
         
+        # Получаем данные из запроса
+        data = request.json
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': "Отсутствуют данные для обновления"
+            }), 400
+        
+        distr_url = data.get('distr_url')
+        restart_mode = data.get('restart_mode', 'restart')
+        
+        if not distr_url:
+            return jsonify({
+                'success': False,
+                'error': "Не указан URL дистрибутива"
+            }), 400
+        
+        # Получаем сервер приложения
         server = Server.query.get(app.server_id)
         if not server:
             return jsonify({
                 'success': False,
-                'error': f"Сервер для приложения {app.name} не найден"
+                'error': f"Сервер приложения не найден"
             }), 404
         
-        # Создаем задачу и добавляем ее в очередь
+        # Получаем путь к playbook
+        playbook_path = app.update_playbook_path
+        
+        # Если путь не задан для приложения, пытаемся получить из экземпляра
+        if not playbook_path:
+            instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
+            if instance:
+                playbook_path = instance.get_effective_playbook_path()
+        
+        # Если все еще нет пути, используем дефолтный
+        if not playbook_path:
+            from app.config import Config
+            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+        
+        # Создаем задачу для обновления
         task = Task(
-            task_type="update",
+            task_type='update',
             params={
-                "distr_url": data['distr_url'],
-                "restart_mode": data['restart_mode']
+                'app_id': app.id,
+                'app_name': app.name,
+                'server_name': server.name,
+                'distr_url': distr_url,
+                'restart_mode': restart_mode,
+                'playbook_path': playbook_path
             },
             server_id=server.id,
             application_id=app.id
         )
         
+        # Добавляем задачу в очередь
         task_queue.add_task(task)
         
+        # Логируем событие
+        event = Event(
+            event_type='update',
+            description=f"Запущено обновление приложения {app.name} на версию из {distr_url}",
+            status='pending',
+            server_id=server.id,
+            application_id=app.id
+        )
+        db.session.add(event)
+        db.session.commit()
+        
+        # Запускаем ansible playbook через SSH сервис
+        from app.services.ssh_ansible_service import SSHAnsibleService
+        ssh_service = SSHAnsibleService()
+        
+        # Асинхронный запуск ansible playbook
+        success, result = run_async(
+            ssh_service.update_application(
+                server_name=server.name,
+                app_name=app.name,
+                app_id=app.id,
+                distr_url=distr_url,
+                restart_mode=restart_mode,
+                playbook_path=playbook_path
+            )
+        )
+        
+        # Обновляем статус задачи и события
+        if success:
+            task.status = 'completed'
+            task.result = result
+            event.status = 'success'
+            
+            # Обновляем информацию о версии и пути дистрибутива
+            app.distr_path = distr_url
+            # Попытка извлечь версию из URL
+            import re
+            version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
+            if version_match:
+                app.version = version_match.group(1)
+        else:
+            task.status = 'failed'
+            task.error = result
+            event.status = 'failed'
+            event.description += f" - Ошибка: {result}"
+        
+        db.session.commit()
+        
         return jsonify({
-            'success': True,
-            'message': f"Обновление приложения {app.name} поставлено в очередь",
+            'success': success,
+            'message': result if success else None,
+            'error': result if not success else None,
             'task_id': task.id
         })
+        
     except Exception as e:
-        logger.error(f"Ошибка при обновлении приложения {app_id}: {str(e)}")
+        logger.error(f"Ошибка при запуске обновления приложения {app_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
 
 @bp.route('/applications/<int:app_id>/manage', methods=['POST'])
 def manage_application(app_id):
@@ -1891,6 +1964,78 @@ def get_disabled_applications():
         })
     except Exception as e:
         logger.error(f"Ошибка при получении отключенных приложений: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+@bp.route('/applications/<int:app_id>/artifacts', methods=['GET'])
+def get_application_artifacts(app_id):
+    """Получение списка доступных версий артефактов для приложения"""
+    try:
+        # Получаем приложение
+        app = Application.query.get(app_id)
+        if not app:
+            return jsonify({
+                'success': False,
+                'error': f"Приложение с id {app_id} не найдено"
+            }), 404
+        
+        # Получаем экземпляр приложения
+        instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
+        if not instance:
+            logger.warning(f"Экземпляр не найден для приложения {app_id}")
+            return jsonify({
+                'success': False,
+                'error': 'Экземпляр приложения не найден. Настройте группу приложений.'
+            }), 404
+        
+        # Получаем URL артефактов и расширение
+        artifact_url = instance.get_effective_artifact_url()
+        artifact_extension = instance.get_effective_artifact_extension()
+        
+        if not artifact_url:
+            logger.info(f"URL артефактов не настроен для приложения {app.name}")
+            return jsonify({
+                'success': False,
+                'error': 'URL артефактов не настроен для данного приложения'
+            }), 404
+        
+        # Получаем список артефактов через NexusArtifactService
+        from app.services.nexus_artifact_service import NexusArtifactService
+        nexus_service = NexusArtifactService()
+        
+        # Запускаем асинхронную операцию
+        artifacts = run_async(nexus_service.get_artifacts_for_application(instance))
+        
+        if not artifacts:
+            logger.warning(f"Не удалось получить список артефактов для {app.name}")
+            return jsonify({
+                'success': False,
+                'error': 'Не удалось получить список версий из репозитория'
+            }), 404
+        
+        # Формируем список версий для отправки на frontend
+        versions = []
+        for artifact in artifacts:
+            versions.append({
+                'version': artifact.version,
+                'url': artifact.download_url,
+                'filename': artifact.filename,
+                'is_release': artifact.is_release,
+                'is_snapshot': artifact.is_snapshot,
+                'timestamp': artifact.timestamp.isoformat() if artifact.timestamp else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'application': app.name,
+            'versions': versions,
+            'total': len(versions)
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка артефактов для приложения {app_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

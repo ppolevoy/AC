@@ -1256,52 +1256,149 @@ function showUpdateModal(appIds) {
  * @param {number|Array} appIds - ID приложения или массив ID
  * @param {string} title - Заголовок модального окна
  */
-function showSimpleUpdateModal(appIds, title) {
+async function showSimpleUpdateModal(appIds, title) {
     const appIdsArray = Array.isArray(appIds) ? appIds : [appIds];
     
     // Определяем значение дистрибутива по умолчанию
     let defaultDistrPath = '';
+    let artifactVersions = null;
+    
+    // Если обновляем одно приложение, пытаемся получить список версий
     if (appIdsArray.length === 1) {
         const app = getAppById(appIdsArray[0]);
         if (app && app.distr_path) {
             defaultDistrPath = app.distr_path;
         }
+        
+        // Пытаемся загрузить список версий из Nexus
+        try {
+            const response = await fetch(`/api/applications/${appIdsArray[0]}/artifacts`);
+            const data = await response.json();
+            
+            if (data.success && data.versions && data.versions.length > 0) {
+                artifactVersions = data.versions;
+                console.log(`Загружено ${artifactVersions.length} версий для приложения ${app.name}`);
+            } else {
+                console.log('Не удалось получить список версий:', data.error || 'Список пуст');
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке списка версий:', error);
+        }
     }
     
     // Определяем поля формы
-    const formFields = [
-        {
+    const formFields = [];
+    
+    // Поле для URL дистрибутива или выпадающий список версий
+    if (artifactVersions && artifactVersions.length > 0) {
+        // Если есть версии, создаем выпадающий список
+        const versionOptions = artifactVersions.map(version => {
+            let label = version.version;
+            if (version.is_release) {
+                label += ' (Release)';
+            } else if (version.is_snapshot) {
+                label += ' (Snapshot)';
+            }
+            return {
+                value: version.url,
+                text: label
+            };
+        });
+        
+        // Добавляем опцию для ручного ввода URL
+        versionOptions.push({
+            value: 'custom',
+            text: '-- Указать URL вручную --'
+        });
+        
+        formFields.push({
+            id: 'distr-url',
+            name: 'distr_url',
+            label: 'Версия дистрибутива:',
+            type: 'select',
+            value: versionOptions[0].value, // Выбираем первую (последнюю) версию по умолчанию
+            options: versionOptions,
+            required: true
+        });
+        
+        // Добавляем скрытое поле для ручного ввода URL (изначально скрыто)
+        formFields.push({
+            id: 'custom-distr-url',
+            name: 'custom_distr_url',
+            label: 'URL дистрибутива:',
+            type: 'text',
+            value: defaultDistrPath,
+            required: false
+        });
+    } else {
+        // Если версии не загрузились, оставляем текстовое поле
+        formFields.push({
             id: 'distr-url',
             name: 'distr_url',
             label: 'URL дистрибутива:',
             type: 'text',
             value: defaultDistrPath,
             required: true
-        },
-        {
-            id: 'restart-mode',
-            name: 'restart_mode',
-            label: 'Режим обновления:',
-            type: 'radio',
-            value: 'restart',
-            options: [
-                { value: 'restart', text: 'В рестарт' },
-                { value: 'immediate', text: 'Сейчас' }
-            ]
-        },
-        {
-            id: 'app-ids',
-            name: 'app_ids',
-            type: 'hidden',
-            value: appIdsArray.join(',')
-        }
-    ];
+        });
+    }
+    
+    // Добавляем поле режима обновления
+    formFields.push({
+        id: 'restart-mode',
+        name: 'restart_mode',
+        label: 'Режим обновления:',
+        type: 'radio',
+        value: 'restart',
+        options: [
+            { value: 'restart', text: 'В рестарт' },
+            { value: 'immediate', text: 'Сейчас' }
+        ]
+    });
+    
+    // Добавляем скрытое поле с ID приложений
+    formFields.push({
+        id: 'app-ids',
+        name: 'app_ids',
+        type: 'hidden',
+        value: appIdsArray.join(',')
+    });
     
     // Функция, которая будет выполнена при отправке формы
-    const submitAction = processUpdateForm;
+    const submitAction = function(formData) {
+        // Если выбран кастомный URL, используем его
+        if (formData.distr_url === 'custom' && formData.custom_distr_url) {
+            formData.distr_url = formData.custom_distr_url;
+        }
+        delete formData.custom_distr_url; // Удаляем лишнее поле
+        
+        // Вызываем стандартную функцию обработки
+        processUpdateForm(formData);
+    };
     
     // Отображаем модальное окно с формой
     ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
+    
+    // Если есть выпадающий список, добавляем обработчик для переключения на ручной ввод
+    if (artifactVersions && artifactVersions.length > 0) {
+        setTimeout(() => {
+            const selectElement = document.getElementById('distr-url');
+            const customUrlGroup = document.getElementById('custom-distr-url').closest('.form-group');
+            
+            // Изначально скрываем поле ручного ввода
+            customUrlGroup.style.display = 'none';
+            
+            // Обработчик изменения выбора
+            selectElement.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customUrlGroup.style.display = 'block';
+                    document.getElementById('custom-distr-url').required = true;
+                } else {
+                    customUrlGroup.style.display = 'none';
+                    document.getElementById('custom-distr-url').required = false;
+                }
+            });
+        }, 100);
+    }
 }
 
 /**
@@ -1532,101 +1629,77 @@ function showTabsUpdateModal(appGroups, title) {
 	});
 }
 
-	/**
-	 * Обрабатывает данные формы обновления
-	 * @param {Object|Array} formData - Данные формы или массив данных форм
-	 * @param {boolean} closeAfterSubmit - Закрыть модальное окно после отправки
-	 */
-	async function processUpdateForm(formData, closeAfterSubmit = true) {
-		try {
-			let successCount = 0;
-			let totalCount = 0;
-			
-			// Проверяем, является ли formData массивом
-			if (Array.isArray(formData)) {
-				// Обрабатываем массив данных форм
-				const allPromises = [];
-				
-				formData.forEach(data => {
-					if (data.app_ids && data.distr_url) {
-						const appIds = data.app_ids.split(',').map(id => parseInt(id.trim()));
-						
-						// Создаем запросы для всех приложений в этой группе
-						appIds.forEach(appId => {
-							const promise = fetch(`/api/applications/${appId}/update`, {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json'
-								},
-								body: JSON.stringify({
-									distr_url: data.distr_url,
-									restart_mode: data.restart_mode
-								})
-							}).then(response => response.json());
-							
-							allPromises.push(promise);
-							totalCount++;
-						});
-					}
-				});
-				
-				// Ждем выполнения всех запросов
-				const results = await Promise.all(allPromises);
-				
-				// Подсчитываем успешные запросы
-				successCount = results.filter(result => result.success).length;
-			} else {
-				// Обрабатываем одиночную форму
-				const appIds = formData.app_ids.split(',').map(id => parseInt(id.trim()));
-				
-				// Создаем массив запросов для всех приложений
-				const updatePromises = appIds.map(appId => 
-					fetch(`/api/applications/${appId}/update`, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
-						body: JSON.stringify({
-							distr_url: formData.distr_url,
-							restart_mode: formData.restart_mode
-						})
-					}).then(response => response.json())
-				);
-				
-				// Ждем выполнения всех запросов
-				const results = await Promise.all(updatePromises);
-				
-				// Подсчитываем успешные запросы
-				successCount = results.filter(result => result.success).length;
-				totalCount = results.length;
-			}
-			
-			// Закрываем модальное окно, если нужно
-			if (closeAfterSubmit) {
-				window.closeModal();
-			}
-			
-			// Анализируем результаты
-			if (successCount === totalCount) {
-				showNotification(`Обновление успешно запущено для всех выбранных приложений`);
-			} else if (successCount === 0) {
-				showError(`Не удалось запустить обновление ни для одного из выбранных приложений`);
-			} else {
-				showNotification(`Обновление запущено для ${successCount} из ${totalCount} приложений`);
-			}
-			
-			// Обновляем список приложений
-			loadApplications();
-		} catch (error) {
-			console.error('Ошибка при обновлении приложений:', error);
-			showError('Не удалось запустить обновление приложений');
-			
-			// Закрываем модальное окно, если нужно
-			if (closeAfterSubmit) {
-				window.closeModal();
-			}
-		}
-	}
+/**
+ * Обработка формы обновления приложений
+ * @param {Object} formData - Данные формы
+ * @param {boolean} closeAfterSubmit - Закрыть модальное окно после отправки
+ */
+async function processUpdateForm(formData, closeAfterSubmit = true) {
+    try {
+        let successCount = 0;
+        let totalCount = 0;
+        
+        // Получаем массив ID приложений
+        const appIds = formData.app_ids.split(',').map(id => parseInt(id.trim()));
+        
+        // Создаем массив запросов для всех приложений
+        const updatePromises = appIds.map(async (appId) => {
+            const app = getAppById(appId);
+            
+            // Формируем параметры для запуска ansible playbook
+            const updateParams = {
+                distr_url: formData.distr_url,
+                restart_mode: formData.restart_mode,
+                app_name: app ? app.name : null,
+                server_name: app ? app.server_name : null
+            };
+            
+            // Отправляем запрос на обновление
+            const response = await fetch(`/api/applications/${appId}/update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateParams)
+            });
+            
+            return response.json();
+        });
+        
+        // Ждем выполнения всех запросов
+        const results = await Promise.all(updatePromises);
+        
+        // Подсчитываем успешные запросы
+        successCount = results.filter(result => result.success).length;
+        totalCount = results.length;
+        
+        // Закрываем модальное окно, если нужно
+        if (closeAfterSubmit) {
+            window.closeModal();
+        }
+        
+        // Анализируем результаты
+        if (successCount === totalCount) {
+            showNotification(`Обновление успешно запущено для всех выбранных приложений`);
+        } else if (successCount === 0) {
+            showError(`Не удалось запустить обновление ни для одного из выбранных приложений`);
+        } else {
+            showNotification(`Обновление запущено для ${successCount} из ${totalCount} приложений`);
+        }
+        
+        // Обновляем список приложений
+        loadApplications();
+        
+    } catch (error) {
+        console.error('Ошибка при обновлении приложений:', error);
+        showError('Не удалось запустить обновление приложений');
+        
+        // Закрываем модальное окно при ошибке
+        if (closeAfterSubmit) {
+            window.closeModal();
+        }
+    }
+}
 	
 /**
  * Сохраняет текущее состояние развернутых групп
