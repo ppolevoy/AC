@@ -37,6 +37,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const artifactsCache = {};
     const CACHE_LIFETIME = 5 * 60 * 1000; // 5 минут в миллисекундах
 
+    // Настройка времени анимаций
+    const LOADING_CONFIG = {
+        MIN_LOADING_TIME: 800,      // Минимальное время показа загрузчика (ms)
+        PROGRESS_STEPS: {
+            FETCH_START: 30,         // Прогресс при начале загрузки (%)
+            FETCH_COMPLETE: 70,      // Прогресс после получения данных (%)
+            PARSE_COMPLETE: 100      // Прогресс после обработки (%)
+        },
+        CACHE_LIFETIME: 5 * 60 * 1000, // Время жизни кэша (5 минут)
+        ANIMATION_DELAYS: {
+            FADE_IN: 100,            // Задержка fade-in (ms)
+            FIELD_STAGGER: 100       // Задержка между полями (ms)
+        }
+    };
+    
+
     // Инициализация страницы
     init();
     initClickDropdowns();
@@ -1260,327 +1276,343 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {number|Array} appIds - ID приложения или массив ID
      * @param {string} title - Заголовок модального окна
      */
-    async function showSimpleUpdateModal(appIds, title) {
-        const appIdsArray = Array.isArray(appIds) ? appIds : [appIds];
-        
-        // Определяем значение дистрибутива по умолчанию
-        let defaultDistrPath = '';
-        let artifactVersions = null;
-        let currentAppId = null;
-        
-        // Если обновляем одно приложение, пытаемся получить список версий
-        //if (appIdsArray.length === 1) {
-        
-            currentAppId = appIdsArray[0];
-            const app = getAppById(currentAppId);
-            if (app && app.distr_path) {
-                defaultDistrPath = app.distr_path;
-            }
-            
-            // Функция загрузки артефактов
-            async function loadArtifacts() {
-                try {
-                    // Получаем максимальное количество версий из конфигурации
-                    const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
-                    
-                    const response = await fetch(`/api/applications/${currentAppId}/artifacts?limit=${maxVersions}`);
-                    const data = await response.json();
-                    
-                    if (data.success && data.versions && data.versions.length > 0) {
-                        artifactVersions = data.versions.slice(0, maxVersions); // Ограничиваем количество
-                        console.log(`Загружено ${artifactVersions.length} версий для приложения ${app.name}`);
-                        return true;
-                    } else {
-                        console.log('Не удалось получить список версий:', data.error || 'Список пуст');
-                        return false;
-                    }
-                } catch (error) {
-                    console.error('Ошибка при загрузке списка версий:', error);
-                    return false;
+async function showSimpleUpdateModal(appIds, title) {
+    const appIdsArray = Array.isArray(appIds) ? appIds : [appIds];
+    
+    // Определяем значение дистрибутива по умолчанию
+    let defaultDistrPath = '';
+    let artifactVersions = null;
+    let currentAppId = null;
+    let isLoadingArtifacts = false;
+    
+    // Если обновляем одно приложение, показываем загрузчик сразу
+    //if (appIdsArray.length === 1) {
+        currentAppId = appIdsArray[0];
+        const app = getAppById(currentAppId);
+        if (app && app.distr_path) {
+            defaultDistrPath = app.distr_path;
+        }
+        isLoadingArtifacts = true; // Устанавливаем флаг загрузки
+    //}
+    
+    // Определяем начальные поля формы с загрузчиком
+    const formFields = [];
+    
+    // Показываем загрузчик если загружаем артефакты
+    if (isLoadingArtifacts) {
+        formFields.push({
+            id: 'artifact-loader-container',
+            name: 'artifact_loader',
+            type: 'custom',
+            html: `
+                <div class="artifact-loading-container">
+                    <label>Версия дистрибутива:</label>
+                    <div class="artifact-loader">
+                        <div class="skeleton-select">
+                            <div class="skeleton-text">Загрузка списка версий...</div>
+                            <div class="skeleton-arrow">▼</div>
+                        </div>
+                        <div class="loading-spinner">
+                            <div class="spinner-ring"></div>
+                        </div>
+                        <div class="loading-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+            `
+        });
+    } else {
+        // Обычное поле URL если не загружаем артефакты
+        formFields.push({
+            id: 'distr-url',
+            name: 'distr_url',
+            label: 'URL дистрибутива:',
+            type: 'text',
+            value: defaultDistrPath,
+            required: true
+        });
+    }
+    
+    // Добавляем остальные поля формы
+    formFields.push({
+        id: 'restart-mode',
+        name: 'restart_mode',
+        label: 'Режим обновления:',
+        type: 'radio',
+        value: 'restart',
+        options: [
+            { value: 'restart', text: 'В рестарт' },
+            { value: 'immediate', text: 'Сейчас' }
+        ]
+    });
+    
+    formFields.push({
+        id: 'app-ids',
+        name: 'app_ids',
+        type: 'hidden',
+        value: appIdsArray.join(',')
+    });
+    
+    // Функция отправки формы
+    const submitAction = function(formData) {
+        if (formData.distr_url === 'custom' && formData.custom_distr_url) {
+            formData.distr_url = formData.custom_distr_url;
+        }
+        delete formData.custom_distr_url;
+        processUpdateForm(formData);
+    };
+    
+    // Отображаем модальное окно с загрузчиком
+    ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
+    
+    // Функция загрузки артефактов
+    async function loadArtifacts(showProgress = true) {
+        try {
+            if (showProgress) {
+                // Анимируем прогресс-бар
+                const progressBar = document.querySelector('.progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = '30%';
                 }
             }
             
-            // Загружаем артефакты
-            await loadArtifacts();
-        //}
-        
-        // Определяем поля формы
-        const formFields = [];
-        
-        // Поле для URL дистрибутива или выпадающий список версий
-        if (artifactVersions && artifactVersions.length > 0) {
-            // Создаем контейнер для выпадающего списка с кнопкой обновления
-            formFields.push({
-                id: 'artifact-selector-container',
-                name: 'artifact_selector_container',
-                type: 'custom',
-                html: `
-                    <div class="artifact-selector-wrapper">
-                        <div class="artifact-selector-header">
-                            <label for="distr-url">Версия дистрибутива:</label>
-                            <button type="button" id="refresh-artifacts-btn" class="refresh-artifacts-btn" title="Обновить список версий">
-                                <span class="refresh-icon">⟳</span>
-                            </button>
-                        </div>
-                        <select id="distr-url" name="distr_url" class="form-control" required>
-                            ${artifactVersions.map(version => {
-                                let label = version.version;
-                                if (version.is_release) {
-                                    label += ' (Release)';
-                                } else if (version.is_snapshot) {
-                                    label += ' (Snapshot)';
-                                }
-                                return `<option value="${version.url}">${label}</option>`;
-                            }).join('')}
-                            <option value="custom">-- Указать URL вручную --</option>
-                        </select>
-                    </div>
-                `
-            });
+            const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
+            const response = await fetch(`/api/applications/${currentAppId}/artifacts?limit=${maxVersions}`);
             
-            // Добавляем скрытое поле для ручного ввода URL
-            formFields.push({
-                id: 'custom-distr-url',
-                name: 'custom_distr_url',
-                label: 'URL дистрибутива:',
-                type: 'text',
-                value: defaultDistrPath,
-                required: false
-            });
-        } else {
-            // Если версии не загрузились, оставляем текстовое поле с кнопкой загрузки
-            formFields.push({
-                id: 'distr-url-container',
-                name: 'distr_url_container',
-                type: 'custom',
-                html: `
-                    <div class="distr-url-wrapper">
-                        <div class="distr-url-header">
-                            <label for="distr-url">URL дистрибутива:</label>
-                            ${currentAppId ? `
-                                <button type="button" id="load-artifacts-btn" class="load-artifacts-btn" title="Загрузить список версий">
-                                    <span class="refresh-icon">⟳</span> Загрузить версии
-                                </button>
-                            ` : ''}
-                        </div>
-                        <input type="text" id="distr-url" name="distr_url" class="form-control" value="${defaultDistrPath}" required>
+            if (showProgress) {
+                const progressBar = document.querySelector('.progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = '70%';
+                }
+            }
+            
+            const data = await response.json();
+            
+            if (showProgress) {
+                const progressBar = document.querySelector('.progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = '100%';
+                }
+            }
+            
+            if (data.success && data.versions && data.versions.length > 0) {
+                artifactVersions = data.versions.slice(0, maxVersions);
+                console.log(`Загружено ${artifactVersions.length} версий для приложения ${app?.name}`);
+                return true;
+            } else {
+                console.log('Не удалось получить список версий:', data.error || 'Список пуст');
+                return false;
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке списка версий:', error);
+            return false;
+        }
+    }
+    
+    // Функция замены загрузчика на реальный контент
+    function replaceLoaderWithContent(artifacts, success = true) {
+        const loaderContainer = document.getElementById('artifact-loader-container');
+        if (!loaderContainer) return;
+        
+        let newContent = '';
+        
+        if (success && artifacts && artifacts.length > 0) {
+            // Создаем выпадающий список с анимацией появления
+            newContent = `
+                <div class="artifact-selector-wrapper animated-fade-in">
+                    <div class="artifact-selector-header">
+                        <label for="distr-url">Версия дистрибутива:</label>
+                        <button type="button" id="refresh-artifacts-btn" class="refresh-artifacts-btn" title="Обновить список версий">
+                            <span class="refresh-icon">⟳</span>
+                        </button>
                     </div>
-                `
+                    <select id="distr-url" name="distr_url" class="form-control" required>
+                        ${artifacts.map(version => {
+                            let label = version.version;
+                            let className = '';
+                            
+                            const versionLower = version.version.toLowerCase();
+                            if (versionLower.includes('snapshot')) {
+                                label += ' 🔸';
+                                className = 'version-snapshot';
+                            } else if (versionLower.includes('dev')) {
+                                label += ' 🔸';
+                                className = 'version-dev';
+                            } else if (version.is_release) {
+                                label += '';
+                                className = 'version-release';
+                            }
+                            
+                            return `<option value="${version.url}" class="${className}">${label}</option>`;
+                        }).join('')}
+                        <option value="custom">-- Указать URL вручную --</option>
+                    </select>
+                </div>
+            `;
+            
+            // Добавляем скрытое поле для ручного ввода
+            const customUrlField = document.createElement('div');
+            customUrlField.className = 'form-group';
+            customUrlField.id = 'custom-url-group';
+            customUrlField.style.display = 'none';
+            customUrlField.innerHTML = `
+                <label for="custom-distr-url">URL дистрибутива:</label>
+                <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" value="${defaultDistrPath}">
+            `;
+            
+            loaderContainer.innerHTML = newContent;
+            loaderContainer.parentNode.insertBefore(customUrlField, loaderContainer.nextSibling);
+            
+        } else {
+            // Показываем поле для ручного ввода с кнопкой повторной попытки
+            newContent = `
+                <div class="distr-url-wrapper animated-fade-in">
+                    <div class="distr-url-header">
+                        <label for="distr-url">URL дистрибутива:</label>
+                        <button type="button" id="retry-load-btn" class="load-artifacts-btn" title="Повторить загрузку">
+                            <span class="refresh-icon">⟳</span> Повторить
+                        </button>
+                    </div>
+                    <input type="text" id="distr-url" name="distr_url" class="form-control" value="${defaultDistrPath}" required>
+                    ${!success ? '<div class="error-message">Не удалось загрузить список версий</div>' : ''}
+                </div>
+            `;
+            
+            loaderContainer.innerHTML = newContent;
+        }
+        
+        // Переинициализируем обработчики
+        setTimeout(() => initializeHandlers(artifacts), 100);
+    }
+    
+    // Функция инициализации обработчиков
+    function initializeHandlers(artifacts) {
+        // Обработчик для выпадающего списка
+        const selectElement = document.getElementById('distr-url');
+        const customUrlGroup = document.getElementById('custom-url-group');
+        
+        if (selectElement && selectElement.tagName === 'SELECT' && customUrlGroup) {
+            selectElement.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customUrlGroup.style.display = 'block';
+                    customUrlGroup.classList.add('animated-slide-down');
+                    document.getElementById('custom-distr-url').required = true;
+                } else {
+                    customUrlGroup.style.display = 'none';
+                    document.getElementById('custom-distr-url').required = false;
+                }
             });
         }
         
-        // Добавляем поле режима обновления
-        formFields.push({
-            id: 'restart-mode',
-            name: 'restart_mode',
-            label: 'Режим обновления:',
-            type: 'radio',
-            value: 'restart',
-            options: [
-                { value: 'restart', text: 'В рестарт' },
-                { value: 'immediate', text: 'Сейчас' }
-            ]
-        });
-        
-        // Добавляем скрытое поле с ID приложений
-        formFields.push({
-            id: 'app-ids',
-            name: 'app_ids',
-            type: 'hidden',
-            value: appIdsArray.join(',')
-        });
-        
-        // Функция, которая будет выполнена при отправке формы
-        const submitAction = function(formData) {
-            // Если выбран кастомный URL, используем его
-            if (formData.distr_url === 'custom' && formData.custom_distr_url) {
-                formData.distr_url = formData.custom_distr_url;
-            }
-            delete formData.custom_distr_url;
-            
-            // Вызываем стандартную функцию обработки
-            processUpdateForm(formData);
-        };
-        
-        // Отображаем модальное окно с формой
-        ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
-        
-        // Добавляем обработчики после отображения модального окна
-        setTimeout(() => {
-            // Обработчик для кнопки обновления списка артефактов
-            const refreshBtn = document.getElementById('refresh-artifacts-btn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
-                    this.disabled = true;
-                    
-                    const success = await loadArtifacts();
-                    
-                    if (success) {
-                        // Обновляем выпадающий список
-                        const selectElement = document.getElementById('distr-url');
-                        if (selectElement) {
-                            // Сохраняем текущее значение
-                            const currentValue = selectElement.value;
-                            
-                            // Очищаем и заполняем заново
-                            selectElement.innerHTML = artifactVersions.map(version => {
+        // Обработчик для кнопки обновления
+        const refreshBtn = document.getElementById('refresh-artifacts-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async function() {
+                this.classList.add('rotating');
+                this.disabled = true;
+                
+                // Очищаем кэш
+                if (currentAppId && window.artifactsCache) {
+                    delete window.artifactsCache[`app_${currentAppId}`];
+                }
+                
+                const success = await loadArtifacts(false);
+                
+                if (success && artifactVersions) {
+                    const select = document.getElementById('distr-url');
+                    if (select) {
+                        const currentValue = select.value;
+                        
+                        // Анимация обновления списка
+                        select.style.opacity = '0.5';
+                        
+                        setTimeout(() => {
+                            select.innerHTML = artifactVersions.map(version => {
                                 let label = version.version;
-                                if (version.is_release) {
-                                    label += ' (Release)';
-                                } else if (version.is_snapshot) {
-                                    label += ' (Snapshot)';
+                                let className = '';
+                                
+                                const versionLower = version.version.toLowerCase();
+                                if (versionLower.includes('snapshot')) {
+                                    label += ' 🔸';
+                                    className = 'version-snapshot';
+                                } else if (versionLower.includes('dev')) {
+                                    label += ' 🔶';
+                                    className = 'version-dev';
+                                } else if (version.is_release) {
+                                    label += ' ✅';
+                                    className = 'version-release';
                                 }
-                                return `<option value="${version.url}">${label}</option>`;
+                                
+                                return `<option value="${version.url}" class="${className}">${label}</option>`;
                             }).join('') + '<option value="custom">-- Указать URL вручную --</option>';
                             
-                            // Восстанавливаем значение если оно еще доступно
-                            if ([...selectElement.options].some(opt => opt.value === currentValue)) {
-                                selectElement.value = currentValue;
+                            if ([...select.options].some(opt => opt.value === currentValue)) {
+                                select.value = currentValue;
                             }
-                        }
-                        showNotification('Список версий обновлен');
-                    } else {
-                        showError('Не удалось обновить список версий');
+                            
+                            select.style.opacity = '1';
+                        }, 200);
                     }
-                    
-                    this.classList.remove('rotating');
-                    this.disabled = false;
-                });
-            }
-            
-            // Обработчик для кнопки загрузки артефактов (когда изначально не загружены)
-            const loadBtn = document.getElementById('load-artifacts-btn');
-            if (loadBtn) {
-                loadBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
-                    this.disabled = true;
-                    
-                    const success = await loadArtifacts();
-                    
-                    if (success && artifactVersions && artifactVersions.length > 0) {
-                        // Заменяем текстовое поле на выпадающий список
-                        const container = document.getElementById('distr-url-container').parentElement;
-                        
-                        container.innerHTML = `
-                            <div class="artifact-selector-wrapper">
-                                <div class="artifact-selector-header">
-                                    <label for="distr-url">Версия дистрибутива:</label>
-                                    <button type="button" id="refresh-artifacts-btn" class="refresh-artifacts-btn" title="Обновить список версий">
-                                        <span class="refresh-icon">⟳</span>
-                                    </button>
-                                </div>
-                                <select id="distr-url" name="distr_url" class="form-control" required>
-                                    ${artifactVersions.map(version => {
-                                        let label = version.version;
-                                        if (version.is_release) {
-                                            label += ' (Release)';
-                                        } else if (version.is_snapshot) {
-                                            label += ' (Snapshot)';
-                                        }
-                                        return `<option value="${version.url}">${label}</option>`;
-                                    }).join('')}
-                                    <option value="custom">-- Указать URL вручную --</option>
-                                </select>
+                    showNotification('Список версий обновлен');
+                } else {
+                    showError('Не удалось обновить список версий');
+                }
+                
+                this.classList.remove('rotating');
+                this.disabled = false;
+            });
+        }
+        
+        // Обработчик для кнопки повторной попытки
+        const retryBtn = document.getElementById('retry-load-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', async function() {
+                // Показываем загрузчик снова
+                const container = this.closest('.distr-url-wrapper').parentElement;
+                container.innerHTML = `
+                    <div class="artifact-loading-container">
+                        <label>Версия дистрибутива:</label>
+                        <div class="artifact-loader">
+                            <div class="skeleton-select">
+                                <div class="skeleton-text">Повторная загрузка...</div>
+                                <div class="skeleton-arrow">▼</div>
                             </div>
-                        `;
-                        
-                        // Добавляем поле для ручного ввода (скрытое)
-                        const customUrlGroup = document.createElement('div');
-                        customUrlGroup.className = 'form-group';
-                        customUrlGroup.id = 'custom-url-group';
-                        customUrlGroup.style.display = 'none';
-                        customUrlGroup.innerHTML = `
-                            <label for="custom-distr-url">URL дистрибутива:</label>
-                            <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" value="${defaultDistrPath}">
-                        `;
-                        container.parentNode.insertBefore(customUrlGroup, container.nextSibling);
-                        
-                        // Переинициализируем обработчики
-                        initializeArtifactHandlers();
-                        
-                        showNotification('Список версий загружен');
-                    } else {
-                        showError('Не удалось загрузить список версий');
-                    }
-                    
-                    this.classList.remove('rotating');
-                    this.disabled = false;
-                });
-            }
-            
-            // Функция инициализации обработчиков для артефактов
-            function initializeArtifactHandlers() {
-                const selectElement = document.getElementById('distr-url');
-                const customUrlGroup = document.getElementById('custom-distr-url')?.closest('.form-group') || 
-                                    document.getElementById('custom-url-group');
+                            <div class="loading-spinner">
+                                <div class="spinner-ring"></div>
+                            </div>
+                            <div class="loading-progress">
+                                <div class="progress-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
                 
-                if (selectElement && customUrlGroup) {
-                    // Изначально скрываем поле ручного ввода
-                    customUrlGroup.style.display = 'none';
-                    
-                    // Обработчик изменения выбора
-                    selectElement.addEventListener('change', function() {
-                        if (this.value === 'custom') {
-                            customUrlGroup.style.display = 'block';
-                            const customInput = document.getElementById('custom-distr-url');
-                            if (customInput) customInput.required = true;
-                        } else {
-                            customUrlGroup.style.display = 'none';
-                            const customInput = document.getElementById('custom-distr-url');
-                            if (customInput) customInput.required = false;
-                        }
-                    });
-                }
+                // Загружаем артефакты заново
+                const success = await loadArtifacts(true);
+                artifactVersions = success ? artifactVersions : null;
                 
-                // Обработчик для новой кнопки обновления
-                const newRefreshBtn = document.getElementById('refresh-artifacts-btn');
-                if (newRefreshBtn && !newRefreshBtn.hasAttribute('data-initialized')) {
-                    newRefreshBtn.setAttribute('data-initialized', 'true');
-                    newRefreshBtn.addEventListener('click', async function() {
-                        this.classList.add('rotating');
-                        this.disabled = true;
-                        
-                        const success = await loadArtifacts();
-                        
-                        if (success) {
-                            // Обновляем выпадающий список
-                            const selectEl = document.getElementById('distr-url');
-                            if (selectEl) {
-                                const currentValue = selectEl.value;
-                                
-                                selectEl.innerHTML = artifactVersions.map(version => {
-                                    let label = version.version;
-                                    if (version.is_release) {
-                                        label += ' (Release)';
-                                    } else if (version.is_snapshot) {
-                                        label += ' (Snapshot)';
-                                    }
-                                    return `<option value="${version.url}">${label}</option>`;
-                                }).join('') + '<option value="custom">-- Указать URL вручную --</option>';
-                                
-                                if ([...selectEl.options].some(opt => opt.value === currentValue)) {
-                                    selectEl.value = currentValue;
-                                }
-                            }
-                            showNotification('Список версий обновлен');
-                        } else {
-                            showError('Не удалось обновить список версий');
-                        }
-                        
-                        this.classList.remove('rotating');
-                        this.disabled = false;
-                    });
-                }
-            }
+                // Замедляем для визуального эффекта
+                setTimeout(() => {
+                    replaceLoaderWithContent(artifactVersions, success);
+                }, 500);
+            });
+        }
+    }
+    
+    // Если нужно загрузить артефакты, делаем это после отображения модального окна
+    if (isLoadingArtifacts && currentAppId) {
+        // Даем время на отрисовку загрузчика
+        setTimeout(async () => {
+            const success = await loadArtifacts(true);
             
-            // Инициализация обработчиков если есть артефакты
-            if (artifactVersions && artifactVersions.length > 0) {
-                initializeArtifactHandlers();
-            }
-            
+            // Небольшая задержка для визуального эффекта (минимум 800ms загрузки)
+            setTimeout(() => {
+                replaceLoaderWithContent(artifactVersions, success);
+            }, Math.max(0, 800 - (Date.now() % 1000)));
         }, 100);
     }
+}
 
     /**
      * Загрузка артефактов с кэшированием
@@ -1701,109 +1733,175 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Функция обновления содержимого формы для группы
-        async function updateFormContent(groupName) {
-            const state = groupStates[groupName];
-            const apps = appGroups[groupName];
-            
-            dynamicContent.innerHTML = '<div class="loading-indicator">Загрузка...</div>';
-            
-            // Проверяем, нужно ли загружать артефакты
-            let artifacts = null;
-            if (apps.length === 1) {
-                const appId = apps[0].id;
-                
-                // Проверяем, загружены ли уже артефакты для этой группы
-                if (!groupArtifacts[groupName] || !state.artifactsLoaded) {
-                    artifacts = await loadArtifactsWithCache(appId);
-                    if (artifacts) {
-                        groupArtifacts[groupName] = artifacts;
-                        state.artifactsLoaded = true;
-                    }
-                } else {
-                    artifacts = groupArtifacts[groupName];
-                }
-            }
-            
-            // Создаем HTML содержимое формы
-            let formHTML = '';
-            
-            // Скрытое поле с ID приложений
-            formHTML += `<input type="hidden" id="app-ids" name="app_ids" value="${state.appIds.join(',')}">`;
-            
-            // Поле URL дистрибутива или выпадающий список
-            if (artifacts && artifacts.length > 0) {
-                formHTML += `
-                    <div class="form-group">
-                        <div class="artifact-selector-wrapper">
-                            <div class="artifact-selector-header">
-                                <label for="distr-url">Версия дистрибутива:</label>
-                                <button type="button" class="refresh-artifacts-btn" data-group="${groupName}" title="Обновить список версий">
-                                    <span class="refresh-icon">⟳</span>
-                                </button>
-                            </div>
-                            <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
-                                ${createVersionSelect(artifacts, state.distrUrl)}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group" id="custom-url-group" style="display: none;">
-                        <label for="custom-distr-url">URL дистрибутива:</label>
-                        <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" value="${state.distrUrl}">
-                    </div>
-                `;
-            } else {
-                // Обычное текстовое поле с возможностью загрузки артефактов
-                formHTML += `
-                    <div class="form-group">
-                        <div class="distr-url-wrapper">
-                            <div class="distr-url-header">
-                                <label for="distr-url">URL дистрибутива:</label>
-                                ${apps.length === 1 ? `
-                                    <button type="button" class="load-artifacts-btn" data-group="${groupName}" data-app-id="${apps[0].id}" title="Загрузить список версий">
-                                        <span class="refresh-icon">⟳</span> Загрузить версии
-                                    </button>
-                                ` : ''}
-                            </div>
-                            <input type="text" id="distr-url" name="distr_url" class="form-control" value="${state.distrUrl}" required>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // Режим обновления
-            formHTML += `
-                <div class="form-group">
-                    <label>Режим обновления:</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="restart_mode" value="restart" ${state.restartMode === 'restart' ? 'checked' : ''}>
-                            В рестарт
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="restart_mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}>
-                            Сейчас
-                        </label>
-                    </div>
+async function updateFormContent(groupName) {
+    const state = groupStates[groupName];
+    const apps = appGroups[groupName];
+    
+    // Показываем красивый загрузчик
+    dynamicContent.innerHTML = `
+        <div class="group-content-loader">
+            <div class="loader-icon">
+                <div class="loader-rings">
+                    <div class="ring ring-1"></div>
+                    <div class="ring ring-2"></div>
+                    <div class="ring ring-3"></div>
                 </div>
-            `;
-            
-            // Информация о приложениях в группе
-            if (apps.length > 1) {
-                formHTML += `
-                    <div class="group-apps-info">
-                        <label>Приложения в группе:</label>
-                        <div class="apps-list">
-                            ${apps.map(app => `<span class="app-badge">${app.name}</span>`).join(' ')}
-                        </div>
-                    </div>
-                `;
+            </div>
+            <div class="loader-text">
+                <span class="loading-label">Загрузка настроек группы</span>
+                <span class="loading-dots"></span>
+            </div>
+            <div class="loader-details">${groupName}</div>
+        </div>
+    `;
+    
+    // Минимальная задержка для визуального эффекта
+    const startTime = Date.now();
+    
+    // Проверяем, нужно ли загружать артефакты
+    let artifacts = null;
+    let loadingError = false;
+    
+    if (apps.length === 1) {
+        const appId = apps[0].id;
+        
+        // Обновляем текст загрузчика
+        setTimeout(() => {
+            const loaderText = document.querySelector('.loading-label');
+            if (loaderText) {
+                loaderText.textContent = 'Получение списка версий';
             }
-            
-            dynamicContent.innerHTML = formHTML;
-            
-            // Добавляем обработчики
-            attachFormHandlers(groupName);
+        }, 300);
+        
+        // Проверяем, загружены ли уже артефакты для этой группы
+        if (!groupArtifacts[groupName] || !state.artifactsLoaded) {
+            artifacts = await loadArtifactsWithCache(appId);
+            if (artifacts) {
+                groupArtifacts[groupName] = artifacts;
+                state.artifactsLoaded = true;
+            } else {
+                loadingError = true;
+            }
+        } else {
+            artifacts = groupArtifacts[groupName];
         }
+    }
+    
+    // Обеспечиваем минимальное время показа загрузчика (600ms)
+    const elapsedTime = Date.now() - startTime;
+    if (elapsedTime < 600) {
+        await new Promise(resolve => setTimeout(resolve, 600 - elapsedTime));
+    }
+    
+    // Создаем HTML содержимое формы с анимацией появления
+    let formHTML = '<div class="form-content-animated">';
+    
+    // Скрытое поле с ID приложений
+    formHTML += `<input type="hidden" id="app-ids" name="app_ids" value="${state.appIds.join(',')}">`;
+    
+    // Поле URL дистрибутива или выпадающий список
+    if (artifacts && artifacts.length > 0) {
+        formHTML += `
+            <div class="form-group animated-fade-in" style="animation-delay: 0.1s">
+                <div class="artifact-selector-wrapper">
+                    <div class="artifact-selector-header">
+                        <label for="distr-url">
+                            Версия дистрибутива:
+                            <span class="version-count">(${artifacts.length} версий)</span>
+                        </label>
+                        <button type="button" class="refresh-artifacts-btn" data-group="${groupName}" title="Обновить список версий">
+                            <span class="refresh-icon">⟳</span>
+                        </button>
+                    </div>
+                    <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
+                        ${createVersionSelect(artifacts, state.distrUrl)}
+                    </select>
+                    ${state.artifactsLoaded && getArtifactsCacheAge ? `
+                        <div class="cache-status">
+                            ${getArtifactsCacheAge(apps[0].id) < 60 ? 
+                                '<span class="cache-fresh">✓ Данные актуальны</span>' : 
+                                '<span class="cache-old">Обновлено ' + Math.round(getArtifactsCacheAge(apps[0].id) / 60) + ' мин. назад</span>'
+                            }
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+            <div class="form-group animated-fade-in" id="custom-url-group" style="display: none; animation-delay: 0.2s">
+                <label for="custom-distr-url">URL дистрибутива:</label>
+                <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" value="${state.distrUrl}">
+            </div>
+        `;
+    } else {
+        // Обычное текстовое поле с возможностью загрузки артефактов
+        const errorClass = loadingError ? 'field-with-error' : '';
+        formHTML += `
+            <div class="form-group animated-fade-in ${errorClass}" style="animation-delay: 0.1s">
+                <div class="distr-url-wrapper">
+                    <div class="distr-url-header">
+                        <label for="distr-url">URL дистрибутива:</label>
+                        ${apps.length === 1 ? `
+                            <button type="button" class="load-artifacts-btn" data-group="${groupName}" data-app-id="${apps[0].id}" title="Загрузить список версий">
+                                Загрузить версии
+                            </button>
+                        ` : ''}
+                    </div>
+                    <input type="text" id="distr-url" name="distr_url" class="form-control" value="${state.distrUrl}" required>
+                    ${loadingError ? `
+                        <div class="field-hint error">
+                            Не удалось загрузить список версий. Введите URL вручную или попробуйте загрузить снова.
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // Режим обновления
+    formHTML += `
+        <div class="form-group animated-fade-in" style="animation-delay: 0.3s">
+            <label>Режим обновления:</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="restart_mode" value="restart" ${state.restartMode === 'restart' ? 'checked' : ''}>
+                    В рестарт
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="restart_mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}>
+                    Сейчас
+                </label>
+            </div>
+        </div>
+    `;
+    
+    // Информация о приложениях в группе
+    if (apps.length > 1) {
+        formHTML += `
+            <div class="group-apps-info animated-fade-in" style="animation-delay: 0.4s">
+                <label>Приложения в группе (${apps.length}):</label>
+                <div class="apps-list">
+                    ${apps.map((app, index) => `
+                        <span class="app-badge" style="animation-delay: ${0.5 + index * 0.05}s">
+                            ${app.name}
+                            ${app.status === 'online' ? '<span class="status-indicator online">●</span>' : ''}
+                        </span>
+                    `).join(' ')}
+                </div>
+            </div>
+        `;
+    }
+    
+    formHTML += '</div>';
+    
+    // Заменяем содержимое с анимацией
+    dynamicContent.style.opacity = '0';
+    setTimeout(() => {
+        dynamicContent.innerHTML = formHTML;
+        dynamicContent.style.opacity = '1';
+        
+        // Добавляем обработчики после рендеринга
+        attachFormHandlers(groupName);
+    }, 200);
+}
         
         // Функция для добавления обработчиков к элементам формы
         function attachFormHandlers(groupName) {

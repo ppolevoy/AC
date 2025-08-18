@@ -2741,21 +2741,6 @@ body.light-theme .confirm-extra-message {
     transition: transform 0.3s ease;
 }
 
-/* Анимация вращения при загрузке */
-.refresh-artifacts-btn.rotating .refresh-icon,
-.load-artifacts-btn.rotating .refresh-icon {
-    animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 /* Контейнер для поля URL дистрибутива */
 .distr-url-wrapper {
     display: flex;
@@ -3084,18 +3069,6 @@ body.light-theme .app-badge {
     opacity: 1;
 }
 
-/* Улучшенная анимация кнопки обновления */
-.refresh-artifacts-btn.rotating .refresh-icon,
-.load-artifacts-btn.rotating .refresh-icon {
-    animation: rotate 1s linear infinite;
-}
-
-.refresh-artifacts-btn:not(.rotating):hover .refresh-icon,
-.load-artifacts-btn:not(.rotating):hover .refresh-icon {
-    transform: rotate(180deg);
-    transition: transform 0.3s ease;
-}
-
 /* Визуальные индикаторы в тексте */
 .version-indicator-text {
     display: inline-block;
@@ -3144,22 +3117,6 @@ body.light-theme .app-badge {
     white-space: nowrap;
     z-index: 1000;
     pointer-events: none;
-}
-
-/* Адаптивность для мобильных устройств */
-@media (max-width: 768px) {
-    .group-apps-info {
-        padding: 10px;
-    }
-    
-    .apps-list {
-        max-height: 120px;
-        overflow-y: auto;
-    }
-    
-    .modal-form {
-        max-height: 50vh;
-    }
 }
 
 /* Стили для динамического контента */
@@ -3371,19 +3328,613 @@ body.light-theme .notification-close:hover {
     }
 }
 
-/* Мобильная адаптация */
-@media (max-width: 768px) {
-    .notification-toast {
-        top: auto;
-        bottom: 20px;
-        left: 20px;
-        right: 20px;
-        min-width: auto;
-        max-width: none;
-        transform: translateY(120%);
+
+/* Стили для анимации загрузки артефактов */
+
+/* Контейнер загрузки */
+.artifact-loading-container {
+    margin-bottom: 15px;
+}
+
+.artifact-loading-container label {
+    display: block;
+    margin-bottom: 8px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+/* Основной загрузчик */
+.artifact-loader {
+    position: relative;
+    min-height: 42px;
+}
+
+/* Skeleton loader для select */
+.skeleton-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background-color: #333336;
+    border: 1px solid #454545;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    animation: pulse-bg 2s ease-in-out infinite;
+}
+
+.skeleton-text {
+    color: #666;
+    font-size: 14px;
+    animation: pulse-text 2s ease-in-out infinite;
+}
+
+.skeleton-arrow {
+    color: #666;
+    font-size: 12px;
+}
+
+/* Анимация пульсации фона */
+@keyframes pulse-bg {
+    0%, 100% {
+        background-color: #333336;
     }
-    
-    .notification-toast.show {
+    50% {
+        background-color: #3a3a3d;
+    }
+}
+
+@keyframes pulse-text {
+    0%, 100% {
+        opacity: 0.5;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Skeleton shimmer effect */
+.skeleton-select::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(92, 165, 225, 0.05),
+        transparent
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+/* Спиннер загрузки */
+.loading-spinner {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+}
+
+.spinner-ring {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(92, 165, 225, 0.2);
+    border-top-color: #5ca5e1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Прогресс-бар загрузки */
+.loading-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: rgba(92, 165, 225, 0.1);
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        #5ca5e1,
+        #6eb5f1,
+        #5ca5e1
+    );
+    width: 0%;
+    transition: width 0.3s ease;
+    animation: progress-pulse 2s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+    0%, 100% {
+        opacity: 0.8;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Светлая тема */
+body.light-theme .skeleton-select {
+    background-color: #f5f5f5;
+    border-color: #ddd;
+    animation: pulse-bg-light 2s ease-in-out infinite;
+}
+
+@keyframes pulse-bg-light {
+    0%, 100% {
+        background-color: #f5f5f5;
+    }
+    50% {
+        background-color: #f0f0f0;
+    }
+}
+
+body.light-theme .skeleton-text {
+    color: #999;
+}
+
+body.light-theme .skeleton-select::before {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(92, 165, 225, 0.08),
+        transparent
+    );
+}
+
+body.light-theme .loading-progress {
+    background-color: rgba(92, 165, 225, 0.15);
+}
+
+/* Анимации появления контента */
+.animated-fade-in {
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
         transform: translateY(0);
     }
+}
+
+.animated-slide-down {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        max-height: 100px;
+        transform: translateY(0);
+    }
+}
+
+/* Сообщение об ошибке */
+.error-message {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background-color: rgba(231, 76, 60, 0.1);
+    border-left: 3px solid #e74c3c;
+    border-radius: 4px;
+    color: #e74c3c;
+    font-size: 13px;
+    animation: fadeIn 0.3s ease;
+}
+
+body.light-theme .error-message {
+    background-color: rgba(231, 76, 60, 0.05);
+}
+
+/* Анимация обновления select */
+.form-control {
+    transition: opacity 0.2s ease;
+}
+
+/* Индикатор загрузки для групповых обновлений */
+.group-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    border-radius: 6px;
+}
+
+.group-loading-content {
+    text-align: center;
+    color: #ebe4da;
+}
+
+.group-loading-spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 10px;
+    border: 3px solid rgba(92, 165, 225, 0.2);
+    border-top-color: #5ca5e1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.group-loading-text {
+    font-size: 14px;
+    color: #aaa;
+}
+
+/* Анимация мигания точек */
+.loading-dots::after {
+    content: '.';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% {
+        content: '.';
+    }
+    40% {
+        content: '..';
+    }
+    60% {
+        content: '...';
+    }
+    80%, 100% {
+        content: '';
+    }
+}
+
+/* Мини-загрузчик для inline использования */
+.inline-loader {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(92, 165, 225, 0.2);
+    border-top-color: #5ca5e1;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* Плавное появление опций в select */
+.form-control option {
+    animation: fadeInOption 0.2s ease;
+}
+
+@keyframes fadeInOption {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+/* Стили для красивого загрузчика групп */
+
+/* Контейнер загрузчика группы */
+.group-content-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    min-height: 250px;
+    text-align: center;
+}
+
+/* Иконка загрузчика с кольцами */
+.loader-icon {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 20px;
+}
+
+.loader-rings {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.ring {
+    position: absolute;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    animation: ring-rotate 2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+.ring-1 {
+    width: 60px;
+    height: 60px;
+    border-top-color: #5ca5e1;
+    animation-delay: 0s;
+}
+
+.ring-2 {
+    width: 45px;
+    height: 45px;
+    top: 7.5px;
+    left: 7.5px;
+    border-right-color: #6eb5f1;
+    animation-delay: 0.2s;
+    animation-duration: 2.5s;
+}
+
+.ring-3 {
+    width: 30px;
+    height: 30px;
+    top: 15px;
+    left: 15px;
+    border-bottom-color: #7ec5ff;
+    animation-delay: 0.4s;
+    animation-duration: 3s;
+}
+
+@keyframes ring-rotate {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Текст загрузчика */
+.loader-text {
+    font-size: 16px;
+    color: #aaa;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.loading-label {
+    font-weight: 500;
+}
+
+.loading-dots {
+    display: inline-block;
+    width: 20px;
+    text-align: left;
+}
+
+.loading-dots::after {
+    content: '';
+    animation: dots-blink 1.5s infinite;
+}
+
+@keyframes dots-blink {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+    100% { content: ''; }
+}
+
+/* Детали загрузчика */
+.loader-details {
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Анимированное содержимое формы */
+.form-content-animated {
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}
+
+.form-content-animated .form-group {
+    opacity: 0;
+    animation: fadeInUp 0.4s ease forwards;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Счетчик версий */
+.version-count {
+    font-size: 12px;
+    color: #666;
+    font-weight: normal;
+    margin-left: 4px;
+}
+
+/* Статус кэша */
+.cache-status {
+    margin-top: 6px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cache-fresh {
+    color: #2ecc71;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cache-old {
+    color: #f39c12;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Индикатор статуса в badge */
+.app-badge {
+    position: relative;
+    animation: fadeInScale 0.3s ease forwards;
+    opacity: 0;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.status-indicator {
+    font-size: 8px;
+    margin-left: 4px;
+}
+
+.status-indicator.online {
+    color: #2ecc71;
+}
+
+/* Поле с ошибкой */
+.field-with-error input {
+    border-color: rgba(231, 76, 60, 0.5);
+    background-color: rgba(231, 76, 60, 0.02);
+}
+
+.field-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.field-hint.error {
+    color: #e74c3c;
+    animation: fadeIn 0.3s ease;
+}
+
+/* Пульсирующая анимация для кнопки */
+.pulse-animation {
+    animation: pulse-shadow 2s infinite;
+}
+
+@keyframes pulse-shadow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(92, 165, 225, 0);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(92, 165, 225, 0.1);
+    }
+}
+
+/* Альтернативный загрузчик - точки */
+.dots-loader {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    background-color: #5ca5e1;
+    border-radius: 50%;
+    animation: dot-pulse 1.5s ease-in-out infinite;
+}
+
+.dot:nth-child(1) { animation-delay: 0s; }
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-pulse {
+    0%, 60%, 100% {
+        transform: scale(0.6);
+        opacity: 0.5;
+    }
+    30% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Светлая тема */
+body.light-theme .group-content-loader {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+body.light-theme .ring-1 {
+    border-top-color: #3498db;
+}
+
+body.light-theme .ring-2 {
+    border-right-color: #5ca5e1;
+}
+
+body.light-theme .ring-3 {
+    border-bottom-color: #74b9ff;
+}
+
+body.light-theme .loader-text {
+    color: #666;
+}
+
+body.light-theme .loader-details {
+    color: #999;
+}
+
+body.light-theme .version-count {
+    color: #999;
+}
+
+body.light-theme .field-with-error input {
+    background-color: rgba(231, 76, 60, 0.03);
+}
+
+/* Плавная анимация смены контента */
+#dynamic-group-content {
+    transition: opacity 0.2s ease;
+    min-height: 300px;
 }
