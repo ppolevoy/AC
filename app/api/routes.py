@@ -1971,7 +1971,13 @@ def get_disabled_applications():
     
 @bp.route('/applications/<int:app_id>/artifacts', methods=['GET'])
 def get_application_artifacts(app_id):
-    """Получение списка доступных версий артефактов для приложения"""
+    """
+    Получение списка артефактов для приложения с поддержкой ограничения количества
+    
+    Query Parameters:
+        limit: максимальное количество версий для возврата (по умолчанию из конфигурации)
+        include_snapshots: включать ли SNAPSHOT версии (по умолчанию из конфигурации)
+    """
     try:
         # Получаем приложение
         app = Application.query.get(app_id)
@@ -1982,12 +1988,12 @@ def get_application_artifacts(app_id):
             }), 404
         
         # Получаем экземпляр приложения
-        instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
-        if not instance:
-            logger.warning(f"Экземпляр не найден для приложения {app_id}")
+        instance = app.instance
+        if not instance or not instance.group:
+            logger.info(f"Приложение {app.name} не привязано к группе")
             return jsonify({
                 'success': False,
-                'error': 'Экземпляр приложения не найден. Настройте группу приложений.'
+                'error': 'Приложение не привязано к группе. Настройте группу приложений.'
             }), 404
         
         # Получаем URL артефактов и расширение
@@ -2000,6 +2006,12 @@ def get_application_artifacts(app_id):
                 'success': False,
                 'error': 'URL артефактов не настроен для данного приложения'
             }), 404
+        
+        # Получаем параметры из запроса
+        from app.config import Config
+        limit = request.args.get('limit', type=int, default=Config.MAX_ARTIFACTS_DISPLAY)
+        include_snapshots = request.args.get('include_snapshots', 
+                                            default=str(Config.INCLUDE_SNAPSHOT_VERSIONS).lower()).lower() == 'true'
         
         # Получаем список артефактов через NexusArtifactService
         from app.services.nexus_artifact_service import NexusArtifactService
@@ -2014,6 +2026,14 @@ def get_application_artifacts(app_id):
                 'success': False,
                 'error': 'Не удалось получить список версий из репозитория'
             }), 404
+        
+        # Фильтруем SNAPSHOT версии если нужно
+        if not include_snapshots:
+            artifacts = [a for a in artifacts if not a.is_snapshot]
+        
+        # Ограничиваем количество версий
+        if limit and limit > 0:
+            artifacts = artifacts[:limit]
         
         # Формируем список версий для отправки на frontend
         versions = []
@@ -2031,7 +2051,9 @@ def get_application_artifacts(app_id):
             'success': True,
             'application': app.name,
             'versions': versions,
-            'total': len(versions)
+            'total': len(versions),
+            'limit_applied': limit if limit else None,
+            'snapshots_included': include_snapshots
         })
         
     except Exception as e:

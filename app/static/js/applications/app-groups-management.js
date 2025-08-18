@@ -717,18 +717,40 @@ async function initializeInstances() {
 
 // Функция показа уведомлений
 function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
+    // Удаляем предыдущие уведомления
+    const existingNotifications = document.querySelectorAll('.notification-toast');
+    existingNotifications.forEach(n => n.remove());
     
+    // Создаем новое уведомление
+    const notification = document.createElement('div');
+    notification.className = `notification-toast notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            ${message}
+        </div>
+        <button class="notification-close">×</button>
+    `;
+    
+    // Добавляем в body
     document.body.appendChild(notification);
     
+    // Показываем с анимацией
     setTimeout(() => {
-        notification.classList.add('fade-out');
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 500);
-    }, 3000);
+        notification.classList.add('show');
+    }, 10);
+    
+    // Автоматически скрываем через 5 секунд
+    const hideTimeout = setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+    
+    // Обработчик закрытия
+    notification.querySelector('.notification-close').addEventListener('click', () => {
+        clearTimeout(hideTimeout);
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    });
 }
 
 // Добавляем стили
