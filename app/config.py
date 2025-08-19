@@ -43,10 +43,6 @@ class Config:
     LOG_DIR = os.environ.get('LOG_DIR') or 'logs'
     LOG_LEVEL = os.environ.get('LOG_LEVEL') or 'INFO'
     
-    # Настройки Ansible
-    ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
-    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
-    
     # Пути для шаблонов и статических файлов
     TEMPLATES_DIR = 'templates'
     STATIC_DIR = 'static'
@@ -58,6 +54,11 @@ class Config:
     # Настройки для группировки приложений
     APP_GROUP_PATTERN = r'(.+)_(\d+)$'  # Шаблон для определения группы и номера экземпляра
 
+    # Настройки Ansible
+    ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
+    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
+    # Включение SSH-режима для Ansible
+    USE_SSH_ANSIBLE = os.environ.get('USE_SSH_ANSIBLE', 'true').lower() == 'true' 
     # Настройки SSH для Ansible
     SSH_HOST = os.environ.get('SSH_HOST') or '192.168.8.46'
     SSH_USER = os.environ.get('SSH_USER') or 'ansible'
@@ -67,11 +68,6 @@ class Config:
     SSH_CONNECTION_TIMEOUT = int(os.environ.get('SSH_CONNECTION_TIMEOUT') or 30)
     SSH_COMMAND_TIMEOUT = int(os.environ.get('SSH_COMMAND_TIMEOUT') or 300)
     ANSIBLE_PATH = os.environ.get('ANSIBLE_PATH') or '/etc/ansible'
-    
-    # Включение SSH-режима для Ansible
-    USE_SSH_ANSIBLE = os.environ.get('USE_SSH_ANSIBLE', 'true').lower() == 'true'    
-
-    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
 
     MAX_ARTIFACTS_DISPLAY = int(os.environ.get('MAX_ARTIFACTS_DISPLAY') or 20)
     INCLUDE_SNAPSHOT_VERSIONS = os.environ.get('INCLUDE_SNAPSHOT_VERSIONS', 'true').lower() == 'true'

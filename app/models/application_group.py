@@ -2,6 +2,9 @@ from app import db
 from datetime import datetime
 from sqlalchemy import event
 
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.mutable import MutableDict
+
 class ApplicationGroup(db.Model):
     """Группа приложений с настройками артефактов"""
     __tablename__ = 'application_groups'
@@ -118,6 +121,8 @@ class ApplicationInstance(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    custom_vars = db.Column(MutableDict.as_mutable(JSONB), nullable=True, default={})
+
     # Связь с Application
     application = db.relationship('Application', backref=db.backref('instance', uselist=False, cascade="all, delete-orphan"))
     
@@ -157,12 +162,64 @@ class ApplicationInstance(db.Model):
         
         return getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
     
+    def get_custom_vars(self) -> dict:
+        """
+        Получить дополнительные переменные для ansible
+        
+        Returns:
+            dict: Словарь с дополнительными переменными
+        """
+        return self.custom_vars or {}
+    
+    def set_custom_vars(self, vars_dict: dict):
+        """
+        Установить дополнительные переменные для ansible
+        
+        Args:
+            vars_dict: Словарь с переменными
+        """
+        if not isinstance(vars_dict, dict):
+            raise ValueError("vars_dict должен быть словарем")
+        
+        self.custom_vars = vars_dict
+        self.updated_at = datetime.utcnow()
+    
+    def update_custom_var(self, key: str, value: str):
+        """
+        Обновить отдельную переменную
+        
+        Args:
+            key: Ключ переменной
+            value: Значение переменной
+        """
+        if self.custom_vars is None:
+            self.custom_vars = {}
+        
+        self.custom_vars[key] = value
+        self.updated_at = datetime.utcnow()
+        
+        # Помечаем поле как измененное для SQLAlchemy
+        db.session.add(self)
+    
+    def remove_custom_var(self, key: str):
+        """
+        Удалить переменную
+        
+        Args:
+            key: Ключ переменной для удаления
+        """
+        if self.custom_vars and key in self.custom_vars:
+            del self.custom_vars[key]
+            self.updated_at = datetime.utcnow()
+            db.session.add(self)
+    
     def has_custom_settings(self):
         """Проверка наличия кастомных настроек"""
         return bool(
             self.custom_artifact_list_url or 
             self.custom_artifact_extension or 
-            self.custom_playbook_path
+            self.custom_playbook_path or
+            (self.custom_vars and len(self.custom_vars) > 0)
         )
     
     def clear_custom_artifacts(self):
@@ -173,6 +230,11 @@ class ApplicationInstance(db.Model):
     def clear_custom_playbook(self):
         """Очистить кастомный playbook"""
         self.custom_playbook_path = None
+    
+    def clear_custom_vars(self):
+        """Очистить все дополнительные переменные"""
+        self.custom_vars = {}
+        self.updated_at = datetime.utcnow()
     
     def to_dict(self, include_effective=False):
         """Преобразование в словарь для API"""
@@ -189,6 +251,7 @@ class ApplicationInstance(db.Model):
             'custom_artifact_list_url': self.custom_artifact_list_url,
             'custom_artifact_extension': self.custom_artifact_extension,
             'custom_playbook_path': self.custom_playbook_path,
+            'custom_vars': self.custom_vars or {},
             'has_custom_settings': self.has_custom_settings(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None

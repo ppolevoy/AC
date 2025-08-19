@@ -621,7 +621,7 @@ class TaskQueue:
             app_id = app.id
             app_name = app.name
             server_name = server.name
-            playbook_path = app.update_playbook_path
+            playbook_path = "test.yaml"#app.update_playbook_path
         
         # Создаем event loop внутри метода
         loop = asyncio.new_event_loop()

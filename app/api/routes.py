@@ -500,7 +500,7 @@ def update_application(app_id):
         # Если все еще нет пути, используем дефолтный
         if not playbook_path:
             from app.config import Config
-            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '')
         
         # Создаем задачу для обновления
         task = Task(
@@ -2062,3 +2062,288 @@ def get_application_artifacts(app_id):
             'success': False,
             'error': str(e)
         }), 500
+    
+@bp.route('/applications/<int:app_id>/custom-vars', methods=['GET', 'PUT', 'PATCH', 'DELETE'])
+def manage_custom_vars(app_id):
+    """
+    Управление дополнительными переменными для экземпляра приложения
+    
+    GET: Получить все переменныеы
+    PUT: Заменить все переменные
+    PATCH: Обновить отдельные переменные
+    DELETE: Удалить все переменные
+    """
+    try:
+        app = Application.query.get(app_id)
+        
+        if not app:
+            return jsonify({
+                'success': False,
+                'error': f"Приложение с id {app_id} не найдено"
+            }), 404
+        
+        if not app.instance:
+            return jsonify({
+                'success': False,
+                'error': 'Приложение не связано с экземпляром'
+            }), 400
+        
+        instance = app.instance
+        
+        if request.method == 'GET':
+            # Получить все переменные
+            return jsonify({
+                'success': True,
+                'application_id': app_id,
+                'application_name': app.name,
+                'custom_vars': instance.get_custom_vars(),
+                'available_vars': SSHAnsibleService.BASE_VARIABLES
+            })
+        
+        elif request.method == 'DELETE':
+            # Удалить все переменные
+            instance.clear_custom_vars()
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Все дополнительные переменные удалены'
+            })
+        
+        elif request.method == 'PUT':
+            # Заменить все переменные
+            data = request.json
+            if not data or 'vars' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': "Отсутствует поле 'vars'"
+                }), 400
+            
+            if not isinstance(data['vars'], dict):
+                return jsonify({
+                    'success': False,
+                    'error': "Поле 'vars' должно быть объектом"
+                }), 400
+            
+            instance.set_custom_vars(data['vars'])
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Переменные успешно обновлены',
+                'custom_vars': instance.get_custom_vars()
+            })
+        
+        elif request.method == 'PATCH':
+            # Обновить отдельные переменные
+            data = request.json
+            if not data:
+                return jsonify({
+                    'success': False,
+                    'error': "Пустое тело запроса"
+                }), 400
+            
+            for key, value in data.items():
+                if value is None:
+                    # Если значение None, удаляем переменную
+                    instance.remove_custom_var(key)
+                else:
+                    # Иначе обновляем
+                    instance.update_custom_var(key, str(value))
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Переменные успешно обновлены',
+                'custom_vars': instance.get_custom_vars()
+            })
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Ошибка при управлении переменными для приложения {app_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/<int:app_id>/custom-vars/<string:var_name>', methods=['GET', 'PUT', 'DELETE'])
+def manage_single_custom_var(app_id, var_name):
+    """
+    Управление отдельной переменной
+    
+    GET: Получить значение переменной
+    PUT: Установить значение переменной
+    DELETE: Удалить переменную
+    """
+    try:
+        app = Application.query.get(app_id)
+        
+        if not app:
+            return jsonify({
+                'success': False,
+                'error': f"Приложение с id {app_id} не найдено"
+            }), 404
+        
+        if not app.instance:
+            return jsonify({
+                'success': False,
+                'error': 'Приложение не связано с экземпляром'
+            }), 400
+        
+        instance = app.instance
+        custom_vars = instance.get_custom_vars()
+        
+        if request.method == 'GET':
+            # Получить значение переменной
+            if var_name not in custom_vars:
+                return jsonify({
+                    'success': False,
+                    'error': f"Переменная '{var_name}' не найдена"
+                }), 404
+            
+            return jsonify({
+                'success': True,
+                'variable': var_name,
+                'value': custom_vars[var_name]
+            })
+        
+        elif request.method == 'DELETE':
+            # Удалить переменную
+            if var_name not in custom_vars:
+                return jsonify({
+                    'success': False,
+                    'error': f"Переменная '{var_name}' не найдена"
+                }), 404
+            
+            instance.remove_custom_var(var_name)
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f"Переменная '{var_name}' удалена"
+            })
+        
+        elif request.method == 'PUT':
+            # Установить значение переменной
+            data = request.json
+            if not data or 'value' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': "Отсутствует поле 'value'"
+                }), 400
+            
+            instance.update_custom_var(var_name, str(data['value']))
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f"Переменная '{var_name}' обновлена",
+                'variable': var_name,
+                'value': str(data['value'])
+            })
+            
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Ошибка при управлении переменной '{var_name}' для приложения {app_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/ansible/variables', methods=['GET'])
+def get_available_variables():
+    """
+    Получить список доступных базовых переменных для Ansible
+    """
+    try:
+        from app.services.ssh_ansible_service import SSHAnsibleService
+        
+        return jsonify({
+            'success': True,
+            'variables': SSHAnsibleService.BASE_VARIABLES,
+            'description': 'Базовые переменные, доступные для всех приложений'
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка переменных: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/<int:app_id>/validate-playbook', methods=['POST'])
+def validate_playbook_config(app_id):
+    """
+    Валидация конфигурации playbook с параметрами
+    """
+    try:
+        data = request.json
+        if not data or 'playbook_path' not in data:
+            return jsonify({
+                'success': False,
+                'error': "Отсутствует поле 'playbook_path'"
+            }), 400
+        
+        playbook_path_with_params = data['playbook_path']
+        
+        from app.services.ssh_ansible_service import get_ssh_ansible_service
+        ssh_service = get_ssh_ansible_service()
+        
+        # Парсим конфигурацию
+        playbook_config = ssh_service.parse_playbook_config(playbook_path_with_params)
+        
+        # Проверяем, какие параметры доступны в базовом наборе
+        available_params = []
+        missing_params = []
+        
+        for param in playbook_config.parameters:
+            if param in SSHAnsibleService.BASE_VARIABLES:
+                available_params.append({
+                    'name': param,
+                    'description': SSHAnsibleService.BASE_VARIABLES[param]
+                })
+            else:
+                missing_params.append(param)
+        
+        # Получаем экземпляр приложения для проверки custom_vars
+        app = Application.query.get(app_id)
+        custom_vars = {}
+        if app and app.instance:
+            custom_vars = app.instance.get_custom_vars()
+        
+        # Проверяем наличие missing параметров в custom_vars
+        custom_available = []
+        still_missing = []
+        
+        for param in missing_params:
+            if param in custom_vars:
+                custom_available.append({
+                    'name': param,
+                    'value': custom_vars[param]
+                })
+            else:
+                still_missing.append(param)
+        
+        return jsonify({
+            'success': True,
+            'playbook_path': playbook_config.path,
+            'parameters': playbook_config.parameters,
+            'validation': {
+                'available_in_base': available_params,
+                'available_in_custom': custom_available,
+                'missing': still_missing,
+                'is_valid': len(still_missing) == 0
+            },
+            'example_command': f"ansible-playbook {playbook_config.path} " + 
+                             ' '.join([f'-e {p}="<value>"' for p in playbook_config.parameters])
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при валидации playbook конфигурации: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500    
