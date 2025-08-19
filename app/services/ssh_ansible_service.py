@@ -223,9 +223,6 @@ class SSHAnsibleService:
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
         """
-        # Если путь к playbook не указан, используем playbook по умолчанию
-        if not playbook_path:
-            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
         
         # Парсим конфигурацию playbook (извлекаем параметры)
         playbook_config = self.parse_playbook_config(playbook_path)
