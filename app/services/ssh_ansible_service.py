@@ -223,29 +223,26 @@ class SSHAnsibleService:
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
         """
-        logging.info(f"Starting update for {app_name} on {server_name} with playbook {playbook_path} and")
         # Если путь к playbook не указан, используем playbook по умолчанию
         if not playbook_path:
             playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
-
-        if os.path.isabs(playbook_path):
-            # Путь уже абсолютный
-            playbook_full_path = playbook_path
-        else:
-            # Относительный путь - добавляем базовый путь Ansible
-            playbook_full_path = os.path.join(self.ssh_config.ansible_path, playbook_path) 
-
-        # Нормализуем путь (убираем дублирования типа /etc/ansible/./update.yml)
-        playbook_full_path = os.path.normpath(playbook_full_path)                       
         
-        # Парсим конфигурацию playbook
+        # Парсим конфигурацию playbook (извлекаем параметры)
         playbook_config = self.parse_playbook_config(playbook_path)
         
-        # Формируем полный путь к playbook
-        playbook_full_path = os.path.join(
-            self.ssh_config.ansible_path, 
-            playbook_config.path.lstrip('/')
-        )
+        # Используем путь из конфигурации (уже очищенный от параметров)
+        if os.path.isabs(playbook_config.path):
+            # Путь уже абсолютный
+            playbook_full_path = playbook_config.path
+        else:
+            # Относительный путь - добавляем базовый путь Ansible
+            playbook_full_path = os.path.join(self.ssh_config.ansible_path, playbook_config.path)
+            
+        
+        # Нормализуем путь (убираем дублирования типа /etc/ansible/./update.yml)
+        playbook_full_path = os.path.normpath(playbook_full_path)
+        
+        logger.info(f"Final playbook path: {playbook_full_path}, parameters: {playbook_config.parameters}")
         
         try:
             # Получаем ID сервера по имени
@@ -319,7 +316,10 @@ class SSHAnsibleService:
                 # Если у приложения есть instance с дополнительными настройками
                 if hasattr(app, 'instance') and app.instance:
                     instance = app.instance
-                    if hasattr(instance, 'custom_vars') and instance.custom_vars:
+                    # Проверяем наличие custom_vars
+                    if hasattr(instance, 'get_custom_vars'):
+                        custom_vars = instance.get_custom_vars()
+                    if custom_vars:
                         context_vars.update(instance.custom_vars)
             
             # Формируем extra_vars на основе конфигурации и контекста
@@ -450,10 +450,10 @@ class SSHAnsibleService:
             playbook_config = self.parse_playbook_config(playbook_path)
             
             # Формируем полный путь к playbook
-            playbook_full_path = os.path.join(
-                self.ssh_config.ansible_path,
-                playbook_config.path.lstrip('/')
-            )
+#            playbook_full_path = os.path.join(
+#                self.ssh_config.ansible_path,
+#                playbook_config.path.lstrip('/')
+#            )
             
             # Проверяем существование playbook
             if not await self._remote_file_exists(playbook_full_path):

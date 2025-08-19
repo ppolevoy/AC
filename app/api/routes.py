@@ -489,18 +489,47 @@ def update_application(app_id):
             }), 404
         
         # Получаем путь к playbook
-        playbook_path = app.update_playbook_path
+        playbook_path = None
         
-        # Если путь не задан для приложения, пытаемся получить из экземпляра
+        # Приоритет 1: Путь из Application
+        if app.update_playbook_path:
+            playbook_path = app.update_playbook_path
+            logger.info(f"Используется playbook приложения: {playbook_path}")
+        
+        # Приоритет 2: Если есть экземпляр, проверяем его настройки
+        if not playbook_path and hasattr(app, 'instance') and app.instance:
+            instance = app.instance
+            
+            # Приоритет 2a: Кастомный путь экземпляра
+            if instance.custom_playbook_path:
+                playbook_path = instance.custom_playbook_path
+                logger.info(f"Используется кастомный playbook экземпляра: {playbook_path}")
+            
+            # Приоритет 2b: Групповой путь
+            elif instance.group and instance.group.update_playbook_path:
+                playbook_path = instance.group.update_playbook_path
+                logger.info(f"Используется групповой playbook: {playbook_path}")
+        
+        # Приоритет 3: Если путь все еще не найден, используем метод экземпляра
         if not playbook_path:
             instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
-            if instance:
+            if instance and hasattr(instance, 'get_effective_playbook_path'):
                 playbook_path = instance.get_effective_playbook_path()
+                logger.info(f"Используется эффективный playbook экземпляра: {playbook_path}")
         
-        # Если все еще нет пути, используем дефолтный
+        # Приоритет 4: Дефолтный путь
         if not playbook_path:
             from app.config import Config
-            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '')
+            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+            logger.info(f"Используется дефолтный playbook: {playbook_path}")
+        
+        # ВАЖНО: Проверяем, что путь не пустой
+        if not playbook_path or playbook_path.strip() == '':
+            logger.info("Путь к playbook пустой, используется дефолтный")
+            from app.config import Config
+            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
+        
+        logger.info(f"Финальный путь к playbook для {app.name}: {playbook_path}")
         
         # Создаем задачу для обновления
         task = Task(
@@ -533,19 +562,30 @@ def update_application(app_id):
         
         # Запускаем ansible playbook через SSH сервис
         from app.services.ssh_ansible_service import SSHAnsibleService
-        ssh_service = SSHAnsibleService()
+        ssh_service = SSHAnsibleService.from_config()
+        
+        # Получаем дополнительные переменные из запроса (если есть)
+        additional_vars = data.get('additional_vars', {})
         
         # Асинхронный запуск ansible playbook
-        success, result = run_async(
-            ssh_service.update_application(
-                server_name=server.name,
-                app_name=app.name,
-                app_id=app.id,
-                distr_url=distr_url,
-                restart_mode=restart_mode,
-                playbook_path=playbook_path
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            success, result = loop.run_until_complete(
+                ssh_service.update_application(
+                    server_name=server.name,
+                    app_name=app.name,
+                    app_id=app.id,
+                    distr_url=distr_url,
+                    restart_mode=restart_mode,
+                    playbook_path=playbook_path,
+                    additional_vars=additional_vars
+                )
             )
-        )
+        finally:
+            loop.close()
         
         # Обновляем статус задачи и события
         if success:
@@ -560,20 +600,29 @@ def update_application(app_id):
             version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
             if version_match:
                 app.version = version_match.group(1)
+            db.session.commit()
+        
+            return jsonify({
+                'success': True,
+                'message': result,
+                'error': result if not success else None,
+                'task_id': task.id,
+                'playbook_used': playbook_path
+            })
         else:
             task.status = 'failed'
             task.error = result
             event.status = 'failed'
-            event.description += f" - Ошибка: {result}"
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': success,
-            'message': result if success else None,
-            'error': result if not success else None,
-            'task_id': task.id
-        })
+            event.description += f" - Update error: {result}"
+            db.session.commit()
+
+            return jsonify({
+                'success': False,
+                'message': result if success else None,
+                'error': result if not success else None,
+                'task_id': task.id,
+                'playbook_attempted': playbook_path
+            })
         
     except Exception as e:
         logger.error(f"Ошибка при запуске обновления приложения {app_id}: {str(e)}")
