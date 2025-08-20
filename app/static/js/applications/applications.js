@@ -1366,125 +1366,294 @@ async function showSimpleUpdateModal(appIds, title) {
     // Отображаем модальное окно с загрузчиком
     ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
     
-    // Функция загрузки артефактов
-    async function loadArtifacts(showProgress = true) {
-        try {
-            if (showProgress) {
-                // Анимируем прогресс-бар
-                const progressBar = document.querySelector('.progress-bar');
-                if (progressBar) {
-                    progressBar.style.width = '30%';
-                }
-            }
-            
-            const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
-            const response = await fetch(`/api/applications/${currentAppId}/artifacts?limit=${maxVersions}`);
-            
-            if (showProgress) {
-                const progressBar = document.querySelector('.progress-bar');
-                if (progressBar) {
-                    progressBar.style.width = '70%';
-                }
-            }
-            
-            const data = await response.json();
-            
-            if (showProgress) {
-                const progressBar = document.querySelector('.progress-bar');
-                if (progressBar) {
-                    progressBar.style.width = '100%';
-                }
-            }
-            
-            if (data.success && data.versions && data.versions.length > 0) {
-                artifactVersions = data.versions.slice(0, maxVersions);
-                console.log(`Загружено ${artifactVersions.length} версий для приложения ${app?.name}`);
-                return true;
-            } else {
-                console.log('Не удалось получить список версий:', data.error || 'Список пуст');
-                return false;
-            }
-        } catch (error) {
-            console.error('Ошибка при загрузке списка версий:', error);
+/**
+ * Универсальная функция загрузки версий (Docker образов или Maven артефактов)
+ * @param {boolean} showProgress - Показывать ли прогресс загрузки
+ * @returns {Promise<boolean>} - Успешность загрузки
+ */
+async function loadArtifacts(showProgress = true) {
+    try {
+        if (!currentAppId) {
+            console.error('Не указан ID приложения для загрузки версий');
             return false;
         }
+        
+        const app = getAppById(currentAppId);
+        if (!app) {
+            console.error(`Приложение с ID ${currentAppId} не найдено`);
+            return false;
+        }
+        
+        console.log(`Загрузка версий для приложения ${app.name} (тип: ${app.app_type})`);
+        
+        if (showProgress) {
+            // Анимируем прогресс-бар
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = '30%';
+            }
+        }
+        
+        const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
+        
+        // Используем универсальный endpoint, который сам определит тип
+        const response = await fetch(`/api/applications/${currentAppId}/artifacts?limit=${maxVersions}`);
+        
+        if (showProgress) {
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = '70%';
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (showProgress) {
+            const progressBar = document.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = '100%';
+            }
+        }
+        
+        if (data.success && data.versions && data.versions.length > 0) {
+            artifactVersions = data.versions.slice(0, maxVersions);
+            
+            // Логируем тип загруженных версий
+            console.log(`Загружено ${artifactVersions.length} ${data.app_type === 'docker' ? 'Docker образов' : 'Maven артефактов'} для приложения ${app.name}`);
+            
+            // Сохраняем тип для последующего использования
+            if (window.loadedVersionsType) {
+                window.loadedVersionsType = data.app_type;
+            }
+            
+            return true;
+        } else {
+            console.log('Не удалось получить список версий:', data.error || 'Список пуст');
+            return false;
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке списка версий:', error);
+        return false;
     }
+}
     
     // Функция замены загрузчика на реальный контент
-    function replaceLoaderWithContent(artifacts, success = true) {
-        const loaderContainer = document.getElementById('artifact-loader-container');
-        if (!loaderContainer) return;
+/**
+ * Обновленная функция создания селектора версий
+ * @param {Array} artifacts - Массив версий
+ * @param {boolean} success - Успешность загрузки
+ * @returns {string} - HTML код селектора
+ */
+function replaceLoaderWithContent(artifacts, success = true) {
+    const loaderContainer = document.getElementById('artifact-loader-container');
+    if (!loaderContainer) return;
+    
+    let newContent = '';
+    
+    if (success && artifacts && artifacts.length > 0) {
+        // Определяем тип версий по наличию специфичных полей
+        const isDocker = artifacts[0].display_name && artifacts[0].display_name.includes(':');
+        const labelText = isDocker ? 'Docker образ:' : 'Версия артефакта:';
         
-        let newContent = '';
-        
-        if (success && artifacts && artifacts.length > 0) {
-            // Создаем выпадающий список с анимацией появления
-            newContent = `
-                <div class="artifact-selector-wrapper animated-fade-in">
-                    <div class="artifact-selector-header">
-                        <label for="distr-url">Версия дистрибутива:</label>
-                        <button type="button" id="refresh-artifacts-btn" class="refresh-artifacts-btn" title="Обновить список версий">
-                            <span class="refresh-icon">⟳</span>
-                        </button>
-                    </div>
-                    <select id="distr-url" name="distr_url" class="form-control" required>
-                        ${artifacts.map(version => {
-                            let label = version.version;
-                            let className = '';
-                            
-                            const versionLower = version.version.toLowerCase();
-                            if (versionLower.includes('snapshot')) {
-                                label += ' 🔸';
-                                className = 'version-snapshot';
-                            } else if (versionLower.includes('dev')) {
-                                label += ' 🔸';
-                                className = 'version-dev';
-                            } else if (version.is_release) {
-                                label += '';
-                                className = 'version-release';
-                            }
-                            
-                            return `<option value="${version.url}" class="${className}">${label}</option>`;
-                        }).join('')}
-                        <option value="custom">-- Указать URL вручную --</option>
-                    </select>
+        // Создаем выпадающий список с анимацией появления
+        newContent = `
+            <div class="artifact-selector-wrapper animated-fade-in">
+                <div class="artifact-selector-header">
+                    <label for="distr-url">${labelText}</label>
+                    <button type="button" id="refresh-artifacts-btn" class="refresh-artifacts-btn" title="Обновить список версий">
+                        <span class="refresh-icon">⟳</span>
+                    </button>
                 </div>
-            `;
-            
-            // Добавляем скрытое поле для ручного ввода
-            const customUrlField = document.createElement('div');
-            customUrlField.className = 'form-group';
-            customUrlField.id = 'custom-url-group';
-            customUrlField.style.display = 'none';
-            customUrlField.innerHTML = `
-                <label for="custom-distr-url">URL дистрибутива:</label>
-                <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" value="${defaultDistrPath}">
-            `;
-            
-            loaderContainer.innerHTML = newContent;
-            loaderContainer.parentNode.insertBefore(customUrlField, loaderContainer.nextSibling);
-            
-        } else {
-            // Показываем поле для ручного ввода с кнопкой повторной попытки
-            newContent = `
+                <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
+                    ${artifacts.map(version => {
+                        let label = version.display_name || version.version;
+                        let className = '';
+                        let icon = '';
+                        
+                        // Определяем тип версии
+                        if (version.is_snapshot) {
+                            icon = ' 🔸';
+                            className = 'version-snapshot';
+                        } else if (version.is_dev) {
+                            icon = ' 🔹';
+                            className = 'version-dev';
+                        } else if (version.is_release) {
+                            icon = ' ✅';
+                            className = 'version-release';
+                        }
+                        
+                        return `<option value="${version.url}" class="${className}">${label}${icon}</option>`;
+                    }).join('')}
+                    <option value="custom" class="custom-option">➕ Указать вручную...</option>
+                </select>
+                <div id="custom-url-group" class="form-group" style="display: none;">
+                    <label for="custom-distr-url">
+                        ${isDocker ? 'Docker образ (registry/image:tag):' : 'URL артефакта:'}
+                    </label>
+                    <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control" 
+                           placeholder="${isDocker ? 'nexus.bankplus.ru/docker-prod-local/app:1.0.0' : 'https://nexus.bankplus.ru/artifact.jar'}">
+                </div>
+            </div>
+        `;
+    } else {
+        // Показываем сообщение об ошибке
+        newContent = `
+
+
                 <div class="distr-url-wrapper animated-fade-in">
                     <div class="distr-url-header">
                         <label for="distr-url">URL дистрибутива:</label>
-                        <button type="button" id="retry-load-btn" class="load-artifacts-btn" title="Повторить загрузку">
-                            <span class="refresh-icon">⟳</span> Повторить
-                        </button>
+                    <button type="button" id="retry-load-btn" class="retry-btn">
+                        <span class="refresh-icon">⟳</span> Повторить
+                    </button> 
                     </div>
                     <input type="text" id="distr-url" name="distr_url" class="form-control" value="${defaultDistrPath}" required>
                     ${!success ? '<div class="error-message">Не удалось загрузить список версий</div>' : ''}
+                </div>                
+
+        `;
+    }
+    
+    // Заменяем загрузчик на реальный контент
+    loaderContainer.innerHTML = newContent;
+    
+    // Добавляем обработчики событий
+    setupVersionSelectorEventHandlers();
+}
+
+/**
+ * Настройка обработчиков событий для селектора версий
+ */
+function setupVersionSelectorEventHandlers() {
+    // Обработчик для селектора версий
+    const distrSelect = document.getElementById('distr-url');
+    if (distrSelect) {
+        distrSelect.addEventListener('change', function() {
+            const customGroup = document.getElementById('custom-url-group');
+            if (customGroup) {
+                if (this.value === 'custom') {
+                    customGroup.style.display = 'block';
+                    document.getElementById('custom-distr-url').required = true;
+                } else {
+                    customGroup.style.display = 'none';
+                    document.getElementById('custom-distr-url').required = false;
+                }
+            }
+        });
+    }
+    
+    // Обработчик для кнопки обновления
+    const refreshBtn = document.getElementById('refresh-artifacts-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async function() {
+            this.classList.add('rotating');
+            this.disabled = true;
+            
+            const success = await loadArtifacts(false);
+            
+            if (success) {
+                const select = document.getElementById('distr-url');
+                if (select) {
+                    select.style.opacity = '0';
+                    
+                    // Пересоздаем опции
+                    select.innerHTML = artifactVersions.map(version => {
+                        let label = version.display_name || version.version;
+                        let className = '';
+                        let icon = '';
+                        
+                        if (version.is_snapshot) {
+                            icon = ' 🔸';
+                            className = 'version-snapshot';
+                        } else if (version.is_dev) {
+                            icon = ' 🔹';
+                            className = 'version-dev';
+                        } else if (version.is_release) {
+                            icon = ' ✅';
+                            className = 'version-release';
+                        }
+                        
+                        return `<option value="${version.url}" class="${className}">${label}${icon}</option>`;
+                    }).join('');
+                    
+                    // Добавляем опцию для ручного ввода
+                    select.innerHTML += '<option value="custom" class="custom-option">➕ Указать вручную...</option>';
+                    
+                    setTimeout(() => {
+                        select.style.opacity = '1';
+                    }, 200);
+                }
+                showNotification('Список версий обновлен');
+            } else {
+                showError('Не удалось обновить список версий');
+            }
+            
+            this.classList.remove('rotating');
+            this.disabled = false;
+        });
+    }
+    
+    // Обработчик для кнопки повторной попытки
+    const retryBtn = document.getElementById('retry-load-btn');
+    if (retryBtn) {
+        retryBtn.addEventListener('click', async function() {
+            // Показываем загрузчик снова
+            const container = this.closest('.distr-url-wrapper').parentElement;
+            container.innerHTML = `
+                <div class="artifact-loading-container">
+                    <label>Загрузка версий:</label>
+                    <div class="artifact-loader">
+                        <div class="skeleton-select">
+                            <div class="skeleton-text">Повторная загрузка...</div>
+                            <div class="skeleton-arrow">▼</div>
+                        </div>
+                        <div class="loading-spinner">
+                            <div class="spinner-ring"></div>
+                        </div>
+                        <div class="loading-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                    </div>
                 </div>
             `;
             
-            loaderContainer.innerHTML = newContent;
+            // Загружаем артефакты заново
+            const success = await loadArtifacts(true);
+            artifactVersions = success ? artifactVersions : null;
+            
+            // Задержка для визуального эффекта
+            setTimeout(() => {
+                replaceLoaderWithContent(artifactVersions, success);
+            }, 500);
+        });
+    }
+}
+
+// Добавим CSS стили для анимации вращения
+if (!document.getElementById('version-loader-styles')) {
+    const style = document.createElement('style');
+    style.id = 'version-loader-styles';
+    style.textContent = `
+        .rotating {
+            animation: rotate 1s linear infinite;
         }
         
-        // Переинициализируем обработчики
-        setTimeout(() => initializeHandlers(artifacts), 100);
-    }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .animated-fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+}
     
     // Функция инициализации обработчиков
     function initializeHandlers(artifacts) {
@@ -2101,139 +2270,500 @@ async function updateFormContent(groupName) {
 }
 
 /**
+ * Определение типа загрузчика версий на основе типа приложения
+ * @param {Object} app - Объект приложения
+ * @returns {string} - Тип загрузчика ('docker' или 'maven')
+ */
+function getVersionLoaderType(app) {
+    // Проверяем тип приложения
+    if (app && app.app_type === 'docker') {
+        return 'docker';
+    }
+    return 'maven';
+}
+
+/**
+ * Загрузка версий для приложения (Docker или Maven)
+ * @param {number} appId - ID приложения  
+ * @param {boolean} forceReload - Принудительная перезагрузка
+ * @returns {Promise<Array>} - Массив версий
+ */
+async function loadApplicationVersions(appId, forceReload = false) {
+    const app = getAppById(appId);
+    if (!app) {
+        console.error(`Приложение с ID ${appId} не найдено`);
+        return null;
+    }
+    
+    const loaderType = getVersionLoaderType(app);
+    console.log(`Загрузка версий для приложения ${app.name}, тип: ${loaderType}`);
+    
+    try {
+        let response;
+        
+        if (loaderType === 'docker') {
+            // Загружаем Docker образы
+            response = await fetch(`/api/docker/images/${appId}?limit=${window.APP_CONFIG.MAX_ARTIFACTS_DISPLAY}`);
+        } else {
+            // Загружаем Maven артефакты
+            response = await fetch(`/api/applications/${appId}/versions?limit=${window.APP_CONFIG.MAX_ARTIFACTS_DISPLAY}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.versions) {
+            console.log(`Загружено ${data.versions.length} версий для ${app.name}`);
+            return {
+                type: loaderType,
+                versions: data.versions
+            };
+        } else {
+            console.error('Не удалось получить список версий:', data.error);
+            return null;
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке версий:', error);
+        return null;
+    }
+}
+
+/**
+ * Создание HTML для селектора версий
+ * @param {Object} versionData - Данные о версиях
+ * @returns {string} - HTML код селектора
+ */
+function createVersionSelector(versionData) {
+    if (!versionData || !versionData.versions || versionData.versions.length === 0) {
+        return `
+            <div class="error-message">
+                <p>Не удалось загрузить список версий</p>
+                <button type="button" id="retry-load-btn" class="retry-btn">
+                    Повторить попытку
+                </button>
+            </div>
+        `;
+    }
+    
+    const isDocker = versionData.type === 'docker';
+    const labelText = isDocker ? 'Docker образ:' : 'Версия артефакта:';
+    
+    let optionsHtml = '';
+    
+    versionData.versions.forEach(version => {
+        let label = version.version;
+        let className = '';
+        let icon = '';
+        
+        // Определяем тип версии и добавляем метки
+        if (version.is_snapshot) {
+            icon = ' 🔸';
+            className = 'version-snapshot';
+        } else if (version.is_dev) {
+            icon = ' 🔹';
+            className = 'version-dev';
+        } else if (version.is_release) {
+            icon = ' ✅';
+            className = 'version-release';
+        }
+        
+        // Для Docker образов показываем display_name
+        if (isDocker && version.display_name) {
+            label = version.display_name;
+        }
+        
+        optionsHtml += `
+            <option value="${version.url}" class="${className}">
+                ${label}${icon}
+            </option>
+        `;
+    });
+    
+    // Добавляем опцию для ручного ввода
+    optionsHtml += `
+        <option value="custom" class="custom-option">
+            ➕ Указать вручную...
+        </option>
+    `;
+    
+    return `
+        <div class="version-selector-wrapper animated-fade-in">
+            <div class="version-selector-header">
+                <label for="version-select">${labelText}</label>
+                <button type="button" id="refresh-versions-btn" class="refresh-artifacts-btn" title="Обновить список">
+                    <span class="refresh-icon">⟳</span>
+                </button>
+            </div>
+            <select id="version-select" name="version_url" class="form-control artifact-select" required>
+                ${optionsHtml}
+            </select>
+            <div id="custom-url-group" class="form-group" style="display: none;">
+                <label for="custom-url">URL ${isDocker ? 'образа' : 'артефакта'}:</label>
+                <input type="text" id="custom-url" class="form-control" 
+                       placeholder="${isDocker ? 'registry.com/image:tag' : 'https://nexus.com/artifact.jar'}">
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Обновленная функция показа простого модального окна обновления
+ * с поддержкой Docker образов
+ */
+async function showSimpleUpdateModalEnhanced(appIds, title) {
+    const appIdsArray = Array.isArray(appIds) ? appIds : [appIds];
+    
+    // Определяем тип приложения для выбора загрузчика
+    let app = null;
+    let versionLoaderType = 'maven';
+    
+    if (appIdsArray.length === 1) {
+        app = getAppById(appIdsArray[0]);
+        if (app) {
+            versionLoaderType = getVersionLoaderType(app);
+        }
+    }
+    
+    // Создаем начальные поля формы
+    const formFields = [];
+    
+    // Показываем загрузчик версий
+    formFields.push({
+        id: 'version-loader-container',
+        name: 'version_loader',
+        type: 'custom',
+        html: `
+            <div class="version-loading-container">
+                <label>${versionLoaderType === 'docker' ? 'Docker образ' : 'Версия'}:</label>
+                <div class="artifact-loader">
+                    <div class="skeleton-select">
+                        <div class="skeleton-text">
+                            Загрузка списка ${versionLoaderType === 'docker' ? 'образов' : 'версий'}...
+                        </div>
+                        <div class="skeleton-arrow">▼</div>
+                    </div>
+                    <div class="loading-spinner">
+                        <div class="spinner-ring"></div>
+                    </div>
+                    <div class="loading-progress">
+                        <div class="progress-bar"></div>
+                    </div>
+                </div>
+            </div>
+        `
+    });
+    
+    // Добавляем поле выбора режима обновления
+    formFields.push({
+        id: 'restart-mode',
+        name: 'restart_mode',
+        label: 'Режим обновления:',
+        type: 'radio',
+        options: [
+            { value: 'restart', label: 'В рестарт', checked: true },
+            { value: 'immediate', label: 'Сейчас' }
+        ]
+    });
+    
+    // Создаем функцию отправки формы
+    const submitAction = async (formData) => {
+        try {
+            // Подготавливаем данные для отправки
+            const updateData = {
+                distr_url: formData.version_url || formData.custom_url,
+                restart_mode: formData.restart_mode
+            };
+            
+            // Для Docker приложений передаем параметр как image_name
+            if (versionLoaderType === 'docker') {
+                updateData.image_name = updateData.distr_url;
+            }
+            
+            // Выполняем обновление для каждого приложения
+            const results = [];
+            for (const appId of appIdsArray) {
+                const response = await fetch(`/api/applications/${appId}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                
+                const data = await response.json();
+                results.push({
+                    appId: appId,
+                    success: data.success,
+                    message: data.message || data.error
+                });
+            }
+            
+            // Показываем результаты
+            const successCount = results.filter(r => r.success).length;
+            if (successCount === results.length) {
+                showNotification('Обновление успешно запущено');
+            } else if (successCount > 0) {
+                showNotification(`Обновление запущено для ${successCount} из ${results.length} приложений`);
+            } else {
+                showError('Не удалось запустить обновление');
+            }
+            
+            // Обновляем список приложений
+            await loadApplications();
+            
+        } catch (error) {
+            console.error('Ошибка при обновлении:', error);
+            showError('Произошла ошибка при обновлении');
+        }
+    };
+    
+    // Отображаем модальное окно
+    ModalUtils.showFormModal(title, formFields, submitAction, 'Обновить');
+    
+    // Загружаем версии после отображения модального окна
+    if (app) {
+        setTimeout(async () => {
+            const versionData = await loadApplicationVersions(app.id, true);
+            
+            // Заменяем загрузчик на реальный селектор
+            const loaderContainer = document.getElementById('version-loader-container');
+            if (loaderContainer && versionData) {
+                loaderContainer.innerHTML = createVersionSelector(versionData);
+                
+                // Добавляем обработчики событий
+                setupVersionSelectorHandlers(app.id);
+            } else if (loaderContainer) {
+                loaderContainer.innerHTML = createVersionSelector(null);
+            }
+        }, 100);
+    }
+}
+
+/**
+ * Настройка обработчиков для селектора версий
+ */
+function setupVersionSelectorHandlers(appId) {
+    // Обработчик изменения селектора версий
+    const versionSelect = document.getElementById('version-select');
+    const customUrlGroup = document.getElementById('custom-url-group');
+    
+    if (versionSelect) {
+        versionSelect.addEventListener('change', function() {
+            if (this.value === 'custom') {
+                customUrlGroup.style.display = 'block';
+                document.getElementById('custom-url').required = true;
+            } else {
+                customUrlGroup.style.display = 'none';
+                document.getElementById('custom-url').required = false;
+            }
+        });
+    }
+    
+    // Обработчик кнопки обновления списка
+    const refreshBtn = document.getElementById('refresh-versions-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async function() {
+            this.classList.add('rotating');
+            this.disabled = true;
+            
+            const versionData = await loadApplicationVersions(appId, true);
+            
+            if (versionData) {
+                // Обновляем опции в селекторе
+                const select = document.getElementById('version-select');
+                if (select) {
+                    const currentValue = select.value;
+                    select.innerHTML = '';
+                    
+                    versionData.versions.forEach(version => {
+                        const option = document.createElement('option');
+                        option.value = version.url;
+                        option.textContent = version.display_name || version.version;
+                        
+                        if (version.is_snapshot) {
+                            option.className = 'version-snapshot';
+                            option.textContent += ' 🔸';
+                        } else if (version.is_dev) {
+                            option.className = 'version-dev';
+                            option.textContent += ' 🔹';
+                        } else if (version.is_release) {
+                            option.className = 'version-release';
+                            option.textContent += ' ✅';
+                        }
+                        
+                        select.appendChild(option);
+                    });
+                    
+                    // Добавляем опцию для ручного ввода
+                    const customOption = document.createElement('option');
+                    customOption.value = 'custom';
+                    customOption.textContent = '➕ Указать вручную...';
+                    customOption.className = 'custom-option';
+                    select.appendChild(customOption);
+                    
+                    // Восстанавливаем выбранное значение если возможно
+                    if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
+                        select.value = currentValue;
+                    }
+                }
+                
+                showNotification('Список версий обновлен');
+            } else {
+                showError('Не удалось обновить список версий');
+            }
+            
+            this.classList.remove('rotating');
+            this.disabled = false;
+        });
+    }
+}
+
+// Переопределяем существующую функцию showSimpleUpdateModal
+window.showSimpleUpdateModal = showSimpleUpdateModalEnhanced;
+
+/**
  * Обработка формы обновления приложений (поддержка как одиночных, так и групповых обновлений)
  * @param {Object|Array} formData - Данные формы или массив данных для нескольких групп
  * @param {boolean} closeAfterSubmit - Закрыть модальное окно после отправки
  */
-async function processUpdateForm(formData, closeAfterSubmit = true) {
-    try {
-        let updateRequests = [];
+async function processUpdateForm(formData) {
+    const appIds = formData.app_ids ? formData.app_ids.split(',').map(id => parseInt(id)) : [];
+    
+    if (appIds.length === 0) {
+        showError('Не выбраны приложения для обновления');
+        return;
+    }
+    
+    const updateRequests = [];
+    
+    for (const appId of appIds) {
+        const app = getAppById(appId);
         
-        // Проверяем, массив ли это (множественные группы) или одиночный объект
-        const isMultiGroup = Array.isArray(formData);
-        const dataArray = isMultiGroup ? formData : [formData];
+        if (!app) {
+            console.error(`Приложение с ID ${appId} не найдено`);
+            continue;
+        }
         
-        // Показываем индикатор загрузки
-        if (!isMultiGroup) {
-            showNotification('Запуск обновления...');
+        // Подготавливаем параметры обновления в зависимости от типа приложения
+        const updateParams = {
+            restart_mode: formData.restart_mode || 'restart'
+        };
+        
+        // ВАЖНО: Для Docker приложений передаем image_name
+        if (app.app_type === 'docker') {
+            // Для Docker используем image_name
+            updateParams.image_name = formData.distr_url;
+            // Также передаем как distr_url для обратной совместимости
+            updateParams.distr_url = formData.distr_url;
+            
+            console.log(`Обновление Docker приложения ${app.name} с образом: ${updateParams.image_name}`);
         } else {
-            showNotification(`Запуск обновления для ${dataArray.length} групп...`);
+            // Для Maven/других типов используем distr_url
+            updateParams.distr_url = formData.distr_url;
+            
+            console.log(`Обновление ${app.app_type} приложения ${app.name} с URL: ${updateParams.distr_url}`);
         }
         
-        // Обрабатываем каждую группу
-        for (const groupData of dataArray) {
-            // Получаем массив ID приложений
-            const appIds = groupData.app_ids.split(',').map(id => parseInt(id.trim()));
-            
-            // Создаем запросы для всех приложений в группе
-            const groupRequests = appIds.map(async (appId) => {
-                const app = getAppById(appId);
-                
-                // Формируем параметры для запуска ansible playbook
-                const updateParams = {
-                    distr_url: groupData.distr_url,
-                    restart_mode: groupData.restart_mode,
-                    app_name: app ? app.name : null,
-                    server_name: app ? app.server_name : null
-                };
-                
-                // Логирование для отладки
-                console.log(`Обновление приложения ${app?.name || appId}:`, updateParams);
-                
-                // Отправляем запрос на обновление
-                try {
-                    const response = await fetch(`/api/applications/${appId}/update`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(updateParams)
-                    });
-                    
-                    const result = await response.json();
-                    
-                    return {
-                        appId: appId,
-                        appName: app?.name || `App ${appId}`,
-                        success: result.success,
-                        error: result.error,
-                        taskId: result.task_id
-                    };
-                } catch (error) {
-                    console.error(`Ошибка при обновлении приложения ${appId}:`, error);
-                    return {
-                        appId: appId,
-                        appName: app?.name || `App ${appId}`,
-                        success: false,
-                        error: error.message
-                    };
-                }
-            });
-            
-            updateRequests = updateRequests.concat(groupRequests);
+        // Добавляем дополнительные параметры если есть
+        if (formData.additional_vars) {
+            updateParams.additional_vars = formData.additional_vars;
         }
         
-        // Ждем выполнения всех запросов
+        // Создаем запрос на обновление
+        updateRequests.push(
+            fetch(`/api/applications/${appId}/update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateParams)
+            })
+            .then(response => response.json())
+            .then(result => ({
+                appId: appId,
+                appName: app.name,
+                appType: app.app_type,
+                success: result.success,
+                message: result.message,
+                error: result.error,
+                taskId: result.task_id
+            }))
+            .catch(error => ({
+                appId: appId,
+                appName: app.name,
+                appType: app.app_type,
+                success: false,
+                error: error.message
+            }))
+        );
+    }
+    
+    try {
+        // Выполняем все запросы параллельно
         const results = await Promise.all(updateRequests);
         
         // Анализируем результаты
         const successCount = results.filter(r => r.success).length;
-        const totalCount = results.length;
-        const failedApps = results.filter(r => !r.success);
+        const failedCount = results.filter(r => !r.success).length;
         
-        // Закрываем модальное окно, если нужно
-        if (closeAfterSubmit) {
-            window.closeModal();
-        }
-        
-        // Показываем результаты
-        if (successCount === totalCount) {
-            showNotification(
-                `✅ Обновление успешно запущено для всех приложений (${totalCount})`,
-                'success'
-            );
-        } else if (successCount === 0) {
-            showError(
-                `❌ Не удалось запустить обновление ни для одного приложения`
-            );
+        // Формируем сообщение
+        if (successCount === results.length) {
+            showNotification(`Успешно запущено обновление для ${successCount} приложений`);
+        } else if (successCount > 0) {
+            showNotification(`Обновление запущено для ${successCount} из ${results.length} приложений`);
             
             // Показываем детали ошибок
-            if (failedApps.length > 0 && failedApps.length <= 5) {
-                failedApps.forEach(app => {
-                    console.error(`Ошибка для ${app.appName}: ${app.error}`);
-                });
-            }
+            const failedApps = results.filter(r => !r.success);
+            failedApps.forEach(app => {
+                console.error(`Ошибка обновления ${app.appName}: ${app.error}`);
+            });
         } else {
-            showNotification(
-                `⚠️ Обновление запущено для ${successCount} из ${totalCount} приложений`,
-                'warning'
-            );
+            showError('Не удалось запустить обновление ни для одного приложения');
             
-            // Логируем неудачные обновления
-            console.log('Неудачные обновления:', failedApps.map(a => a.appName).join(', '));
+            // Показываем детали ошибок
+            results.forEach(app => {
+                if (!app.success) {
+                    console.error(`Ошибка обновления ${app.appName}: ${app.error}`);
+                }
+            });
         }
         
-        // Если есть успешные задачи, показываем их ID
-        const tasksWithId = results.filter(r => r.success && r.taskId);
-        if (tasksWithId.length > 0) {
-            console.log('Созданные задачи:', tasksWithId.map(t => `${t.appName}: #${t.taskId}`).join(', '));
-        }
+        // Обновляем список приложений
+        await loadApplications();
         
-        // Обновляем список приложений через небольшую задержку
-        setTimeout(() => {
-            loadApplications();
-        }, 1000);
+        // Закрываем модальное окно
+        closeModal();
         
     } catch (error) {
-        console.error('Критическая ошибка при обновлении приложений:', error);
-        showError('Произошла непредвиденная ошибка при запуске обновления');
-        
-        // Закрываем модальное окно при критической ошибке
-        if (closeAfterSubmit) {
-            window.closeModal();
-        }
+        console.error('Ошибка при обработке обновления:', error);
+        showError('Произошла ошибка при обновлении приложений');
     }
 }
+
+// Обновляем обработчик отправки формы в модальном окне
+document.addEventListener('submit', async function(e) {
+    if (e.target && e.target.id === 'update-form') {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const data = {};
+        
+        // Собираем данные формы
+        for (let [key, value] of formData.entries()) {
+            data[key] = value;
+        }
+        
+        // Проверяем, если выбран custom вариант
+        const distrSelect = document.getElementById('distr-url');
+        const customInput = document.getElementById('custom-distr-url');
+        
+        if (distrSelect && distrSelect.value === 'custom' && customInput && customInput.value) {
+            data.distr_url = customInput.value;
+        }
+        
+        // Обрабатываем форму
+        await processUpdateForm(data);
+    }
+})
 	
 /**
  * Сохраняет текущее состояние развернутых групп
@@ -2576,22 +3106,6 @@ function createGroupActionMenu(group, apps) {
     `;
 }
 
-/**
- * Создает меню групповых действий
- */
-function createGroupActionMenu(group, apps) {
-    return `
-        <a href="#" class="group-info-btn" data-group="${group}">Информация</a>
-        <a href="#" class="group-start-btn ${!isGroupActionAvailable(apps, 'start') ? 'disabled' : ''}" 
-           data-group="${group}" data-action="start">Запустить все</a>
-        <a href="#" class="group-stop-btn ${!isGroupActionAvailable(apps, 'stop') ? 'disabled' : ''}" 
-           data-group="${group}" data-action="stop">Остановить все</a>
-        <a href="#" class="group-restart-btn ${!isGroupActionAvailable(apps, 'restart') ? 'disabled' : ''}" 
-           data-group="${group}" data-action="restart">Перезапустить все</a>
-        <a href="#" class="group-update-btn" 
-           data-group="${group}" data-action="update">Обновить все</a>
-    `;
-}
 
 // === ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ВЫПАДАЮЩИМИ МЕНЮ ===
 
@@ -2735,6 +3249,8 @@ window.debugArtifactsCache = function() {
     });
     console.log('===========================');
 };
+
+
 
 });
         

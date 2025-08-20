@@ -411,49 +411,9 @@ def get_application(app_id):
             'error': str(e)
         }), 500
 
-@bp.route('/applications/<int:app_id>/update_playbook', methods=['PUT'])
-def update_application_playbook(app_id):
-    """Обновление пути к плейбуку обновления для приложения"""
-    try:
-        data = request.json
-        
-        if not data or 'playbook_path' not in data:
-            return jsonify({
-                'success': False,
-                'error': "Отсутствует поле playbook_path"
-            }), 400
-        
-        app = Application.query.get(app_id)
-        if not app:
-            return jsonify({
-                'success': False,
-                'error': f"Приложение с id {app_id} не найдено"
-            }), 404
-        
-        # Обновляем путь к плейбуку
-        app.update_playbook_path = data['playbook_path']
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f"Путь к плейбуку обновления для приложения {app.name} успешно обновлен",
-            'application': {
-                'id': app.id,
-                'name': app.name,
-                'update_playbook_path': app.update_playbook_path
-            }
-        })
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Ошибка при обновлении пути к плейбуку для приложения {app_id}: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 @bp.route('/applications/<int:app_id>/update', methods=['POST'])
 def update_application(app_id):
-    """Запуск обновления приложения через Ansible playbook"""
+    """Запуск обновления приложения через Ansible playbook с поддержкой Docker"""
     try:
         # Получаем приложение
         app = Application.query.get(app_id)
@@ -471,14 +431,37 @@ def update_application(app_id):
                 'error': "Отсутствуют данные для обновления"
             }), 400
         
-        distr_url = data.get('distr_url')
+        # Получаем параметры обновления
         restart_mode = data.get('restart_mode', 'restart')
         
-        if not distr_url:
-            return jsonify({
-                'success': False,
-                'error': "Не указан URL дистрибутива"
-            }), 400
+        # Определяем URL/имя дистрибутива в зависимости от типа приложения
+        if app.app_type == 'docker':
+            # Для Docker приложений используем image_name
+            image_name = data.get('image_name') or data.get('distr_url')
+            if not image_name:
+                return jsonify({
+                    'success': False,
+                    'error': "Не указано имя Docker образа"
+                }), 400
+            
+            # Сохраняем в distr_url для обратной совместимости
+            distr_url = image_name
+            
+            # Добавляем image_name в дополнительные переменные для playbook
+            additional_vars = data.get('additional_vars', {})
+            additional_vars['image_name'] = image_name
+            additional_vars['image_url'] = image_name  # Для совместимости с существующим playbook
+            
+        else:
+            # Для Maven/обычных приложений
+            distr_url = data.get('distr_url')
+            if not distr_url:
+                return jsonify({
+                    'success': False,
+                    'error': "Не указан URL дистрибутива"
+                }), 400
+            
+            additional_vars = data.get('additional_vars', {})
         
         # Получаем сервер приложения
         server = Server.query.get(app.server_id)
@@ -488,7 +471,7 @@ def update_application(app_id):
                 'error': f"Сервер приложения не найден"
             }), 404
         
-        # Получаем путь к playbook
+        # Определяем путь к playbook
         playbook_path = None
         
         # Приоритет 1: Путь из Application
@@ -497,37 +480,41 @@ def update_application(app_id):
             logger.info(f"Используется playbook приложения: {playbook_path}")
         
         # Приоритет 2: Если есть экземпляр, проверяем его настройки
-        if not playbook_path and hasattr(app, 'instance') and app.instance:
-            instance = app.instance
-            
-            # Приоритет 2a: Кастомный путь экземпляра
-            if instance.custom_playbook_path:
-                playbook_path = instance.custom_playbook_path
-                logger.info(f"Используется кастомный playbook экземпляра: {playbook_path}")
-            
-            # Приоритет 2b: Групповой путь
-            elif instance.group and instance.group.update_playbook_path:
-                playbook_path = instance.group.update_playbook_path
-                logger.info(f"Используется групповой playbook: {playbook_path}")
-        
-        # Приоритет 3: Если путь все еще не найден, используем метод экземпляра
         if not playbook_path:
             instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
-            if instance and hasattr(instance, 'get_effective_playbook_path'):
-                playbook_path = instance.get_effective_playbook_path()
-                logger.info(f"Используется эффективный playbook экземпляра: {playbook_path}")
+            if instance:
+                # Приоритет 2a: Кастомный путь экземпляра
+                if instance.custom_playbook_path:
+                    playbook_path = instance.custom_playbook_path
+                    logger.info(f"Используется кастомный playbook экземпляра: {playbook_path}")
+                
+                # Приоритет 2b: Групповой путь
+                elif instance.group and instance.group.update_playbook_path:
+                    playbook_path = instance.group.update_playbook_path
+                    logger.info(f"Используется групповой playbook: {playbook_path}")
+                
+                # Приоритет 2c: Эффективный путь
+                elif hasattr(instance, 'get_effective_playbook_path'):
+                    playbook_path = instance.get_effective_playbook_path()
+                    logger.info(f"Используется эффективный playbook экземпляра: {playbook_path}")
         
-        # Приоритет 4: Дефолтный путь
+        # Приоритет 3: Дефолтный путь в зависимости от типа приложения
         if not playbook_path:
             from app.config import Config
-            playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
-            logger.info(f"Используется дефолтный playbook: {playbook_path}")
+            if app.app_type == 'docker':
+                # Используем специальный playbook для Docker
+                playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/etc/ansible/docker_update_playbook.yaml')
+            else:
+                playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+            logger.info(f"Используется дефолтный playbook для типа {app.app_type}: {playbook_path}")
         
-        # ВАЖНО: Проверяем, что путь не пустой
+        # Проверяем, что путь не пустой
         if not playbook_path or playbook_path.strip() == '':
-            logger.info("Путь к playbook пустой, используется дефолтный")
-            from app.config import Config
-            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
+            logger.error("Путь к playbook пустой")
+            return jsonify({
+                'success': False,
+                'error': "Не настроен путь к Ansible playbook"
+            }), 500
         
         logger.info(f"Финальный путь к playbook для {app.name}: {playbook_path}")
         
@@ -537,10 +524,12 @@ def update_application(app_id):
             params={
                 'app_id': app.id,
                 'app_name': app.name,
+                'app_type': app.app_type,
                 'server_name': server.name,
                 'distr_url': distr_url,
                 'restart_mode': restart_mode,
-                'playbook_path': playbook_path
+                'playbook_path': playbook_path,
+                'additional_vars': additional_vars
             },
             server_id=server.id,
             application_id=app.id
@@ -552,7 +541,7 @@ def update_application(app_id):
         # Логируем событие
         event = Event(
             event_type='update',
-            description=f"Запущено обновление приложения {app.name} на версию из {distr_url}",
+            description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url}",
             status='pending',
             server_id=server.id,
             application_id=app.id
@@ -563,9 +552,6 @@ def update_application(app_id):
         # Запускаем ansible playbook через SSH сервис
         from app.services.ssh_ansible_service import SSHAnsibleService
         ssh_service = SSHAnsibleService.from_config()
-        
-        # Получаем дополнительные переменные из запроса (если есть)
-        additional_vars = data.get('additional_vars', {})
         
         # Асинхронный запуск ansible playbook
         import asyncio
@@ -595,41 +581,47 @@ def update_application(app_id):
             
             # Обновляем информацию о версии и пути дистрибутива
             app.distr_path = distr_url
-            # Попытка извлечь версию из URL
-            import re
-            version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
-            if version_match:
-                app.version = version_match.group(1)
+            
+            # Для Docker приложений пытаемся извлечь версию из тега
+            if app.app_type == 'docker':
+                # Извлекаем тег из имени образа (часть после последнего ':')
+                if ':' in distr_url:
+                    app.version = distr_url.split(':')[-1]
+            else:
+                # Для обычных приложений пытаемся извлечь версию из URL
+                import re
+                version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
+                if version_match:
+                    app.version = version_match.group(1)
+            
             db.session.commit()
-        
+            
             return jsonify({
                 'success': True,
-                'message': result,
-                'error': result if not success else None,
-                'task_id': task.id,
-                'playbook_used': playbook_path
+                'message': f"Обновление {app.app_type} приложения {app.name} успешно запущено",
+                'task_id': task.id
             })
         else:
             task.status = 'failed'
             task.error = result
             event.status = 'failed'
-            event.description += f" - Update error: {result}"
+            event.description += f" - Ошибка: {result}"
             db.session.commit()
-
+            
             return jsonify({
                 'success': False,
-                'message': result if success else None,
-                'error': result if not success else None,
-                'task_id': task.id,
-                'playbook_attempted': playbook_path
-            })
-        
+                'error': f"Не удалось запустить обновление: {result}"
+            }), 500
+            
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Ошибка при запуске обновления приложения {app_id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+
 
 
 @bp.route('/applications/<int:app_id>/manage', methods=['POST'])
@@ -2017,25 +2009,12 @@ def get_disabled_applications():
             'success': False,
             'error': str(e)
         }), 500
-    
-@bp.route('/applications/<int:app_id>/artifacts', methods=['GET'])
-def get_application_artifacts(app_id):
+
+def get_maven_versions_for_app(app):
     """
-    Получение списка артефактов для приложения с поддержкой ограничения количества
-    
-    Query Parameters:
-        limit: максимальное количество версий для возврата (по умолчанию из конфигурации)
-        include_snapshots: включать ли SNAPSHOT версии (по умолчанию из конфигурации)
+    Получение списка Maven артефактов для приложения
     """
     try:
-        # Получаем приложение
-        app = Application.query.get(app_id)
-        if not app:
-            return jsonify({
-                'success': False,
-                'error': f"Приложение с id {app_id} не найдено"
-            }), 404
-        
         # Получаем экземпляр приложения
         instance = app.instance
         if not instance or not instance.group:
@@ -2056,6 +2035,8 @@ def get_application_artifacts(app_id):
                 'error': 'URL артефактов не настроен для данного приложения'
             }), 404
         
+        logger.info(f"Загрузка Maven артефактов из: {artifact_url}")
+        
         # Получаем параметры из запроса
         from app.config import Config
         limit = request.args.get('limit', type=int, default=Config.MAX_ARTIFACTS_DISPLAY)
@@ -2064,10 +2045,24 @@ def get_application_artifacts(app_id):
         
         # Получаем список артефактов через NexusArtifactService
         from app.services.nexus_artifact_service import NexusArtifactService
-        nexus_service = NexusArtifactService()
         
         # Запускаем асинхронную операцию
-        artifacts = run_async(nexus_service.get_artifacts_for_application(instance))
+        async def fetch_maven_artifacts():
+            async with NexusArtifactService() as service:
+                artifacts = await service.get_artifacts_for_application(instance)
+                
+                # Фильтруем SNAPSHOT версии если нужно
+                if not include_snapshots:
+                    artifacts = [a for a in artifacts if not a.is_snapshot]
+                
+                # Ограничиваем количество версий
+                if limit and limit > 0:
+                    artifacts = artifacts[:limit]
+                
+                return artifacts
+        
+        import asyncio
+        artifacts = asyncio.run(fetch_maven_artifacts())
         
         if not artifacts:
             logger.warning(f"Не удалось получить список артефактов для {app.name}")
@@ -2076,37 +2071,176 @@ def get_application_artifacts(app_id):
                 'error': 'Не удалось получить список версий из репозитория'
             }), 404
         
-        # Фильтруем SNAPSHOT версии если нужно
-        if not include_snapshots:
-            artifacts = [a for a in artifacts if not a.is_snapshot]
-        
-        # Ограничиваем количество версий
-        if limit and limit > 0:
-            artifacts = artifacts[:limit]
-        
         # Формируем список версий для отправки на frontend
         versions = []
         for artifact in artifacts:
             versions.append({
                 'version': artifact.version,
                 'url': artifact.download_url,
+                'display_name': artifact.filename,  # Для единообразия с Docker
                 'filename': artifact.filename,
                 'is_release': artifact.is_release,
                 'is_snapshot': artifact.is_snapshot,
+                'is_dev': False,  # Maven не имеет dev версий
                 'timestamp': artifact.timestamp.isoformat() if artifact.timestamp else None
             })
+        
+        logger.info(f"Загружено {len(versions)} Maven артефактов для приложения {app.name}")
         
         return jsonify({
             'success': True,
             'application': app.name,
+            'app_type': app.app_type,
             'versions': versions,
             'total': len(versions),
-            'limit_applied': limit if limit else None,
+            'limit_applied': limit,
             'snapshots_included': include_snapshots
         })
         
     except Exception as e:
-        logger.error(f"Ошибка при получении списка артефактов для приложения {app_id}: {str(e)}")
+        logger.error(f"Ошибка при получении Maven артефактов для приложения {app.id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/<int:app_id>/artifacts', methods=['GET'])
+def get_application_artifacts(app_id):
+    """
+    Получение списка артефактов/образов для приложения с поддержкой типов приложений
+    
+    Query Parameters:
+        limit: максимальное количество версий для возврата (по умолчанию из конфигурации)
+        include_snapshots: включать ли SNAPSHOT версии (по умолчанию из конфигурации)
+        include_dev: включать ли DEV версии (для Docker, по умолчанию false)
+    """
+    try:
+        # Получаем приложение
+        app = Application.query.get(app_id)
+        if not app:
+            return jsonify({
+                'success': False,
+                'error': f"Приложение с id {app_id} не найдено"
+            }), 404
+        
+        logger.info(f"Получение версий для приложения {app.name}, тип: {app.app_type}")
+        
+        # ВАЖНО: Проверяем тип приложения
+        if app.app_type == 'docker':
+            # Для Docker приложений используем NexusDockerService
+            return get_docker_versions_for_app(app)
+        else:
+            # Для остальных (maven, site, service) используем NexusArtifactService
+            return get_maven_versions_for_app(app)
+            
+    except Exception as e:
+        logger.error(f"Ошибка при получении версий для приложения {app_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+def get_docker_versions_for_app(app):
+    """
+    Получение списка Docker образов для приложения
+    """
+    try:
+        # Получаем экземпляр приложения
+        instance = app.instance
+        if not instance:
+            # Если экземпляра нет, пытаемся определить группу
+            from app.services.application_group_service import ApplicationGroupService
+            group = ApplicationGroupService.determine_group_for_application(app)
+            if not group:
+                return jsonify({
+                    'success': False,
+                    'error': 'Не удалось определить группу приложения для Docker'
+                }), 404
+            
+            # Создаем временный экземпляр
+            instance = ApplicationInstance(
+                application_id=app.id,
+                group_id=group.id,
+                original_name=app.name
+            )
+        
+        # Получаем URL Docker репозитория
+        artifact_url = instance.get_effective_artifact_url()
+        
+        if not artifact_url:
+            logger.warning(f"URL Docker репозитория не настроен для приложения {app.name}")
+            return jsonify({
+                'success': False,
+                'error': 'URL Docker репозитория не настроен для данного приложения'
+            }), 404
+        
+        logger.info(f"Загрузка Docker образов из: {artifact_url}")
+        
+        # Получаем параметры из запроса
+        from app.config import Config
+        limit = request.args.get('limit', type=int, default=Config.MAX_ARTIFACTS_DISPLAY)
+        include_dev = request.args.get('include_dev', 'false').lower() == 'true'
+        include_snapshots = request.args.get('include_snapshots', 'false').lower() == 'true'
+        
+        # Запускаем асинхронную операцию
+        import asyncio
+        from app.services.nexus_docker_service import NexusDockerService
+        
+        async def fetch_docker_images():
+            async with NexusDockerService() as service:
+                images = await service.get_docker_images(artifact_url, limit=limit*2)
+                
+                # Фильтруем версии
+                filtered_images = []
+                for image in images:
+                    if not include_dev and image.is_dev:
+                        continue
+                    if not include_snapshots and image.is_snapshot:
+                        continue
+                    filtered_images.append(image)
+                
+                return filtered_images[:limit]
+        
+        images = asyncio.run(fetch_docker_images())
+        
+        if not images:
+            logger.warning(f"Не удалось получить список Docker образов для {app.name}")
+            return jsonify({
+                'success': False,
+                'error': 'Не удалось получить список образов из репозитория'
+            }), 404
+        
+        # Формируем список версий для отправки на frontend
+        versions = []
+        for image in images:
+            versions.append({
+                'version': image.tag,
+                'url': image.full_image_name,  # Полное имя образа для Docker
+                'display_name': image.display_name,
+                'filename': f"{image.repository.split('/')[-1]}:{image.tag}",  # Для совместимости
+                'is_release': not (image.is_dev or image.is_snapshot),
+                'is_snapshot': image.is_snapshot,
+                'is_dev': image.is_dev,
+                'timestamp': image.created.isoformat() if image.created else None
+            })
+        
+        logger.info(f"Загружено {len(versions)} Docker образов для приложения {app.name}")
+        
+        return jsonify({
+            'success': True,
+            'application': app.name,
+            'app_type': 'docker',
+            'versions': versions,
+            'total': len(versions),
+            'limit_applied': limit,
+            'snapshots_included': include_snapshots,
+            'dev_included': include_dev
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении Docker образов для приложения {app.id}: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

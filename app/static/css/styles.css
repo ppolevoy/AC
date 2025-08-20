@@ -2709,6 +2709,7 @@ body.light-theme .confirm-extra-message {
 
 /* Кнопка обновления списка артефактов */
 .refresh-artifacts-btn,
+.retry-btn,
 .load-artifacts-btn {
     background-color: #454545;
     color: #ebe4da;
@@ -2724,11 +2725,13 @@ body.light-theme .confirm-extra-message {
 }
 
 .refresh-artifacts-btn:hover,
+.retry-btn:hover,
 .load-artifacts-btn:hover {
     background-color: #555;
 }
 
 .refresh-artifacts-btn:disabled,
+.retry-btn:disabled,
 .load-artifacts-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -2838,36 +2841,6 @@ body.light-theme .modal-tab.active {
 /* Стили для кастомных полей формы */
 .form-group[type="custom"] {
     margin-bottom: 15px;
-}
-
-/* Адаптивность для маленьких экранов */
-@media (max-width: 768px) {
-    .artifact-selector-header,
-    .distr-url-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
-    
-    .refresh-artifacts-btn,
-    .load-artifacts-btn {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .modal-tabs {
-        flex-direction: column;
-    }
-    
-    .modal-tab {
-        border-bottom: none;
-        border-left: 2px solid transparent;
-    }
-    
-    .modal-tab.active {
-        border-left: 2px solid #5ca5e1;
-        border-bottom: none;
-    }
 }
 
 /* Стили для индикаторов версий */

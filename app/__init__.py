@@ -41,6 +41,17 @@ def create_app(config_name=None):
     # Регистрация основных маршрутов для веб-интерфейса
     from app.routes import bp as main_bp
     app.register_blueprint(main_bp)
+
+   # Логирование зарегистрированных маршрутов
+#    with app.app_context():
+#        import logging
+#        logger = logging.getLogger(__name__)
+#        logger.info("Registered routes:")
+#        for rule in app.url_map.iter_rules():
+#            if '/api/' in rule.rule:
+#                logger.info(f"  {rule.methods} {rule.rule}")
+    
+    return app    
     
     # Инициализация задач (вынесено в отдельный блок, после всех импортов)
     with app.app_context():
