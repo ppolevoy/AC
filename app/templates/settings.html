@@ -133,11 +133,63 @@
                                             placeholder=".jar, .war, etc.">
                                     </div>
                                     <div class="form-group">
-                                        <label for="group-playbook-path">Ansible Playbook Path:</label>
+                                        <div class="form-label-with-help">
+                                            <label for="group-playbook-path">Ansible Playbook Path:</label>
+                                            <button type="button" class="variables-help-btn" onclick="toggleVariablesHelp('group')" title="Показать доступные переменные">
+                                                ℹ
+                                            </button>
+                                        </div>
                                         <input type="text" 
                                             id="group-playbook-path" 
                                             class="form-control" 
-                                            placeholder="/etc/ansible/update-app.yml">
+                                            placeholder="/etc/ansible/update-app.yml {server} {app} {distr_url}"
+                                            onblur="validatePlaybookPath(this)">
+                                        <div class="validation-feedback" id="group-playbook-validation"></div>
+                                        
+                                        <!-- Панель с подсказкой -->
+                                        <div id="group-variables-help" class="variables-help-panel" style="display: none;">
+                                            <h5>📋 Доступные переменные для подстановки:</h5>
+                                            <table class="variables-table">
+                                                <tr>
+                                                    <td><code>{server}</code></td>
+                                                    <td>Имя сервера из настроек приложения</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{app}</code></td>
+                                                    <td>Имя приложения</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{app_name}</code></td>
+                                                    <td>Имя приложения (алиас для {app})</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{distr_url}</code></td>
+                                                    <td>URL артефакта/дистрибутива</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{restart_mode}</code></td>
+                                                    <td>Режим перезапуска: now или night-restart</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{image_url}</code></td>
+                                                    <td>URL Docker образа (только для Docker приложений)</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{app_id}</code></td>
+                                                    <td>ID приложения в базе данных</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>{server_id}</code></td>
+                                                    <td>ID сервера в базе данных</td>
+                                                </tr>
+                                            </table>
+                                            <div class="help-example">
+                                                <strong>Примеры использования:</strong><br>
+                                                <code>/etc/ansible/update-app.yml {server} {app} {distr_url} {restart_mode}</code><br>
+                                                <code>/playbooks/docker-deploy.yml {server} {app} {image_url}</code><br>
+                                                <code>/ansible/simple-restart.yml {server} {app}</code>
+                                            </div>
+                                        </div>
                                     </div>
                                     <button id="save-group-settings-btn" class="action-btn">
                                         Сохранить настройки группы
@@ -162,11 +214,23 @@
                                             placeholder="Оставьте пустым для использования настроек группы">
                                     </div>
                                     <div class="form-group">
-                                        <label for="instance-playbook-path">Custom Ansible Playbook Path:</label>
+                                        <div class="form-label-with-help">
+                                            <label for="instance-playbook-path">Custom Ansible Playbook Path:</label>
+                                            <button type="button" class="variables-help-btn" onclick="toggleVariablesHelp('instance')" title="Показать доступные переменные">
+                                                ℹ
+                                            </button>
+                                        </div>
                                         <input type="text" 
                                             id="instance-playbook-path" 
                                             class="form-control" 
-                                            placeholder="Оставьте пустым для использования настроек группы">
+                                            placeholder="Оставьте пустым для использования настроек группы"
+                                            onblur="validatePlaybookPath(this)">
+                                        <div class="validation-feedback" id="instance-playbook-validation"></div>
+                                        
+                                        <!-- Используем ту же панель помощи -->
+                                        <div id="instance-variables-help" class="variables-help-panel" style="display: none;">
+                                            <!-- Содержимое будет скопировано из group-variables-help -->
+                                        </div>
                                     </div>
                                     <button id="save-instance-settings-btn" class="action-btn">
                                         Сохранить настройки экземпляра
@@ -181,7 +245,6 @@
                                     <div class="info-loading">Проверка приложений...</div>
                                 </div>
                             </div>
-                            
                             <!-- Ручное назначение группы -->
                             <div class="detail-section" id="manual-group-assignment" style="display: none;">
                                 <h5>Назначение группы</h5>
@@ -209,8 +272,7 @@
                                 <button id="assign-group-btn" class="action-btn">
                                     Назначить группу
                                 </button>
-                            </div>
-                            
+                            </div>                                                        
                             <!-- Статистика -->
                             <div class="detail-section">
                                 <h5>Статистика</h5>
@@ -843,8 +905,14 @@
     }
 
     .form-group {
-        margin-bottom: 15px;
+        margin-bottom: 20px;
     }
+
+    .form-label-with-help {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+    }    
 
     .form-group label {
         display: block;
@@ -857,15 +925,166 @@
         color: #666;
     }
 
+    .variables-help-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px 6px;
+        margin-left: 8px;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        font-size: 12px;
+        color: #5ca5e1;
+    }
+
+    .variables-help-btn:hover {
+        background-color: rgba(92, 165, 225, 0.15);
+        transform: scale(1.1);
+    }
+
+    .variables-help-panel {
+        margin-top: 10px;
+        padding: 15px;
+        background-color: #2a2a2d;
+        border: 1px solid #444;
+        border-radius: 6px;
+        font-size: 13px;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    body.light-theme .variables-help-panel {
+        background-color: #f8f9fa;
+        border-color: #dee2e6;
+    }
+
+    .variables-help-panel h5 {
+        margin: 0 0 12px 0;
+        color: #5ca5e1;
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    body.light-theme .variables-help-panel h5 {
+        color: #0066cc;
+    }
+
+    .variables-table {
+        width: 100%;
+        margin: 10px 0;
+        border-collapse: collapse;
+    }
+
+    .variables-table td {
+        padding: 6px 10px;
+        border-bottom: 1px solid #3a3a3d;
+    }
+
+    body.light-theme .variables-table td {
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .variables-table td:first-child {
+        width: 140px;
+        font-family: 'Courier New', monospace;
+    }    
+
+    .variables-table code {
+    background-color: #1e1e21;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #5ca5e1;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+    }
+
+    body.light-theme .variables-table code {
+        background-color: #e9ecef;
+        color: #0066cc;
+    }
+
+    .help-example {
+        margin-top: 15px;
+        padding: 10px 12px;
+        background-color: #1e1e21;
+        border-left: 3px solid #5ca5e1;
+        border-radius: 0 4px 4px 0;
+    }
+
+    body.light-theme .help-example {
+        background-color: #f1f3f5;
+        border-left-color: #0066cc;
+    }
+
+    .help-example code {
+        background-color: transparent;
+        color: #98c379;
+        padding: 0;
+    }
+
+    body.light-theme .help-example code {
+        color: #28a745;
+    }    
+
     .form-control {
         width: 100%;
         padding: 8px 12px;
-        background-color: #1e1e20;
-        border: 1px solid #333336;
+        border: 1px solid #444;
         border-radius: 4px;
+        background-color: #1e1e21;
         color: #ebe4da;
-        font-size: 14px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        transition: border-color 0.3s;
     }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #5ca5e1;
+        box-shadow: 0 0 0 2px rgba(92, 165, 225, 0.1);
+    }
+
+    .form-control.is-valid {
+        border-color: #28a745;
+    }
+
+    .form-control.is-invalid {
+        border-color: #dc3545;
+    }
+
+    .validation-feedback {
+        margin-top: 5px;
+        font-size: 12px;
+        display: none;
+    }
+
+    .validation-feedback.show {
+        display: block;
+    }
+
+    .validation-feedback.valid {
+        color: #28a745;
+    }
+
+    .validation-feedback.invalid {
+        color: #dc3545;
+    }    
 
     body.light-theme .form-control {
         background-color: #fff;
@@ -890,6 +1109,9 @@
 </style>
 
 <script>
+// Глобальный объект с доступными переменными
+let AVAILABLE_VARIABLES = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     // Загружаем статус SSH при загрузке страницы
     loadSSHStatus();
@@ -898,8 +1120,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const statusLine = document.getElementById('ssh-status-line');
     const sshDetails = document.getElementById('ssh-details');
     const expandArrow = document.getElementById('expand-arrow');
+    const groupHelp = document.getElementById('group-variables-help');
+    const instanceHelp = document.getElementById('instance-variables-help');    
     let isExpanded = false;
-    
+
+    if (groupHelp && instanceHelp) {
+        instanceHelp.innerHTML = groupHelp.innerHTML;
+    }    
+
     statusLine.addEventListener('click', function() {
         isExpanded = !isExpanded;
         
@@ -1085,6 +1313,138 @@ async function testConnection() {
         btn.textContent = 'Test Connection';
     }
 }
+
+function toggleVariablesHelp(type) {
+    const helpPanel = document.getElementById(`${type}-variables-help`);
+    const isVisible = helpPanel.style.display !== 'none';
+    
+    if (isVisible) {
+        helpPanel.style.display = 'none';
+    } else {
+        helpPanel.style.display = 'block';
+        // При первом открытии загружаем переменные с сервера
+        if (!AVAILABLE_VARIABLES) {
+            loadAvailableVariables();
+        }
+    }
+}
+
+// Загрузка доступных переменных с сервера
+async function loadAvailableVariables() {
+    try {
+        const response = await fetch('/api/ansible/variables');
+        const data = await response.json();
+        
+        if (data.success && data.variables) {
+            AVAILABLE_VARIABLES = data.variables;
+            updateVariablesTables(data.variables);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки переменных:', error);
+        // Используем дефолтные значения
+        AVAILABLE_VARIABLES = {
+            'server': 'Имя сервера',
+            'app': 'Имя приложения',
+            'app_name': 'Имя приложения (алиас)',
+            'distr_url': 'URL артефакта',
+            'restart_mode': 'Режим перезапуска',
+            'image_url': 'Docker образ',
+            'app_id': 'ID приложения',
+            'server_id': 'ID сервера'
+        };
+    }
+}
+
+// Обновление таблиц с переменными
+function updateVariablesTables(variables) {
+    const tables = document.querySelectorAll('.variables-table');
+    
+    tables.forEach(table => {
+        table.innerHTML = '';
+        for (const [key, description] of Object.entries(variables)) {
+            const row = table.insertRow();
+            row.innerHTML = `
+                <td><code>{${key}}</code></td>
+                <td>${description}</td>
+            `;
+        }
+    });
+}
+
+// Валидация playbook path
+async function validatePlaybookPath(input) {
+    const value = input.value.trim();
+    const feedbackId = input.id.replace('-path', '-validation');
+    const feedback = document.getElementById(feedbackId);
+    
+    if (!value) {
+        input.classList.remove('is-valid', 'is-invalid');
+        feedback.classList.remove('show');
+        return;
+    }
+    
+    // Извлекаем параметры
+    const params = value.match(/\{([^}]+)\}/g);
+    
+    if (!params || params.length === 0) {
+        // Путь без параметров - это нормально
+        input.classList.remove('is-invalid');
+        input.classList.add('is-valid');
+        feedback.textContent = '✓ Путь валидный (без параметров)';
+        feedback.className = 'validation-feedback valid show';
+        return;
+    }
+    
+    try {
+        // Отправляем на валидацию
+        const response = await fetch('/api/ansible/validate-playbook', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({playbook_path: value})
+        });
+        
+        const data = await response.json();
+        
+        if (data.is_valid) {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            feedback.textContent = `✓ Все параметры валидны: ${data.parameters.join(', ')}`;
+            feedback.className = 'validation-feedback valid show';
+        } else {
+            input.classList.remove('is-valid');
+            input.classList.add('is-invalid');
+            feedback.textContent = `✗ Неизвестные параметры: ${data.invalid_parameters.join(', ')}`;
+            feedback.className = 'validation-feedback invalid show';
+        }
+    } catch (error) {
+        console.error('Ошибка валидации:', error);
+        // Локальная валидация если сервер недоступен
+        if (!AVAILABLE_VARIABLES) {
+            await loadAvailableVariables();
+        }
+        
+        const invalidParams = [];
+        params.forEach(param => {
+            const paramName = param.slice(1, -1); // Убираем { }
+            if (!AVAILABLE_VARIABLES || !(paramName in AVAILABLE_VARIABLES)) {
+                invalidParams.push(param);
+            }
+        });
+        
+        if (invalidParams.length > 0) {
+            input.classList.remove('is-valid');
+            input.classList.add('is-invalid');
+            feedback.textContent = `✗ Неизвестные параметры: ${invalidParams.join(', ')}`;
+            feedback.className = 'validation-feedback invalid show';
+        } else {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            feedback.textContent = '✓ Все параметры валидны';
+            feedback.className = 'validation-feedback valid show';
+        }
+    }
+}
+
 </script>
 {% endblock %}
 

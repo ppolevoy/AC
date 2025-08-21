@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import tempfile
 import re
 from datetime import datetime
 from typing import Tuple, Optional, Dict, Any, List
@@ -40,29 +39,23 @@ class PlaybookConfig:
     """Конфигурация playbook с параметрами"""
     path: str  # Путь к playbook файлу
     parameters: List[str]  # Список параметров в фигурных скобках
-    extra_vars: Dict[str, str]  # Словарь дополнительных переменных
 
 class SSHAnsibleService:
     """
     Сервис для запуска Ansible playbook-ов через SSH с поддержкой параметров
     """
     
-    # Базовые переменные, доступные для всех приложений
-    BASE_VARIABLES = {
+    # Доступные переменные для использования в playbook path
+    # Это справочник для документации и валидации
+    AVAILABLE_VARIABLES = {
         'server': 'Имя сервера',
-        'app': 'Имя приложения', 
-        'app_name': 'Имя приложения (альтернатива)',
+        'app': 'Имя приложения',
+        'app_name': 'Имя приложения (алиас для app)',
+        'image_url': 'URL до docker image (для docker-приложений)',
         'distr_url': 'URL артефакта/дистрибутива',
-        'restart_mode': 'Режим установки/перезапуска',
-        'version': 'Версия приложения',
-        'environment': 'Окружение (dev/test/prod)',
-        'deploy_user': 'Пользователь для деплоя',
-        'deploy_path': 'Путь установки',
-        'backup_enabled': 'Включить резервное копирование',
-        'port': 'Порт приложения',
-        'java_opts': 'Параметры JVM',
-        'config_url': 'URL конфигурации',
-        'log_level': 'Уровень логирования'
+        'restart_mode': 'Режим перезапуска (now или night-restart)',
+        'app_id': 'ID приложения в БД',
+        'server_id': 'ID сервера в БД'
     }
     
     def __init__(self, ssh_config: SSHConfig):
@@ -115,13 +108,74 @@ class SSHAnsibleService:
         
         return PlaybookConfig(
             path=playbook_path,
-            parameters=parameters,
-            extra_vars={}
+            parameters=parameters
         )
+    
+    def validate_parameters(self, parameters: List[str]) -> Tuple[bool, List[str]]:
+        """
+        Валидирует параметры playbook
+        
+        Args:
+            parameters: Список параметров для проверки
+            
+        Returns:
+            Tuple[bool, List[str]]: (все параметры валидны, список невалидных параметров)
+        """
+        invalid_params = []
+        
+        for param in parameters:
+            if param not in self.AVAILABLE_VARIABLES:
+                invalid_params.append(param)
+                logger.warning(f"Unknown parameter '{param}' in playbook path")
+        
+        return len(invalid_params) == 0, invalid_params
+    
+    def build_context_vars(self,
+                          server_name: str,
+                          app_name: str,
+                          app_id: int,
+                          server_id: int,
+                          distr_url: Optional[str] = None,
+                          restart_mode: Optional[str] = None,
+                          image_url: Optional[str] = None) -> Dict[str, str]:
+        """
+        Формирует контекстные переменные для подстановки в playbook
+        
+        Args:
+            server_name: Имя сервера
+            app_name: Имя приложения
+            app_id: ID приложения
+            server_id: ID сервера
+            distr_url: URL дистрибутива (опционально)
+            restart_mode: Режим перезапуска (опционально)
+            image_url: URL docker образа (опционально)
+            
+        Returns:
+            Dict[str, str]: Словарь с переменными контекста
+        """
+        context_vars = {
+            'server': server_name,
+            'app': app_name,
+            'app_name': app_name,  # Алиас
+            'app_id': str(app_id),
+            'server_id': str(server_id)
+        }
+        
+        # Добавляем опциональные переменные только если они переданы
+        if distr_url:
+            context_vars['distr_url'] = distr_url
+        
+        if restart_mode:
+            context_vars['restart_mode'] = restart_mode
+        
+        if image_url:
+            context_vars['image_url'] = image_url
+        
+        return context_vars
     
     def build_extra_vars(self, 
                         playbook_config: PlaybookConfig,
-                        context_vars: Dict[str, Any]) -> Dict[str, str]:
+                        context_vars: Dict[str, str]) -> Dict[str, str]:
         """
         Формирует extra_vars для ansible-playbook на основе конфигурации и контекста
         
@@ -131,31 +185,21 @@ class SSHAnsibleService:
             
         Returns:
             Dict[str, str]: Словарь extra_vars для передачи в ansible-playbook
-            
-        Examples:
-            parameters=["server", "app"], context={"server": "web01", "app": "myapp"}
-            -> {"server": "web01", "app": "myapp"}
         """
         extra_vars = {}
         
-        # Обрабатываем параметры из конфигурации
+        # Обрабатываем только те параметры, которые указаны в playbook_path
         for param in playbook_config.parameters:
-            # Проверяем наличие параметра в контексте
             if param in context_vars:
                 value = context_vars[param]
-                # Преобразуем значение в строку
                 if value is not None:
                     extra_vars[param] = str(value)
                 else:
-                    logger.warning(f"Parameter '{param}' has None value, skipping")
+                    logger.warning(f"Parameter '{param}' has None value, using empty string")
+                    extra_vars[param] = ""
             else:
-                # Если параметр не найден в контексте, логируем предупреждение
-                logger.warning(f"Parameter '{param}' not found in context, available: {list(context_vars.keys())}")
-                # Можно использовать дефолтное значение или пустую строку
+                logger.warning(f"Parameter '{param}' not found in context, using empty string")
                 extra_vars[param] = ""
-        
-        # Добавляем дополнительные переменные из конфигурации
-        extra_vars.update(playbook_config.extra_vars)
         
         logger.info(f"Built extra_vars: {extra_vars}")
         
@@ -206,50 +250,61 @@ class SSHAnsibleService:
                                app_id: int, 
                                distr_url: str, 
                                restart_mode: str, 
-                               playbook_path: Optional[str] = None,
-                               additional_vars: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
+                               playbook_path: Optional[str] = None) -> Tuple[bool, str]:
         """
-        Запуск Ansible playbook для обновления приложения через SSH с поддержкой параметров
+        Запуск Ansible playbook для обновления приложения через SSH
         
         Args:
             server_name: Имя сервера
             app_name: Имя приложения
             app_id: ID приложения в БД
             distr_url: URL дистрибутива
-            restart_mode: Режим рестарта ('restart' или 'immediate')
+            restart_mode: Режим рестарта ('now' или 'night-restart')
             playbook_path: Путь к playbook с параметрами (опционально)
-            additional_vars: Дополнительные переменные (опционально)
         
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
         """
+        # Если путь к playbook не указан, используем playbook по умолчанию
+        if not playbook_path:
+            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
         
-        # Парсим конфигурацию playbook (извлекаем параметры)
+        # Парсим конфигурацию playbook
         playbook_config = self.parse_playbook_config(playbook_path)
         
-        # Используем путь из конфигурации (уже очищенный от параметров)
-        if os.path.isabs(playbook_config.path):
-            # Путь уже абсолютный
-            playbook_full_path = playbook_config.path
-        else:
-            # Относительный путь - добавляем базовый путь Ansible
-            playbook_full_path = os.path.join(self.ssh_config.ansible_path, playbook_config.path)
-            
+        # Валидируем параметры
+        is_valid, invalid_params = self.validate_parameters(playbook_config.parameters)
+        if not is_valid:
+            error_msg = f"Неизвестные параметры в playbook path: {', '.join(invalid_params)}"
+            logger.error(error_msg)
+            return False, error_msg
         
-        # Нормализуем путь (убираем дублирования типа /etc/ansible/./update.yml)
-        playbook_full_path = os.path.normpath(playbook_full_path)
-        
-        logger.info(f"Final playbook path: {playbook_full_path}, parameters: {playbook_config.parameters}")
+        # Формируем полный путь к playbook
+        playbook_full_path = os.path.join(
+            self.ssh_config.ansible_path, 
+            playbook_config.path.lstrip('/')
+        )
         
         try:
             # Получаем ID сервера по имени
             from app.models.server import Server
-            server = Server.query.filter_by(name=server_name).first()
+            from app.models.application import Application
             
+            server = Server.query.filter_by(name=server_name).first()
             if not server:
                 error_msg = f"Сервер с именем {server_name} не найден"
                 logger.error(error_msg)
                 return False, error_msg
+            
+            # Получаем информацию о приложении
+            app = Application.query.get(app_id)
+            image_url = None
+            
+            # Проверяем, если это Docker приложение
+            if app and hasattr(app, 'deployment_type') and app.deployment_type == 'docker':
+                # Получаем image_url для Docker приложений
+                if hasattr(app, 'docker_image'):
+                    image_url = app.docker_image
             
             # Проверяем SSH-соединение
             connection_ok, connection_msg = await self.test_connection()
@@ -286,38 +341,16 @@ class SSHAnsibleService:
                 )
                 return False, error_msg
             
-            # Формируем контекст переменных для подстановки
-            context_vars = {
-                'server': server_name,
-                'app': app_name,
-                'app_name': app_name,
-                'distr_url': distr_url,
-                'restart_mode': restart_mode,
-                'server_id': str(server.id),
-                'app_id': str(app_id),
-                'ansible_user': self.ssh_config.user,
-                'ansible_host': self.ssh_config.host
-            }
-            
-            # Добавляем дополнительные переменные если они переданы
-            if additional_vars:
-                context_vars.update(additional_vars)
-            
-            # Получаем информацию о приложении для дополнительного контекста
-            from app.models.application import Application
-            app = Application.query.get(app_id)
-            if app:
-                context_vars['version'] = app.version or ''
-                context_vars['port'] = str(app.port) if hasattr(app, 'port') else ''
-                
-                # Если у приложения есть instance с дополнительными настройками
-                if hasattr(app, 'instance') and app.instance:
-                    instance = app.instance
-                    # Проверяем наличие custom_vars
-                    if hasattr(instance, 'get_custom_vars'):
-                        custom_vars = instance.get_custom_vars()
-                    if custom_vars:
-                        context_vars.update(instance.custom_vars)
+            # Формируем контекст переменных из параметров события
+            context_vars = self.build_context_vars(
+                server_name=server_name,
+                app_name=app_name,
+                app_id=app_id,
+                server_id=server.id,
+                distr_url=distr_url,
+                restart_mode=restart_mode,
+                image_url=image_url
+            )
             
             # Формируем extra_vars на основе конфигурации и контекста
             extra_vars = self.build_extra_vars(playbook_config, context_vars)
@@ -385,10 +418,9 @@ class SSHAnsibleService:
                                app_name: str, 
                                app_id: int, 
                                action: str,
-                               playbook_path: Optional[str] = None,
-                               additional_vars: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
+                               playbook_path: Optional[str] = None) -> Tuple[bool, str]:
         """
-        Управление состоянием приложения через SSH с поддержкой параметров
+        Управление состоянием приложения через SSH
         
         Args:
             server_name: Имя сервера
@@ -396,7 +428,6 @@ class SSHAnsibleService:
             app_id: ID приложения в БД
             action: Действие (start, stop, restart)
             playbook_path: Путь к playbook с параметрами (опционально)
-            additional_vars: Дополнительные переменные (опционально)
         
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
@@ -411,12 +442,21 @@ class SSHAnsibleService:
         try:
             # Получаем ID сервера по его имени
             from app.models.server import Server
-            server = Server.query.filter_by(name=server_name).first()
+            from app.models.application import Application
             
+            server = Server.query.filter_by(name=server_name).first()
             if not server:
                 error_msg = f"Сервер с именем {server_name} не найден"
                 logger.error(error_msg)
                 return False, error_msg
+            
+            # Получаем информацию о приложении для Docker
+            app = Application.query.get(app_id)
+            image_url = None
+            
+            if app and hasattr(app, 'deployment_type') and app.deployment_type == 'docker':
+                if hasattr(app, 'docker_image'):
+                    image_url = app.docker_image
             
             # Проверяем SSH-соединение
             connection_ok, connection_msg = await self.test_connection()
@@ -446,11 +486,18 @@ class SSHAnsibleService:
             # Парсим конфигурацию playbook
             playbook_config = self.parse_playbook_config(playbook_path)
             
+            # Валидируем параметры
+            is_valid, invalid_params = self.validate_parameters(playbook_config.parameters)
+            if not is_valid:
+                error_msg = f"Неизвестные параметры в playbook path: {', '.join(invalid_params)}"
+                logger.error(error_msg)
+                return False, error_msg
+            
             # Формируем полный путь к playbook
-#            playbook_full_path = os.path.join(
-#                self.ssh_config.ansible_path,
-#                playbook_config.path.lstrip('/')
-#            )
+            playbook_full_path = os.path.join(
+                self.ssh_config.ansible_path,
+                playbook_config.path.lstrip('/')
+            )
             
             # Проверяем существование playbook
             if not await self._remote_file_exists(playbook_full_path):
@@ -467,18 +514,13 @@ class SSHAnsibleService:
                 return False, error_msg
             
             # Формируем контекст переменных
-            context_vars = {
-                'server': server_name,
-                'app': app_name,
-                'app_name': app_name,
-                'action': action,
-                'server_id': str(server.id),
-                'app_id': str(app_id)
-            }
-            
-            # Добавляем дополнительные переменные
-            if additional_vars:
-                context_vars.update(additional_vars)
+            context_vars = self.build_context_vars(
+                server_name=server_name,
+                app_name=app_name,
+                app_id=app_id,
+                server_id=server.id,
+                image_url=image_url
+            )
             
             # Формируем extra_vars
             extra_vars = self.build_extra_vars(playbook_config, context_vars)
@@ -541,7 +583,7 @@ class SSHAnsibleService:
             
             return False, error_msg
     
-    # Вспомогательные методы остаются без изменений
+    # Остальные вспомогательные методы остаются без изменений
     async def test_connection(self) -> Tuple[bool, str]:
         """Проверка SSH-соединения с хостом"""
         try:

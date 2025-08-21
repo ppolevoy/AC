@@ -1,9 +1,9 @@
+# app/models/application_group.py
+# ФИНАЛЬНАЯ ВЕРСИЯ - без хранения переменных в БД
+
 from app import db
 from datetime import datetime
 from sqlalchemy import event
-
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.mutable import MutableDict
 
 class ApplicationGroup(db.Model):
     """Группа приложений с настройками артефактов"""
@@ -42,68 +42,9 @@ class ApplicationGroup(db.Model):
             )
         ).count()
     
-    def has_custom_settings(self):
-        """Проверить, есть ли у экземпляра кастомные настройки"""
-        return bool(
-            self.custom_artifact_list_url or 
-            self.custom_artifact_extension or 
-            self.custom_playbook_path
-        )
-    
-    def get_effective_artifact_url(self):
-        """Получить эффективный URL артефактов (кастомный или групповой)"""
-        if self.custom_artifact_list_url:
-            return self.custom_artifact_list_url
-        if self.group:
-            return self.group.artifact_list_url
-        return None
-    
-    def get_effective_artifact_extension(self):
-        """Получить эффективное расширение артефактов (кастомное или групповое)"""
-        if self.custom_artifact_extension:
-            return self.custom_artifact_extension
-        if self.group:
-            return self.group.artifact_extension
-        return None
-    
-    def get_effective_playbook_path(self):
-        """Получить эффективный путь к playbook (кастомный, групповой или дефолтный)"""
-        if self.custom_playbook_path:
-            return self.custom_playbook_path
-        if self.group and self.group.update_playbook_path:
-            return self.group.update_playbook_path
-        from app.config import Config
-        return getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
-    
-    def is_disabled(self):
-        """Проверить, отключен ли экземпляр"""
-        # Можно добавить логику для отключения экземпляров
-        # Например, через дополнительное поле is_disabled
-        return False
-    
-    def to_dict(self):
-        """Преобразование в словарь для API"""
-        return {
-            'id': self.id,
-            'original_name': self.original_name,
-            'instance_number': self.instance_number,
-            'group_id': self.group_id,
-            'group_name': self.group.name if self.group else None,
-            'application_id': self.application_id,
-            'group_resolved': self.group_resolved,
-            'has_custom_settings': self.has_custom_settings(),
-            'custom_artifact_list_url': self.custom_artifact_list_url,
-            'custom_artifact_extension': self.custom_artifact_extension,
-            'custom_playbook_path': self.custom_playbook_path,
-            'effective_artifact_url': self.get_effective_artifact_url(),
-            'effective_artifact_extension': self.get_effective_artifact_extension(),
-            'effective_playbook_path': self.get_effective_playbook_path(),
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
-    
     def __repr__(self):
         return f'<ApplicationGroup {self.name}>'
+
 
 class ApplicationInstance(db.Model):
     """Экземпляр приложения с возможностью переопределения настроек"""
@@ -120,9 +61,7 @@ class ApplicationInstance(db.Model):
     custom_playbook_path = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    custom_vars = db.Column(MutableDict.as_mutable(JSONB), nullable=True, default={})
-
+        
     # Связь с Application
     application = db.relationship('Application', backref=db.backref('instance', uselist=False, cascade="all, delete-orphan"))
     
@@ -148,6 +87,10 @@ class ApplicationInstance(db.Model):
         2. Путь из Application
         3. Групповой путь
         4. Дефолтный путь
+        
+        Примеры возвращаемых значений:
+        - "/etc/ansible/update.yml {server} {app} {distr_url}"
+        - "/playbooks/deploy.yml {server} {app}"
         """
         from app.config import Config
         
@@ -162,64 +105,12 @@ class ApplicationInstance(db.Model):
         
         return getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
     
-    def get_custom_vars(self) -> dict:
-        """
-        Получить дополнительные переменные для ansible
-        
-        Returns:
-            dict: Словарь с дополнительными переменными
-        """
-        return self.custom_vars or {}
-    
-    def set_custom_vars(self, vars_dict: dict):
-        """
-        Установить дополнительные переменные для ansible
-        
-        Args:
-            vars_dict: Словарь с переменными
-        """
-        if not isinstance(vars_dict, dict):
-            raise ValueError("vars_dict должен быть словарем")
-        
-        self.custom_vars = vars_dict
-        self.updated_at = datetime.utcnow()
-    
-    def update_custom_var(self, key: str, value: str):
-        """
-        Обновить отдельную переменную
-        
-        Args:
-            key: Ключ переменной
-            value: Значение переменной
-        """
-        if self.custom_vars is None:
-            self.custom_vars = {}
-        
-        self.custom_vars[key] = value
-        self.updated_at = datetime.utcnow()
-        
-        # Помечаем поле как измененное для SQLAlchemy
-        db.session.add(self)
-    
-    def remove_custom_var(self, key: str):
-        """
-        Удалить переменную
-        
-        Args:
-            key: Ключ переменной для удаления
-        """
-        if self.custom_vars and key in self.custom_vars:
-            del self.custom_vars[key]
-            self.updated_at = datetime.utcnow()
-            db.session.add(self)
-    
     def has_custom_settings(self):
         """Проверка наличия кастомных настроек"""
         return bool(
             self.custom_artifact_list_url or 
             self.custom_artifact_extension or 
-            self.custom_playbook_path or
-            (self.custom_vars and len(self.custom_vars) > 0)
+            self.custom_playbook_path
         )
     
     def clear_custom_artifacts(self):
@@ -230,11 +121,6 @@ class ApplicationInstance(db.Model):
     def clear_custom_playbook(self):
         """Очистить кастомный playbook"""
         self.custom_playbook_path = None
-    
-    def clear_custom_vars(self):
-        """Очистить все дополнительные переменные"""
-        self.custom_vars = {}
-        self.updated_at = datetime.utcnow()
     
     def to_dict(self, include_effective=False):
         """Преобразование в словарь для API"""
@@ -251,7 +137,6 @@ class ApplicationInstance(db.Model):
             'custom_artifact_list_url': self.custom_artifact_list_url,
             'custom_artifact_extension': self.custom_artifact_extension,
             'custom_playbook_path': self.custom_playbook_path,
-            'custom_vars': self.custom_vars or {},
             'has_custom_settings': self.has_custom_settings(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
