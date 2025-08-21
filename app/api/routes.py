@@ -413,7 +413,7 @@ def get_application(app_id):
 
 @bp.route('/applications/<int:app_id>/update', methods=['POST'])
 def update_application(app_id):
-    """Запуск обновления приложения через Ansible playbook с поддержкой Docker"""
+    """Запуск обновления приложения через Ansible playbook"""
     try:
         # Получаем приложение
         app = Application.query.get(app_id)
@@ -447,10 +447,8 @@ def update_application(app_id):
             # Сохраняем в distr_url для обратной совместимости
             distr_url = image_name
             
-            # Добавляем image_name в дополнительные переменные для playbook
-            additional_vars = data.get('additional_vars', {})
-            additional_vars['image_name'] = image_name
-            additional_vars['image_url'] = image_name  # Для совместимости с существующим playbook
+            # УДАЛЕНО: additional_vars больше не используется!
+            # Значение image_url будет сформировано динамически в SSHAnsibleService
             
         else:
             # Для Maven/обычных приложений
@@ -460,8 +458,6 @@ def update_application(app_id):
                     'success': False,
                     'error': "Не указан URL дистрибутива"
                 }), 400
-            
-            additional_vars = data.get('additional_vars', {})
         
         # Получаем сервер приложения
         server = Server.query.get(app.server_id)
@@ -503,9 +499,9 @@ def update_application(app_id):
             from app.config import Config
             if app.app_type == 'docker':
                 # Используем специальный playbook для Docker
-                playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/etc/ansible/docker_update_playbook.yaml')
+                playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
             else:
-                playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/etc/ansible/update-app.yml')
+                playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
             logger.info(f"Используется дефолтный playbook для типа {app.app_type}: {playbook_path}")
         
         # Проверяем, что путь не пустой
@@ -528,8 +524,8 @@ def update_application(app_id):
                 'server_name': server.name,
                 'distr_url': distr_url,
                 'restart_mode': restart_mode,
-                'playbook_path': playbook_path,
-                'additional_vars': additional_vars
+                'playbook_path': playbook_path
+                # УДАЛЕНО: 'additional_vars': additional_vars
             },
             server_id=server.id,
             application_id=app.id
@@ -559,6 +555,7 @@ def update_application(app_id):
         asyncio.set_event_loop(loop)
         
         try:
+            # ИСПРАВЛЕНО: Вызов БЕЗ additional_vars
             success, result = loop.run_until_complete(
                 ssh_service.update_application(
                     server_name=server.name,
@@ -566,8 +563,8 @@ def update_application(app_id):
                     app_id=app.id,
                     distr_url=distr_url,
                     restart_mode=restart_mode,
-                    playbook_path=playbook_path,
-                    additional_vars=additional_vars
+                    playbook_path=playbook_path
+                    # УДАЛЕНО: additional_vars больше не передается!
                 )
             )
         finally:
@@ -596,32 +593,45 @@ def update_application(app_id):
             
             db.session.commit()
             
+            logger.info(f"Обновление {app.name} выполнено успешно: {result}")
+            
             return jsonify({
                 'success': True,
-                'message': f"Обновление {app.app_type} приложения {app.name} успешно запущено",
-                'task_id': task.id
+                'message': f"Обновление приложения {app.name} запущено успешно",
+                'result': result
             })
         else:
             task.status = 'failed'
             task.error = result
             event.status = 'failed'
-            event.description += f" - Ошибка: {result}"
+            event.description += f"\nОшибка: {result}"
             db.session.commit()
+            
+            logger.error(f"Ошибка обновления {app.name}: {result}")
             
             return jsonify({
                 'success': False,
-                'error': f"Не удалось запустить обновление: {result}"
+                'error': result
             }), 500
             
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Ошибка при запуске обновления приложения {app_id}: {str(e)}")
+        
+        # Обновляем статус задачи и события в случае исключения
+        if 'task' in locals():
+            task.status = 'failed'
+            task.error = str(e)
+        
+        if 'event' in locals():
+            event.status = 'failed'
+            event.description += f"\nКритическая ошибка: {str(e)}"
+        
+        db.session.commit()
+        
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-
-
 
 
 @bp.route('/applications/<int:app_id>/manage', methods=['POST'])
