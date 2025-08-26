@@ -3248,6 +3248,13 @@ document.addEventListener('submit', async function(e) {
     if (e.target && e.target.id === 'update-form') {
         e.preventDefault();
         
+        // Если это форма с вкладками, не обрабатываем её здесь
+        const hasTabs = e.target.closest('.modal-content')?.querySelector('.modal-tabs');
+        if (hasTabs) {
+            console.log('Форма с вкладками обрабатывается локальным обработчиком');
+            return; // Выходим, пусть локальный обработчик справится
+        }
+            
         const formData = new FormData(e.target);
         const data = {};
         
