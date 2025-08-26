@@ -1965,129 +1965,103 @@ if (!document.getElementById('version-loader-styles')) {
      * @param {Object} appGroups - Объект групп приложений
      * @param {string} title - Заголовок модального окна
      */
-    function showTabsUpdateModal(appGroups, title) {
-        // Создаем контейнер с содержимым модального окна
-        const modalContent = document.createElement('div');
+function showTabsUpdateModal(appGroups, title) {
+    // Создаем контейнер с содержимым модального окна
+    const modalContent = document.createElement('div');
+    
+    // Создаем контейнер для вкладок
+    const tabsContainer = document.createElement('div');
+    tabsContainer.className = 'modal-tabs';
+    modalContent.appendChild(tabsContainer);
+    
+    // Создаем форму
+    const form = document.createElement('form');
+    form.id = 'update-form';
+    form.className = 'modal-form';
+    modalContent.appendChild(form);
+    
+    // Создаем хранилище состояний и артефактов для каждой группы
+    const groupStates = {};
+    const groupArtifacts = {};
+    const groupContentCache = {}; // НОВОЕ: Кэш HTML содержимого для каждой группы
+    const groupContentLoaded = {}; // НОВОЕ: Флаги загрузки содержимого
+    
+    // Создаем вкладки
+    Object.keys(appGroups).forEach((groupName, index) => {
+        const tab = document.createElement('div');
+        tab.className = `modal-tab ${index === 0 ? 'active' : ''}`;
+        tab.innerHTML = `${groupName} <span class="app-count">(${appGroups[groupName].length})</span>`;
+        tab.setAttribute('data-group', groupName);
+        tabsContainer.appendChild(tab);
         
-        // Создаем контейнер для вкладок
-        const tabsContainer = document.createElement('div');
-        tabsContainer.className = 'modal-tabs';
-        modalContent.appendChild(tabsContainer);
+        // Инициализируем состояние группы
+        const apps = appGroups[groupName];
+        const firstApp = apps[0];
         
-        // Создаем форму
-        const form = document.createElement('form');
-        form.id = 'update-form';
-        form.className = 'modal-form';
-        modalContent.appendChild(form);
+        groupStates[groupName] = {
+            appIds: apps.map(app => app.id),
+            distrUrl: firstApp && firstApp.distr_path ? firstApp.distr_path : '',
+            restartMode: 'restart',
+            artifactsLoaded: false
+        };
         
-        // Создаем хранилище состояний и артефактов для каждой группы
-        const groupStates = {};
-        const groupArtifacts = {};
-        
-        // Создаем вкладки
-        Object.keys(appGroups).forEach((groupName, index) => {
-            const tab = document.createElement('div');
-            tab.className = `modal-tab ${index === 0 ? 'active' : ''}`;
-            tab.innerHTML = `${groupName} <span class="app-count">(${appGroups[groupName].length})</span>`;
-            tab.setAttribute('data-group', groupName);
-            tabsContainer.appendChild(tab);
+        // Инициализируем флаг загрузки содержимого
+        groupContentLoaded[groupName] = false;
+    });
+    
+    // Создаем контейнер для динамического содержимого
+    const dynamicContent = document.createElement('div');
+    dynamicContent.id = 'dynamic-group-content';
+    form.appendChild(dynamicContent);
+    
+    // Функция создания выпадающего списка версий
+    function createVersionSelect(artifacts, currentValue) {
+        const options = artifacts.map(version => {
+            let label = version.version;
+            let className = '';
             
-            // Инициализируем состояние группы
-            const apps = appGroups[groupName];
-            const firstApp = apps[0];
-            
-            groupStates[groupName] = {
-                appIds: apps.map(app => app.id),
-                distrUrl: firstApp && firstApp.distr_path ? firstApp.distr_path : '',
-                restartMode: 'restart',
-                artifactsLoaded: false
-            };
-        });
-        
-        // Создаем контейнер для динамического содержимого
-        const dynamicContent = document.createElement('div');
-        dynamicContent.id = 'dynamic-group-content';
-        form.appendChild(dynamicContent);
-        
-        // Функция создания выпадающего списка версий с подсветкой
-        function createVersionSelect(artifacts, currentValue) {
-            const options = artifacts.map(version => {
-                let label = version.version;
-                let className = '';
-                
-                // Проверяем на dev/snapshot и добавляем визуальные индикаторы
-                const versionLower = version.version.toLowerCase();
-                if (versionLower.includes('snapshot')) {
-                    label += ' 🔸'; // Оранжевый ромб для snapshot
-                    className = 'version-snapshot';
-                } else if (versionLower.includes('dev')) {
-                    label += ' 🔸'; // Оранжевый ромб для dev
-                    className = 'version-dev';
-                } else if (version.is_release) {
-                    label += ''; // release
-                    className = 'version-release';
-                }
-                
-                return `<option value="${version.url}" class="${className}">${label}</option>`;
-            }).join('');
-            
-            return options + '<option value="custom">-- Указать URL вручную --</option>';
-        }
-
-        // Вспомогательная функция для загрузки артефактов группы через групповой API
-        async function loadGroupArtifacts(groupId) {
-            const now = Date.now();
-            const cacheKey = `group_${groupId}`;
-            const CACHE_LIFETIME = 5 * 60 * 1000; // 5 минут - такая же как в loadArtifactsWithCache
-            
-            // Проверяем кэш (используем глобальный artifactsCache)
-            if (artifactsCache && artifactsCache[cacheKey]) {
-                const cacheEntry = artifactsCache[cacheKey];
-                const age = now - cacheEntry.timestamp;
-                
-                // Если кэш свежий, используем его
-                if (age < CACHE_LIFETIME) {
-                    console.log(`📦 Используем кэш артефактов для группы ID ${groupId} (возраст: ${Math.round(age/1000)}с)`);
-                    return cacheEntry.data;
-                }
+            const versionLower = version.version.toLowerCase();
+            if (versionLower.includes('snapshot')) {
+                label += ' 🔸';
+                className = 'version-snapshot';
+            } else if (versionLower.includes('dev')) {
+                label += ' 🔹';
+                className = 'version-dev';
+            } else if (version.is_release) {
+                label += ' ✅';
+                className = 'version-release';
             }
             
-            // Загружаем свежие данные
-            try {
-                const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
-                console.log(`🔄 Загружаем версии для группы ID ${groupId} через групповой API...`);
-                const response = await fetch(`/api/artifacts/group/${groupId}?limit=${maxVersions}`);
-                const data = await response.json();
-                
-                if (data.success && data.versions && data.versions.length > 0) {
-                    const artifacts = data.versions.slice(0, maxVersions);
-                    
-                    // Сохраняем в кэш
-                    if (artifactsCache) {
-                        artifactsCache[cacheKey] = {
-                            timestamp: now,
-                            data: artifacts
-                        };
-                    }
-                    
-                    console.log(`✅ Загружено ${artifacts.length} версий для группы ID ${groupId} через групповой API`);
-                    return artifacts;
-                } else {
-                    console.warn(`⚠️ Групповой API не вернул версии для группы ID ${groupId}`);
-                }
-            } catch (error) {
-                console.error(`❌ Ошибка при загрузке артефактов для группы ID ${groupId}:`, error);
-            }
-            
-            return null;
-        }        
-
-    // Функция обновления содержимого формы для группы
-    async function updateFormContent(groupName) {
+            return `<option value="${version.url}" class="${className}">${label}</option>`;
+        }).join('');
+        
+        return options + '<option value="custom" class="custom-option">➕ Указать вручную...</option>';
+    }
+    
+    // ОПТИМИЗИРОВАННАЯ функция обновления содержимого формы
+    async function updateFormContent(groupName, forceReload = false) {
+        console.log(`📂 Загрузка содержимого для группы "${groupName}" (force=${forceReload})`);
+        
         const state = groupStates[groupName];
         const apps = appGroups[groupName];
         
-        // Показываем красивый загрузчик
+        // НОВОЕ: Проверяем, есть ли кэшированное содержимое
+        if (!forceReload && groupContentLoaded[groupName] && groupContentCache[groupName]) {
+            console.log(`✨ Используем кэшированное содержимое для группы "${groupName}"`);
+            
+            // Быстро восстанавливаем HTML из кэша
+            dynamicContent.innerHTML = groupContentCache[groupName];
+            
+            // Восстанавливаем обработчики событий
+            setTimeout(() => {
+                attachFormHandlers(groupName);
+                restoreGroupState(groupName);
+            }, 0);
+            
+            return; // Выходим без повторной загрузки
+        }
+        
+        // Показываем красивый загрузчик только при первой загрузке
         dynamicContent.innerHTML = `
             <div class="group-content-loader">
                 <div class="loader-icon">
@@ -2105,100 +2079,52 @@ if (!document.getElementById('version-loader-styles')) {
             </div>
         `;
         
-        // Минимальная задержка для визуального эффекта
         const startTime = Date.now();
         
         // Проверяем, нужно ли загружать артефакты
         let artifacts = null;
         let loadingError = false;
         
-        // ИСПРАВЛЕНИЕ: Загружаем версии для любого количества приложений (>= 1)
-        if (apps.length > 0) {
+        // Загружаем версии только если они еще не загружены
+        if (apps.length > 0 && (!groupArtifacts[groupName] || !state.artifactsLoaded)) {
             const firstApp = apps[0];
             
-            // Проверяем, есть ли group_id для использования группового API
-            if (firstApp.group_id) {
-                console.log(`🔍 Обнаружен group_id=${firstApp.group_id} для группы "${groupName}"`);
-                
-                // Обновляем текст загрузчика
-                setTimeout(() => {
-                    const loaderText = document.querySelector('.loading-label');
-                    if (loaderText) {
-                        loaderText.textContent = 'Получение версий группы';
-                    }
-                }, 300);
-                
-                // Загружаем через групповой API
-                if (!groupArtifacts[groupName] || !state.artifactsLoaded) {
-                    console.log(`🔄 Загружаем версии для группы "${groupName}" через групповой API`);
-                    
-                    // Вызов функции загрузки версий для группы
-                    const groupArtifacts = await loadGroupArtifacts(firstApp.group_id);
-                    if (groupArtifacts) {
-                        artifacts = groupArtifacts;
-                        groupArtifacts[groupName] = artifacts;
-                        state.artifactsLoaded = true;
-                        console.log(`✅ Загружено ${artifacts.length} версий для группы "${groupName}" через групповой API`);
-                    } else {
-                        // Fallback на загрузку для первого приложения
-                        console.log(`⚠️ Групповой API не сработал, используем fallback на приложение ID=${firstApp.id}`);
-                        artifacts = await loadArtifactsWithCache(firstApp.id);
-                        if (artifacts) {
-                            groupArtifacts[groupName] = artifacts;
-                            state.artifactsLoaded = true;
-                            console.log(`✅ Загружено ${artifacts.length} версий через API приложения`);
-                        } else {
-                            loadingError = true;
-                            console.error(`❌ Не удалось загрузить версии для группы "${groupName}"`);
-                        }
-                    }
-                } else {
-                    artifacts = groupArtifacts[groupName];
-                    console.log(`📦 Используем кэшированные версии для группы "${groupName}" (${artifacts?.length || 0} версий)`);
+            // Обновляем текст загрузчика
+            setTimeout(() => {
+                const loaderText = document.querySelector('.loading-label');
+                if (loaderText) {
+                    loaderText.textContent = apps.length > 1 
+                        ? `Получение версий для ${apps.length} приложений`
+                        : 'Получение списка версий';
                 }
+            }, 300);
+            
+            console.log(`🔄 Загружаем артефакты для группы "${groupName}"`);
+            artifacts = await loadArtifactsWithCache(firstApp.id);
+            
+            if (artifacts) {
+                groupArtifacts[groupName] = artifacts;
+                state.artifactsLoaded = true;
+                console.log(`✅ Загружено ${artifacts.length} версий для группы "${groupName}"`);
             } else {
-                // Используем API одиночного приложения
-                const appId = firstApp.id;
-                
-                // Обновляем текст загрузчика
-                setTimeout(() => {
-                    const loaderText = document.querySelector('.loading-label');
-                    if (loaderText) {
-                        loaderText.textContent = apps.length > 1 
-                            ? `Получение версий для ${apps.length} приложений`
-                            : 'Получение списка версий';
-                    }
-                }, 300);
-                
-                // Проверяем, загружены ли уже артефакты для этой группы
-                if (!groupArtifacts[groupName] || !state.artifactsLoaded) {
-                    console.log(`🔄 Загружаем версии для группы "${groupName}" (${apps.length} приложений)`);
-                    artifacts = await loadArtifactsWithCache(appId);
-                    if (artifacts) {
-                        groupArtifacts[groupName] = artifacts;
-                        state.artifactsLoaded = true;
-                        console.log(`✅ Загружено ${artifacts.length} версий для группы "${groupName}"`);
-                    } else {
-                        loadingError = true;
-                        console.error(`❌ Не удалось загрузить версии для группы "${groupName}"`);
-                    }
-                } else {
-                    artifacts = groupArtifacts[groupName];
-                    console.log(`📦 Используем кэшированные версии для группы "${groupName}" (${artifacts?.length || 0} версий)`);
-                }
+                loadingError = true;
+                console.error(`❌ Не удалось загрузить версии для группы "${groupName}"`);
             }
-        } else {
-            console.error(`❌ Группа "${groupName}" не содержит приложений`);
-            loadingError = true;
+        } else if (groupArtifacts[groupName]) {
+            // Используем уже загруженные артефакты
+            artifacts = groupArtifacts[groupName];
+            console.log(`📦 Используем уже загруженные артефакты для группы "${groupName}"`);
         }
         
-        // Обеспечиваем минимальное время показа загрузчика (600ms)
-        const elapsedTime = Date.now() - startTime;
-        if (elapsedTime < 600) {
-            await new Promise(resolve => setTimeout(resolve, 600 - elapsedTime));
+        // Минимальное время показа загрузчика только при первой загрузке
+        if (!groupContentLoaded[groupName]) {
+            const elapsedTime = Date.now() - startTime;
+            if (elapsedTime < 600) {
+                await new Promise(resolve => setTimeout(resolve, 600 - elapsedTime));
+            }
         }
         
-        // Создаем HTML содержимое формы с анимацией появления
+        // Создаем HTML содержимое формы
         let formHTML = '<div class="form-content-animated">';
         
         // Скрытое поле с ID приложений
@@ -2239,7 +2165,6 @@ if (!document.getElementById('version-loader-styles')) {
         } else {
             // Обычное текстовое поле с возможностью загрузки артефактов
             const errorClass = loadingError ? 'field-with-error' : '';
-            // Проверяем, есть ли у приложений в группе URL для загрузки артефактов
             const hasArtifactUrl = apps.some(app => app.artifact_list_url || app.distr_path);
             
             formHTML += `
@@ -2257,7 +2182,7 @@ if (!document.getElementById('version-loader-styles')) {
                         ${loadingError && hasArtifactUrl ? `
                             <div class="field-error-message">
                                 <span class="error-icon">⚠</span>
-                                Не удалось загрузить список версий. Вы можете ввести URL вручную или попробовать загрузить снова.
+                                Не удалось загрузить список версий. Введите URL вручную или попробуйте загрузить снова.
                             </div>
                         ` : ''}
                     </div>
@@ -2301,6 +2226,10 @@ if (!document.getElementById('version-loader-styles')) {
         
         formHTML += '</div>';
         
+        // НОВОЕ: Сохраняем HTML в кэш
+        groupContentCache[groupName] = formHTML;
+        groupContentLoaded[groupName] = true;
+        
         // Заменяем содержимое с анимацией
         dynamicContent.style.opacity = '0';
         setTimeout(() => {
@@ -2309,364 +2238,328 @@ if (!document.getElementById('version-loader-styles')) {
             
             // Добавляем обработчики после рендеринга
             attachFormHandlers(groupName);
+            restoreGroupState(groupName);
         }, 200);
     }
+    
+    // Функция для добавления обработчиков к элементам формы
+    function attachFormHandlers(groupName) {
+        // Обработчик для выпадающего списка версий
+        const selectElement = document.getElementById('distr-url');
+        const customUrlGroup = document.getElementById('custom-url-group');
         
-        // Функция для добавления обработчиков к элементам формы
-        function attachFormHandlers(groupName) {
-            // Обработчик для выпадающего списка версий
-            const selectElement = document.getElementById('distr-url');
-            const customUrlGroup = document.getElementById('custom-url-group');
-            
-            if (selectElement && selectElement.tagName === 'SELECT' && customUrlGroup) {
-                selectElement.addEventListener('change', function() {
-                    if (this.value === 'custom') {
-                        customUrlGroup.style.display = 'block';
-                        const customInput = document.getElementById('custom-distr-url');
-                        if (customInput) {
-                            customInput.required = true;
-                            // Фокус на поле ввода
-                            setTimeout(() => customInput.focus(), 100);
-                        }
-                    } else {
-                        customUrlGroup.style.display = 'none';
-                        const customInput = document.getElementById('custom-distr-url');
-                        if (customInput) {
-                            customInput.required = false;
+        if (selectElement && selectElement.tagName === 'SELECT' && customUrlGroup) {
+            selectElement.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customUrlGroup.style.display = 'block';
+                    const customInput = document.getElementById('custom-distr-url');
+                    if (customInput) {
+                        customInput.required = true;
+                        setTimeout(() => customInput.focus(), 100);
+                    }
+                } else {
+                    customUrlGroup.style.display = 'none';
+                    const customInput = document.getElementById('custom-distr-url');
+                    if (customInput) {
+                        customInput.required = false;
+                    }
+                }
+                saveCurrentGroupState();
+            });
+        }
+        
+        // Обработчик для кнопки обновления артефактов (принудительная перезагрузка)
+        const refreshBtn = document.querySelector('.refresh-artifacts-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async function() {
+                this.classList.add('rotating');
+                this.disabled = true;
+                
+                const group = this.getAttribute('data-group');
+                const apps = appGroups[group];
+                
+                if (apps && apps.length > 0) {
+                    const firstApp = apps[0];
+                    
+                    // Очищаем кэш артефактов
+                    if (artifactsCache) {
+                        delete artifactsCache[`app_${firstApp.id}`];
+                        if (firstApp.group_id) {
+                            delete artifactsCache[`group_${firstApp.group_id}`];
                         }
                     }
                     
-                    // Сохраняем изменение сразу
+                    // Очищаем кэш группы для принудительной перезагрузки
+                    delete groupArtifacts[group];
+                    delete groupContentCache[group];
+                    groupContentLoaded[group] = false;
+                    groupStates[group].artifactsLoaded = false;
+                    
+                    // Сохраняем текущее состояние
                     saveCurrentGroupState();
-                });
-            }
-            
-            // Обработчик для custom URL input
-            const customUrlInput = document.getElementById('custom-distr-url');
-            if (customUrlInput) {
-                // Сохраняем при изменении
-                customUrlInput.addEventListener('input', function() {
-                    // Debounce для оптимизации
-                    clearTimeout(this.saveTimeout);
-                    this.saveTimeout = setTimeout(() => {
-                        saveCurrentGroupState();
-                    }, 500);
-                });
+                    
+                    // Перезагружаем содержимое с force=true
+                    await updateFormContent(group, true);
+                }
                 
-                // Сохраняем при потере фокуса
-                customUrlInput.addEventListener('blur', function() {
+                this.classList.remove('rotating');
+                this.disabled = false;
+            });
+        }
+        
+        // Обработчики для сохранения состояния при изменении
+        const customUrlInput = document.getElementById('custom-distr-url');
+        if (customUrlInput) {
+            customUrlInput.addEventListener('input', function() {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = setTimeout(() => {
                     saveCurrentGroupState();
-                });
-            }
-            
-            // Обработчик для обычного поля URL (когда нет select)
-            if (selectElement && selectElement.tagName === 'INPUT') {
-                selectElement.addEventListener('input', function() {
-                    // Debounce для оптимизации
-                    clearTimeout(this.saveTimeout);
-                    this.saveTimeout = setTimeout(() => {
-                        saveCurrentGroupState();
-                    }, 500);
-                });
-                
-                selectElement.addEventListener('blur', function() {
-                    saveCurrentGroupState();
-                });
-            }
-            
-            // Обработчики для режима обновления
-            const restartModeRadios = document.querySelectorAll('input[name="restart_mode"]');
-            restartModeRadios.forEach(radio => {
-                radio.addEventListener('change', function() {
-                    saveCurrentGroupState();
-                });
+                }, 500);
             });
             
-            // Обработчик для кнопки обновления артефактов
-            const refreshBtn = document.querySelector('.refresh-artifacts-btn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
-                    this.disabled = true;
-                    
-                    const group = this.getAttribute('data-group');
-                    const apps = appGroups[group];
-                    
-                    if (apps && apps.length > 0) {
-                        const firstApp = apps[0];
-                        
-                        // Очищаем кэш для принудительного обновления
-                        if (firstApp.group_id && artifactsCache) {
-                            delete artifactsCache[`group_${firstApp.group_id}`];
-                        } else if (artifactsCache) {
-                            delete artifactsCache[`app_${firstApp.id}`];
-                        }
-                        
-                        // Сохраняем текущее состояние перед перезагрузкой
-                        saveCurrentGroupState();
-                        
-                        // Перезагружаем содержимое формы
-                        await updateFormContent(group);
-                    }
-                    
-                    this.classList.remove('rotating');
-                    this.disabled = false;
-                });
-            }
-            
-            // Обработчик для кнопки загрузки артефактов
-            const loadBtn = document.querySelector('.load-artifacts-btn');
-            if (loadBtn) {
-                loadBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
-                    this.disabled = true;
-                    
-                    const group = this.getAttribute('data-group');
-                    const appId = this.getAttribute('data-app-id');
-                    
-                    const artifacts = await loadArtifactsWithCache(appId);
-                    if (artifacts) {
-                        groupArtifacts[group] = artifacts;
-                        groupStates[group].artifactsLoaded = true;
-                        
-                        // Сохраняем текущее состояние
-                        saveCurrentGroupState();
-                        
-                        // Перерисовываем форму с артефактами
-                        await updateFormContent(group);
-                        
-                        showNotification('Список версий загружен');
-                    } else {
-                        showError('Не удалось загрузить список версий');
-                    }
-                    
-                    this.classList.remove('rotating');
-                    this.disabled = false;
-                });
-            }
-            
-            // ВАЖНО: Восстанавливаем состояние группы после установки обработчиков
-            restoreGroupState(groupName);
-        }
-        
-        // Функция сохранения текущего состояния группы
-        function saveCurrentGroupState() {
-            const currentGroup = tabsContainer.querySelector('.modal-tab.active');
-            if (!currentGroup) return;
-            
-            const groupName = currentGroup.getAttribute('data-group');
-            const distrUrlElement = document.getElementById('distr-url');
-            const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
-            
-            // Сохраняем URL дистрибутива
-            if (distrUrlElement) {
-                let distrUrl = distrUrlElement.value;
-                
-                // Если выбран custom, берем значение из custom поля
-                if (distrUrl === 'custom') {
-                    const customUrlElement = document.getElementById('custom-distr-url');
-                    if (customUrlElement && customUrlElement.value.trim()) {
-                        // Сохраняем введенный пользователем URL
-                        distrUrl = customUrlElement.value.trim();
-                    } else {
-                        // Если custom выбран но URL не введен, сохраняем пустое значение
-                        distrUrl = '';
-                    }
-                }
-                
-                // Сохраняем финальное значение URL
-                groupStates[groupName].distrUrl = distrUrl;
-                
-                console.log(`Сохранено состояние группы "${groupName}":`, {
-                    url: distrUrl,
-                    mode: restartModeElement ? restartModeElement.value : 'restart'
-                });
-            }
-            
-            // Сохраняем режим обновления
-            if (restartModeElement) {
-                groupStates[groupName].restartMode = restartModeElement.value;
-            }
-        }
-
-        // Функция для восстановления состояния группы
-        function restoreGroupState(groupName) {
-            const state = groupStates[groupName];
-            if (!state) return;
-            
-            console.log(`Восстановление состояния группы "${groupName}":`, state);
-            
-            // Восстанавливаем значение URL дистрибутива
-            const distrUrlElement = document.getElementById('distr-url');
-            if (distrUrlElement) {
-                if (distrUrlElement.tagName === 'SELECT') {
-                    // Для select элемента
-                    const hasOption = [...distrUrlElement.options].some(opt => opt.value === state.distrUrl);
-                    
-                    if (hasOption) {
-                        // Если значение есть в списке опций
-                        distrUrlElement.value = state.distrUrl;
-                    } else if (state.distrUrl && state.distrUrl !== '' && state.distrUrl !== 'custom') {
-                        // Если значение не в списке и не пустое - это custom URL
-                        distrUrlElement.value = 'custom';
-                        
-                        // Показываем поле для custom URL и заполняем его
-                        const customUrlGroup = document.getElementById('custom-url-group');
-                        const customUrlInput = document.getElementById('custom-distr-url');
-                        
-                        if (customUrlGroup && customUrlInput) {
-                            customUrlGroup.style.display = 'block';
-                            customUrlInput.value = state.distrUrl;
-                            customUrlInput.required = true;
-                        }
-                    }
-                } else if (distrUrlElement.tagName === 'INPUT') {
-                    // Для обычного input элемента
-                    distrUrlElement.value = state.distrUrl || '';
-                }
-            }
-            
-            // Восстанавливаем режим обновления
-            if (state.restartMode) {
-                const modeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
-                if (modeRadio) {
-                    modeRadio.checked = true;
-                }
-            }
-        }       
-        
-        // Кнопки действий формы
-        const formActions = document.createElement('div');
-        formActions.className = 'form-actions';
-        
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'cancel-btn';
-        cancelBtn.textContent = 'Отмена';
-        cancelBtn.onclick = window.closeModal;
-        formActions.appendChild(cancelBtn);
-        
-        const submitBtn = document.createElement('button');
-        submitBtn.type = 'submit';
-        submitBtn.className = 'submit-btn';
-        submitBtn.textContent = 'Обновить';
-        formActions.appendChild(submitBtn);
-        
-        form.appendChild(formActions);
-        
-        // Отображаем модальное окно
-        window.showModal(title, modalContent);
-        
-        // Загружаем содержимое для первой группы
-        const firstGroup = Object.keys(appGroups)[0];
-        updateFormContent(firstGroup);
-        
-        // Обработчики для вкладок
-        tabsContainer.querySelectorAll('.modal-tab').forEach(tab => {
-            tab.addEventListener('click', async function() {
-                // Сохраняем текущее состояние
+            customUrlInput.addEventListener('blur', function() {
                 saveCurrentGroupState();
-                
-                // Переключаем активную вкладку
-                tabsContainer.querySelectorAll('.modal-tab').forEach(t => {
-                    t.classList.remove('active');
-                });
-                this.classList.add('active');
-                
-                // Загружаем состояние для выбранной группы
-                const groupName = this.getAttribute('data-group');
-                await updateFormContent(groupName);
+            });
+        }
+        
+        // Обработчик для обычного поля URL
+        if (selectElement && selectElement.tagName === 'INPUT') {
+            selectElement.addEventListener('input', function() {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = setTimeout(() => {
+                    saveCurrentGroupState();
+                }, 500);
+            });
+            
+            selectElement.addEventListener('blur', function() {
+                saveCurrentGroupState();
+            });
+        }
+        
+        // Обработчики для режима обновления
+        const restartModeRadios = document.querySelectorAll('input[name="restart_mode"]');
+        restartModeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                saveCurrentGroupState();
             });
         });
         
-        // Обработчик отправки формы
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
+        // Обработчик для кнопки загрузки артефактов
+        const loadBtn = document.querySelector('.load-artifacts-btn');
+        if (loadBtn) {
+            loadBtn.addEventListener('click', async function() {
+                this.classList.add('rotating');
+                this.disabled = true;
+                
+                const group = this.getAttribute('data-group');
+                const appId = this.getAttribute('data-app-id');
+                
+                const artifacts = await loadArtifactsWithCache(appId);
+                if (artifacts) {
+                    groupArtifacts[group] = artifacts;
+                    groupStates[group].artifactsLoaded = true;
+                    
+                    // Очищаем кэш HTML для перерисовки с артефактами
+                    delete groupContentCache[group];
+                    groupContentLoaded[group] = false;
+                    
+                    // Сохраняем текущее состояние
+                    saveCurrentGroupState();
+                    
+                    // Перерисовываем форму с артефактами
+                    await updateFormContent(group, true);
+                    
+                    showNotification('Список версий загружен');
+                } else {
+                    showError('Не удалось загрузить список версий');
+                }
+                
+                this.classList.remove('rotating');
+                this.disabled = false;
+            });
+        }
+    }
+    
+    // Функция сохранения текущего состояния группы
+    function saveCurrentGroupState() {
+        const currentGroup = tabsContainer.querySelector('.modal-tab.active');
+        if (!currentGroup) return;
+        
+        const groupName = currentGroup.getAttribute('data-group');
+        const distrUrlElement = document.getElementById('distr-url');
+        const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
+        
+        if (distrUrlElement) {
+            let distrUrl = distrUrlElement.value;
             
-            // Сохраняем текущее состояние активной вкладки
+            if (distrUrl === 'custom') {
+                const customUrlElement = document.getElementById('custom-distr-url');
+                if (customUrlElement && customUrlElement.value.trim()) {
+                    distrUrl = customUrlElement.value.trim();
+                } else {
+                    distrUrl = '';
+                }
+            }
+            
+            groupStates[groupName].distrUrl = distrUrl;
+        }
+        
+        if (restartModeElement) {
+            groupStates[groupName].restartMode = restartModeElement.value;
+        }
+        
+        console.log(`💾 Сохранено состояние группы "${groupName}":`, {
+            url: groupStates[groupName].distrUrl,
+            mode: groupStates[groupName].restartMode
+        });
+    }
+    
+    // Функция восстановления состояния группы
+    function restoreGroupState(groupName) {
+        const state = groupStates[groupName];
+        if (!state) return;
+        
+        const distrUrlElement = document.getElementById('distr-url');
+        if (distrUrlElement) {
+            if (distrUrlElement.tagName === 'SELECT') {
+                const hasOption = [...distrUrlElement.options].some(opt => opt.value === state.distrUrl);
+                
+                if (hasOption) {
+                    distrUrlElement.value = state.distrUrl;
+                } else if (state.distrUrl && state.distrUrl !== '' && state.distrUrl !== 'custom') {
+                    distrUrlElement.value = 'custom';
+                    
+                    const customUrlGroup = document.getElementById('custom-url-group');
+                    const customUrlInput = document.getElementById('custom-distr-url');
+                    
+                    if (customUrlGroup && customUrlInput) {
+                        customUrlGroup.style.display = 'block';
+                        customUrlInput.value = state.distrUrl;
+                        customUrlInput.required = true;
+                    }
+                }
+            } else if (distrUrlElement.tagName === 'INPUT') {
+                distrUrlElement.value = state.distrUrl || '';
+            }
+        }
+        
+        if (state.restartMode) {
+            const modeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
+            if (modeRadio) {
+                modeRadio.checked = true;
+            }
+        }
+    }
+    
+    // Обработчики для вкладок
+    tabsContainer.querySelectorAll('.modal-tab').forEach(tab => {
+        tab.addEventListener('click', async function() {
+            // Проверяем, не активна ли уже эта вкладка
+            if (this.classList.contains('active')) {
+                console.log('Вкладка уже активна, пропускаем');
+                return;
+            }
+            
+            // Сохраняем текущее состояние
             saveCurrentGroupState();
             
-            // Собираем все обновления для выполнения
-            const allUpdates = [];
-            let hasValidUpdates = false;
+            // Переключаем активную вкладку
+            tabsContainer.querySelectorAll('.modal-tab').forEach(t => {
+                t.classList.remove('active');
+            });
+            this.classList.add('active');
             
-            // Проходим по всем группам и собираем данные
+            // Загружаем состояние для выбранной группы
+            const groupName = this.getAttribute('data-group');
+            await updateFormContent(groupName); // Без force, используем кэш
+        });
+    });
+    
+    // Обработчик отправки формы
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Проверка на двойную отправку
+        if (this.dataset.processing === 'true') {
+            console.log('Форма уже обрабатывается');
+            return;
+        }
+        
+        this.dataset.processing = 'true';
+        
+        try {
+            // Сохраняем текущее состояние
+            saveCurrentGroupState();
+            
+            // Собираем данные из всех групп
+            const allUpdates = [];
+            
             for (const groupName of Object.keys(groupStates)) {
                 const state = groupStates[groupName];
                 
-                // Проверяем, есть ли заполненный URL для этой группы
-                let finalDistUrl = state.distrUrl;
-                
-                // Пропускаем группы где не указан URL или он пустой
-                if (!finalDistUrl || finalDistUrl.trim() === '') {
-                    console.log(`Группа "${groupName}" пропущена - URL не указан`);
+                if (!state.distrUrl || state.distrUrl.trim() === '') {
                     continue;
                 }
                 
-                // Пропускаем если выбрано 'custom' но не введен кастомный URL
-                // (это случай когда пользователь выбрал custom но не ввел значение)
-                if (finalDistUrl === 'custom') {
-                    console.log(`Группа "${groupName}" пропущена - выбран custom но URL не введен`);
-                    continue;
-                }
-                
-                console.log(`Подготовка обновления для группы "${groupName}":`, {
-                    apps: state.appIds.length,
-                    url: finalDistUrl,
-                    mode: state.restartMode
-                });
-                
-                // Добавляем каждое приложение из группы в список обновлений
                 for (const appId of state.appIds) {
                     const app = getAppById(appId);
-                    if (!app) {
-                        console.error(`Приложение с ID ${appId} не найдено`);
-                        continue;
-                    }
+                    if (!app) continue;
                     
                     allUpdates.push({
                         appId: appId,
                         appName: app.name,
                         groupName: groupName,
-                        distr_url: finalDistUrl,
+                        distr_url: state.distrUrl,
                         restart_mode: state.restartMode || 'restart'
                     });
-                    hasValidUpdates = true;
                 }
             }
             
-            // Проверяем, есть ли хотя бы одно обновление
-            if (!hasValidUpdates || allUpdates.length === 0) {
+            if (allUpdates.length === 0) {
                 showError('Укажите URL дистрибутива хотя бы для одной группы');
                 return;
             }
             
-            // Показываем подтверждение с деталями
-            const groupsSummary = {};
-            allUpdates.forEach(update => {
-                if (!groupsSummary[update.groupName]) {
-                    groupsSummary[update.groupName] = {
-                        apps: [],
-                        url: update.distr_url,
-                        mode: update.restart_mode
-                    };
-                }
-                groupsSummary[update.groupName].apps.push(update.appName);
-            });
+            console.log(`🚀 Запуск обновления ${allUpdates.length} приложений`);
+            await processMultipleUpdates(allUpdates);
             
-            console.log('=== Запуск обновления ===');
-            console.log(`Всего приложений: ${allUpdates.length}`);
-            console.log('Детали по группам:', groupsSummary);
-            
-            // Запускаем обновления
-            try {
-                await processMultipleUpdates(allUpdates);
-            } catch (error) {
-                console.error('Ошибка при обновлении приложений:', error);
-                showError('Произошла ошибка при обновлении приложений');
-            }
-        });
-    }
+        } finally {
+            this.dataset.processing = 'false';
+        }
+    });
+    
+    // Кнопки действий формы
+    const formActions = document.createElement('div');
+    formActions.className = 'form-actions';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = 'Отмена';
+    cancelBtn.onclick = function() {
+        // Очищаем кэши при закрытии
+        Object.keys(groupContentCache).forEach(key => delete groupContentCache[key]);
+        Object.keys(groupContentLoaded).forEach(key => delete groupContentLoaded[key]);
+        window.closeModal();
+    };
+    formActions.appendChild(cancelBtn);
+    
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'submit-btn';
+    submitBtn.textContent = 'Обновить';
+    formActions.appendChild(submitBtn);
+    
+    form.appendChild(formActions);
+    
+    // Отображаем модальное окно
+    window.showModal(title, modalContent);
+    
+    // Загружаем содержимое для первой группы
+    const firstGroup = Object.keys(appGroups)[0];
+    updateFormContent(firstGroup);
+}
 
 // Новая функция для обработки нескольких обновлений
 async function processMultipleUpdates(updates) {
@@ -3247,14 +3140,14 @@ async function processUpdateForm(formData) {
 document.addEventListener('submit', async function(e) {
     if (e.target && e.target.id === 'update-form') {
         e.preventDefault();
-        
+        а
         // Если это форма с вкладками, не обрабатываем её здесь
         const hasTabs = e.target.closest('.modal-content')?.querySelector('.modal-tabs');
         if (hasTabs) {
-            console.log('Форма с вкладками обрабатывается локальным обработчиком');
-            return; // Выходим, пусть локальный обработчик справится
+            //console.log('Форма с вкладками обрабатывается локальным обработчиком');
+            return;
         }
-            
+
         const formData = new FormData(e.target);
         const data = {};
         
