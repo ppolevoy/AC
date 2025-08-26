@@ -51,6 +51,11 @@ document.addEventListener('DOMContentLoaded', function() {
             FIELD_STAGGER: 100       // Задержка между полями (ms)
         }
     };
+
+    const selectedItemsState = {
+        applications: new Set(),  // Set для хранения ID выбранных приложений
+        groups: new Set()         // Set для хранения имен выбранных групп
+    };
     
 
     // Инициализация страницы
@@ -84,37 +89,59 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
         
         // Обработчик выбора всех приложений
-		if (selectAllCheckbox) {
-			selectAllCheckbox.addEventListener('change', function() {
-				const isChecked = this.checked;
-				
-				// Обновляем все видимые чекбоксы приложений
-				const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
-				appCheckboxes.forEach(checkbox => {
-					if (!checkbox.closest('tr.hidden')) {
-						checkbox.checked = isChecked;
-					}
-				});
-				
-				// Обновляем все видимые чекбоксы групп
-				const groupCheckboxes = document.querySelectorAll('.group-checkbox');
-				groupCheckboxes.forEach(checkbox => {
-					if (!checkbox.closest('tr.hidden')) {
-						checkbox.checked = isChecked;
-						checkbox.indeterminate = false;
-						
-						// Также обновляем все дочерние чекбоксы
-						const groupName = checkbox.getAttribute('data-group');
-						const childCheckboxes = document.querySelectorAll(`.child-row[data-parent="${groupName}"] .app-checkbox`);
-						childCheckboxes.forEach(childBox => {
-							childBox.checked = isChecked;
-						});
-					}
-				});
-				
-				updateActionButtonsState(isChecked);
-			});
-		}
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                
+                // Если выбираем все - добавляем все видимые элементы в состояние
+                if (isChecked) {
+                    // Добавляем все видимые приложения
+                    document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)').forEach(checkbox => {
+                        if (!checkbox.closest('tr.hidden')) {
+                            checkbox.checked = true;
+                            const appId = checkbox.getAttribute('data-app-id');
+                            if (appId) {
+                                selectedItemsState.applications.add(appId);
+                            }
+                        }
+                    });
+                    
+                    // Добавляем все видимые группы
+                    document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+                        if (!checkbox.closest('tr.hidden')) {
+                            checkbox.checked = true;
+                            const groupName = checkbox.getAttribute('data-group');
+                            if (groupName) {
+                                selectedItemsState.groups.add(groupName);
+                            }
+                        }
+                    });
+                } else {
+                    // Если снимаем выделение - очищаем состояние только для видимых элементов
+                    document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)').forEach(checkbox => {
+                        if (!checkbox.closest('tr.hidden')) {
+                            checkbox.checked = false;
+                            const appId = checkbox.getAttribute('data-app-id');
+                            if (appId) {
+                                selectedItemsState.applications.delete(appId);
+                            }
+                        }
+                    });
+                    
+                    document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+                        if (!checkbox.closest('tr.hidden')) {
+                            checkbox.checked = false;
+                            const groupName = checkbox.getAttribute('data-group');
+                            if (groupName) {
+                                selectedItemsState.groups.delete(groupName);
+                            }
+                        }
+                    });
+                }
+                
+                updateActionButtonsState(isChecked || selectedItemsState.applications.size > 0);
+            });
+        }
         
         // Обработчик поиска
         if (searchInput) {
@@ -271,6 +298,8 @@ document.addEventListener('DOMContentLoaded', function() {
      * Загрузка списка приложений
      */
     async function loadApplications() {
+        // При полной перезагрузке приложений очищаем состояние
+        clearCheckboxState();        
         try {
             // Сохраняем текущее состояние развернутых групп перед обновлением
             saveTableState();
@@ -297,7 +326,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 filterAndDisplayApplications();
                 
                 // Восстанавливаем состояние таблицы после отображения данных
-                restoreTableState();
+                // Состояние уже очищено, поэтому restoreTableState не нужен 
+                // restoreTableState();
             } else {
                 console.error('Ошибка при загрузке приложений:', data.error);
                 showError('Не удалось загрузить список приложений');
@@ -309,58 +339,112 @@ document.addEventListener('DOMContentLoaded', function() {
             applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
         }
     }
+
+    // Функция сохранения состояния чекбоксов перед перерисовкой
+    function saveCheckboxState() {
+        // Сохраняем выбранные приложения
+        document.querySelectorAll('.app-checkbox:checked').forEach(checkbox => {
+            const appId = checkbox.getAttribute('data-app-id');
+            if (appId) {
+                selectedItemsState.applications.add(appId);
+            }
+        });
+        
+        // Сохраняем выбранные группы
+        document.querySelectorAll('.group-checkbox:checked').forEach(checkbox => {
+            const groupName = checkbox.getAttribute('data-group');
+            if (groupName) {
+                selectedItemsState.groups.add(groupName);
+            }
+        });
+    }
+
+    // Функция восстановления состояния чекбоксов после перерисовки
+    function restoreCheckboxState() {
+        // Восстанавливаем состояние чекбоксов приложений
+        selectedItemsState.applications.forEach(appId => {
+            const checkbox = document.querySelector(`.app-checkbox[data-app-id="${appId}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+            }
+        });
+        
+        // Восстанавливаем состояние чекбоксов групп
+        selectedItemsState.groups.forEach(groupName => {
+            const checkbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+            if (checkbox) {
+                checkbox.checked = true;
+                // Обновляем состояние группы в зависимости от дочерних элементов
+                updateGroupCheckboxState(groupName);
+            }
+        });
+        
+        // Обновляем состояние чекбокса "Выбрать все" и кнопок действий
+        updateSelectAllState();
+    }
+
+    // Функция очистки состояния выбранных элементов
+    function clearCheckboxState() {
+        selectedItemsState.applications.clear();
+        selectedItemsState.groups.clear();
+    }    
     
     /**
      * Фильтрация и отображение приложений
      */
 	function filterAndDisplayApplications() {
-		// Фильтрация по поисковому запросу
-		if (searchQuery) {
-			const query = searchQuery.toLowerCase();
-			filteredApplications = allApplications.filter(app => 
-				app.name.toLowerCase().includes(query) || 
-				(app.version && app.version.toLowerCase().includes(query)) ||
-				(app.server_name && app.server_name.toLowerCase().includes(query))
-			);
-		} else {
-			filteredApplications = [...allApplications];
-		}
-		
-		// Сортировка
-		filteredApplications.sort((a, b) => {
-			let valueA, valueB;
-			
-			if (sortColumn === 'name') {
-				valueA = a.name.toLowerCase();
-				valueB = b.name.toLowerCase();
-			} else if (sortColumn === 'state') {
-				valueA = a.status ? a.status.toLowerCase() : '';
-				valueB = b.status ? b.status.toLowerCase() : '';
-			}
-			
-			if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
-			if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
-			return 0;
-		});
-		
-		// Очищаем текущую таблицу
-		applicationsTableBody.innerHTML = '';
-		
-		if (filteredApplications.length === 0) {
-			applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Нет приложений, соответствующих критериям поиска</td></tr>';
-			updatePagination(0);
-			return;
-		}
-		
-		// Если группировка включена, отображаем сгруппированные приложения
-		if (groupingEnabled) {
-			displayGroupedApplications(filteredApplications);
-		} else {
-			displayFlatApplications(filteredApplications);
-		}
-		
-		// Добавляем обработчики событий для элементов таблицы
-		setupTableEventHandlers();
+        // Сохраняем состояние чекбоксов перед очисткой таблицы
+        saveCheckboxState();        
+        // Фильтрация по поисковому запросу
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            filteredApplications = allApplications.filter(app => 
+                app.name.toLowerCase().includes(query) || 
+                (app.version && app.version.toLowerCase().includes(query)) ||
+                (app.server_name && app.server_name.toLowerCase().includes(query))
+            );
+        } else {
+            filteredApplications = [...allApplications];
+        }
+        
+        // Сортировка
+        filteredApplications.sort((a, b) => {
+            let valueA, valueB;
+            
+            if (sortColumn === 'name') {
+                valueA = a.name.toLowerCase();
+                valueB = b.name.toLowerCase();
+            } else if (sortColumn === 'state') {
+                valueA = a.status ? a.status.toLowerCase() : '';
+                valueB = b.status ? b.status.toLowerCase() : '';
+            }
+            
+            if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+            if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // Очищаем текущую таблицу
+        applicationsTableBody.innerHTML = '';
+        
+        if (filteredApplications.length === 0) {
+            applicationsTableBody.innerHTML = '<tr><td colspan="6" class="table-loading">Нет приложений, соответствующих критериям поиска</td></tr>';
+            updatePagination(0);
+            return;
+        }
+        
+        // Если группировка включена, отображаем сгруппированные приложения
+        if (groupingEnabled) {
+            displayGroupedApplications(filteredApplications);
+        } else {
+            displayFlatApplications(filteredApplications);
+        }
+        
+        // Добавляем обработчики событий для элементов таблицы
+        setupTableEventHandlers();
+        
+        // Восстанавливаем состояние чекбоксов после перерисовки
+        restoreCheckboxState();
 	}
 	
 	// Функция для отображения приложений без группировки
@@ -771,10 +855,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateSelectAllState();
             });
         });
+
+        // Добавляем обработчики для обновления состояния при изменении чекбоксов
+        document.querySelectorAll('.app-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const appId = this.getAttribute('data-app-id');
+                if (this.checked) {
+                    selectedItemsState.applications.add(appId);
+                } else {
+                    selectedItemsState.applications.delete(appId);
+                }
+                
+                // Если это дочерний элемент группы, обновляем состояние группы
+                const parentGroup = this.closest('.child-wrapper')?.getAttribute('data-group');
+                if (parentGroup) {
+                    updateGroupCheckboxState(parentGroup);
+                    updateSelectAllState();
+                }
+            });
+        });        
+
+        // Обработчик для групповых чекбоксов
+        document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const groupName = this.getAttribute('data-group');
+                const isChecked = this.checked;
+                
+                if (isChecked) {
+                    selectedItemsState.groups.add(groupName);
+                } else {
+                    selectedItemsState.groups.delete(groupName);
+                }
+                
+                // Выбираем/снимаем все дочерние чекбоксы
+                const childCheckboxes = document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`);
+                childCheckboxes.forEach(childBox => {
+                    childBox.checked = isChecked;
+                    const appId = childBox.getAttribute('data-app-id');
+                    if (isChecked) {
+                        selectedItemsState.applications.add(appId);
+                    } else {
+                        selectedItemsState.applications.delete(appId);
+                    }
+                });
+                
+                updateSelectAllState();
+            });
+        });        
         
-        setupAppActionButtons();
-        
-        setupGroupActionButtons();
+        setupAppActionButtons();        
+        setupGroupActionButtons();        
     }
 
     /**
@@ -972,17 +1102,19 @@ document.addEventListener('DOMContentLoaded', function() {
      * @param {boolean} hasSelection - Есть ли выбранные приложения
      */
     function updateActionButtonsState(hasSelection) {
-        if (startBtn) startBtn.disabled = !hasSelection;
-        if (restartBtn) restartBtn.disabled = !hasSelection;
-        if (stopBtn) stopBtn.disabled = !hasSelection;
-        if (updateBtn) updateBtn.disabled = !hasSelection;
-        if (unloadBtn) unloadBtn.disabled = !hasSelection;
+        const hasSelectedItems = selectedItemsState.applications.size > 0 || hasSelection;
+
+        if (startBtn) startBtn.disabled = !hasSelectedItems;
+        if (restartBtn) restartBtn.disabled = !hasSelectedItems;
+        if (stopBtn) stopBtn.disabled = !hasSelectedItems;
+        if (updateBtn) updateBtn.disabled = !hasSelectedItems;
+        if (unloadBtn) unloadBtn.disabled = !hasSelectedItems;
         
         // Добавляем/удаляем класс для визуального отображения неактивных кнопок
         [startBtn, restartBtn, stopBtn, updateBtn, unloadBtn].forEach(btn => {
             if (!btn) return;
             
-            if (hasSelection) {
+            if (hasSelectedItems) {
                 btn.classList.remove('disabled');
             } else {
                 btn.classList.add('disabled');
@@ -996,8 +1128,9 @@ document.addEventListener('DOMContentLoaded', function() {
      */
 	function getSelectedAppIds() {
 		// Теперь нужно искать чекбоксы как в основной таблице, так и во вложенных таблицах
-		const selectedCheckboxes = document.querySelectorAll('.app-checkbox:checked');
-		return Array.from(selectedCheckboxes).map(checkbox => checkbox.getAttribute('data-app-id'));
+		//const selectedCheckboxes = document.querySelectorAll('.app-checkbox:checked');
+		//return Array.from(selectedCheckboxes).map(checkbox => checkbox.getAttribute('data-app-id'));
+        return Array.from(selectedItemsState.applications);
 	}
     
     /**
@@ -1931,7 +2064,7 @@ async function updateFormContent(groupName) {
     let artifacts = null;
     let loadingError = false;
     
-    if (apps.length === 1) {
+    if (apps.length > 1) {
         const appId = apps[0].id;
         
         // Обновляем текст загрузчика
