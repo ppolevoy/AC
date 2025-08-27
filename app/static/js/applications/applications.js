@@ -3304,7 +3304,7 @@ function createGroupRow(groupName, groupApps) {
             </div>
         </td>
         <td>${versionText}</td>
-        <td>${statusDot} ${hasOffline ? 'Частично офлайн' : 'Онлайн'}</td>
+        <td>${statusDot} ${hasOffline ? 'Offline' : 'Online'}</td>
         <td>${serverName}</td>
         <td>
             <div class="actions-menu">
