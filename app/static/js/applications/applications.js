@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let searchQuery = '';
 	let groupingEnabled = true;	
 	let activeDropdown = null;
-	let dropdownOverlay = null;    
+	let dropdownOverlay = null;
+    let tagsLoaded = false;
 	
     // DOM-элементы
     const serverDropdown = document.getElementById('server-selected');
@@ -57,6 +58,31 @@ document.addEventListener('DOMContentLoaded', function() {
         groups: new Set()         // Set для хранения имен выбранных групп
     };
     
+    function initTagsIntegration() {
+        if (tagsLoaded || window.TagsIntegration) {
+            return;
+        }
+        
+        // Динамически загружаем скрипт интеграции тегов
+        const script = document.createElement('script');
+        script.src = '/static/js/applications/tags-integration.js';
+        script.onload = function() {
+            console.log('Tags integration loaded successfully');
+            tagsLoaded = true;
+            
+            // Если приложения уже загружены, обновляем их для показа тегов
+            if (allApplications && allApplications.length > 0) {
+                addTagsToExistingRows();
+            }
+        };
+        script.onerror = function() {
+            console.warn('Failed to load tags integration, continuing without tags');
+            tagsLoaded = true; // Помечаем как загруженное чтобы не пытаться снова
+        };
+        document.head.appendChild(script);
+    }    
+
+document.addEventListener('DOMContentLoaded', initTagsIntegration);
 
     // Инициализация страницы
     init();
@@ -297,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Загрузка списка приложений
      */
-    async function loadApplications() {
+    async function loadApplications(serverId = null) {
         // При полной перезагрузке приложений очищаем состояние
         clearCheckboxState();        
         try {
@@ -309,6 +335,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Формирование URL с параметрами
             let url = '/api/applications';
             const params = new URLSearchParams();
+
+            params.append('include_tags', 'true');
             
             if (selectedServerId !== 'all') {
                 params.append('server_id', selectedServerId);
@@ -328,6 +356,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Восстанавливаем состояние таблицы после отображения данных
                 // Состояние уже очищено, поэтому restoreTableState не нужен 
                 // restoreTableState();
+                if (window.TagsIntegration && data.applications) {
+                    data.applications.forEach(app => {
+                        if (app.tags && window.TagsIntegration.tagsCache) {
+                            window.TagsIntegration.tagsCache.set(app.id, app.tags);
+                        }
+                    });
+                }
+
+                filterAndDisplayApplications();
             } else {
                 console.error('Ошибка при загрузке приложений:', data.error);
                 showError('Не удалось загрузить список приложений');
@@ -666,17 +703,16 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 
 	// Создание строки приложения
-	function createApplicationRow(app, isChild) {
-		const row = document.createElement('tr');
-		row.className = isChild ? 'app-row child-row' : 'app-row';
-		row.setAttribute('data-app-id', app.id);
-		row.setAttribute('data-app-name', app.name.toLowerCase());
-		
-		// Статус приложения
-		const statusDot = app.status === 'online' ? 
-			'<span class="service-dot"></span>' : 
-			'<span class="service-dot offline"></span>';
-		
+    function createApplicationRow(app, isChild) {
+        const row = document.createElement('tr');
+        row.className = isChild ? 'app-row child-row' : 'app-row';
+        row.setAttribute('data-app-id', app.id);
+        row.setAttribute('data-app-name', app.name.toLowerCase());
+        
+        const statusDot = app.status === 'online' ? 
+            '<span class="service-dot"></span>' : 
+            '<span class="service-dot offline"></span>';
+        
         row.innerHTML = `
             <td>
                 <div class="checkbox-container">
@@ -695,7 +731,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </td>
             <td>${app.version || 'Н/Д'}</td>
-            <td>${statusDot} ${app.status || 'Н/Д'}</td>
+            <td>${statusDot} ${app.status}</td>
             <td>${app.server_name || 'Н/Д'}</td>
             <td>
                 <div class="actions-menu">
@@ -706,10 +742,92 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </td>
         `;
-		
-		return row;
-	}	
-    
+        
+        // ✅ ДОБАВИТЬ ТОЛЬКО ЭТИ 3 СТРОКИ:
+        if (window.TagsIntegration) {
+            setTimeout(() => addTagsToRow(row, app), 0);
+        }
+        
+        return row;
+    }
+
+    // Вспомогательная функция для добавления тегов в строку
+    function addTagsToRow(row, app) {
+        const nameCell = row.querySelector('td.service-name');
+        if (!nameCell) return;
+        
+        // Проверяем, не добавлены ли уже теги
+        if (nameCell.querySelector('.service-tags')) return;
+        
+        // Получаем текущее содержимое ячейки
+        const appName = app.name;
+        const distDetails = nameCell.querySelector('.dist-details');
+        
+        // Создаем новую структуру с тегами
+        const nameWithTags = document.createElement('div');
+        nameWithTags.className = 'service-name-with-tags';
+        nameWithTags.style.display = 'flex';
+        nameWithTags.style.alignItems = 'center';
+        nameWithTags.style.flexWrap = 'wrap';
+        
+        // Имя приложения
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'service-name-text';
+        nameSpan.textContent = appName;
+        nameWithTags.appendChild(nameSpan);
+        
+        // Контейнер для тегов
+        const tagsSpan = document.createElement('span');
+        tagsSpan.className = 'service-tags';
+        tagsSpan.setAttribute('data-app-id', app.id);
+        tagsSpan.style.marginLeft = '8px';
+        nameWithTags.appendChild(tagsSpan);
+        
+        // Очищаем ячейку и добавляем новую структуру
+        nameCell.innerHTML = '';
+        nameCell.appendChild(nameWithTags);
+        
+        // Возвращаем dist-details если он был
+        if (distDetails) {
+            nameCell.appendChild(distDetails);
+        } else {
+            // Создаем dist-details если его не было
+            const newDistDetails = document.createElement('div');
+            newDistDetails.className = 'dist-details';
+            newDistDetails.innerHTML = `
+                <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
+            `;
+            nameCell.appendChild(newDistDetails);
+        }
+        
+        // Асинхронно загружаем теги
+        if (window.TagsIntegration && window.TagsIntegration.loadApplicationTags) {
+            window.TagsIntegration.loadApplicationTags(app.id).then(tags => {
+                if (tags && tags.length > 0) {
+                    tagsSpan.innerHTML = window.TagsIntegration.createTagsBadgeHtml(tags, true);
+                }
+            }).catch(err => {
+                console.warn('Failed to load tags for app', app.id, err);
+            });
+        }
+    }
+
+    // Функция для добавления тегов к уже отображенным строкам
+    function addTagsToExistingRows() {
+        // Обрабатываем обычные строки приложений
+        document.querySelectorAll('tr.app-row, tr.app-child-row').forEach(row => {
+            const appId = row.getAttribute('data-app-id');
+            if (!appId) return;
+            
+            const app = allApplications.find(a => a.id == appId);
+            if (!app) return;
+            
+            addTagsToRow(row, app);
+        });
+    }
+
     /**
      * Обновление элементов пагинации
      * @param {number} totalPages - Общее количество страниц
@@ -3481,7 +3599,7 @@ function isGroupActionAvailable(apps, action) {
  * Создает пункты меню с учетом статуса приложения
  */
 function createActionMenuItems(app) {
-    return `
+    let menuHtml = `
         <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
         <a href="#" class="app-start-btn ${!isActionAvailable(app, 'start') ? 'disabled' : ''}" 
            data-app-id="${app.id}" data-action="start">Запустить</a>
@@ -3491,6 +3609,15 @@ function createActionMenuItems(app) {
            data-app-id="${app.id}" data-action="restart">Перезапустить</a>
         <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
     `;
+    if (window.TagsIntegration) {
+        menuHtml += `
+        <div class="dropdown-divider" style="margin: 5px 0; border-top: 1px solid #444;"></div>
+        <a href="#" class="dropdown-item" onclick="if(window.TagsIntegration) TagsIntegration.openTagsModal(${app.id}); return false;">
+            <i class="dropdown-icon">🏷️</i> Управление тегами
+        </a>`;
+    }
+    
+    return menuHtml;
 }
 
 /**

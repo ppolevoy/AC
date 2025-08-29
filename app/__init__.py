@@ -33,7 +33,13 @@ def create_app(config_name=None):
         from app.models.application import Application
         from app.models.application_group import ApplicationGroup
         from app.models.event import Event
-    
+        from app.models.tags import Tag, ApplicationInstanceTag, ApplicationGroupTag, init_system_tags
+
+        try:
+            init_system_tags()
+        except Exception as e:
+            app.logger.warning(f"Could not initialize system tags: {e}")
+                    
     # Регистрация маршрутов API
     from app.api import bp as api_bp
     app.register_blueprint(api_bp, url_prefix='/api')

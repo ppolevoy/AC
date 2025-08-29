@@ -17,7 +17,8 @@ from app.models.application_group import ApplicationGroup, ApplicationInstance
 from app.services.application_group_service import ApplicationGroupService
 
 from app.tasks.queue import task_queue, Task
-
+from app.models.tags import Tag, ApplicationInstanceTag, ApplicationGroupTag
+from sqlalchemy.orm import joinedload
 
 
 logger = logging.getLogger(__name__)
@@ -305,44 +306,124 @@ def refresh_server(server_id):
 # API для работы с приложениями
 @bp.route('/applications', methods=['GET'])
 def get_applications():
-    """Получение списка всех приложений"""
+    """Получение списка всех приложений с опциональными тегами"""
     try:
+        # Параметры запроса
+        include_tags = request.args.get('include_tags', 'false').lower() == 'true'
         server_id = request.args.get('server_id', type=int)
-        app_type = request.args.get('type')
         
         # Формируем базовый запрос
         query = Application.query
         
-        # Применяем фильтры, если они указаны
+        # Применяем фильтр по серверу если указан
         if server_id:
             query = query.filter_by(server_id=server_id)
-        
-        if app_type:
-            query = query.filter_by(app_type=app_type)
         
         applications = query.all()
         result = []
         
+        # Если нужны теги, загружаем их пакетно для оптимизации
+        tags_map = {}
+        if include_tags:
+            # Получаем все ID приложений
+            app_ids = [app.id for app in applications]
+            
+            if app_ids:
+                # Загружаем все экземпляры приложений одним запросом
+                instances = db.session.query(ApplicationInstance).filter(
+                    ApplicationInstance.application_id.in_(app_ids)
+                ).all()
+                instances_map = {inst.application_id: inst for inst in instances}
+                
+                # Загружаем все теги для экземпляров
+                if instances_map:
+                    instance_ids = [inst.id for inst in instances_map.values()]
+                    
+                    # Собственные теги экземпляров
+                    own_tags = db.session.query(
+                        ApplicationInstanceTag.instance_id,
+                        Tag
+                    ).join(Tag).filter(
+                        ApplicationInstanceTag.instance_id.in_(instance_ids)
+                    ).all()
+                    
+                    for instance_id, tag in own_tags:
+                        if instance_id not in tags_map:
+                            tags_map[instance_id] = []
+                        tags_map[instance_id].append(tag)
+                    
+                    # Унаследованные теги от групп
+                    group_ids = [inst.group_id for inst in instances_map.values() if inst.group_id]
+                    if group_ids:
+                        inherited_tags = db.session.query(
+                            ApplicationInstance.id,
+                            Tag
+                        ).select_from(ApplicationInstance).join(
+                            ApplicationGroupTag,
+                            ApplicationInstance.group_id == ApplicationGroupTag.group_id
+                        ).join(Tag).filter(
+                            ApplicationInstance.id.in_(instance_ids),
+                            ApplicationGroupTag.inheritable == True
+                        ).all()
+                        
+                        for instance_id, tag in inherited_tags:
+                            if instance_id not in tags_map:
+                                tags_map[instance_id] = []
+                            # Проверяем дубликаты
+                            if not any(t.id == tag.id for t in tags_map[instance_id]):
+                                tags_map[instance_id].append(tag)
+        
+        # Формируем результат
         for app in applications:
             server = Server.query.get(app.server_id)
+            group = ApplicationGroup.query.get(app.group_id) if app.group_id else None
             
-            result.append({
+            app_data = {
                 'id': app.id,
                 'name': app.name,
+                'path': app.path,
+                'log_path': app.log_path,
+                'version': app.version,
+                'distr_path': app.distr_path,
+                'container_id': app.container_id,
+                'container_name': app.container_name,
+                'eureka_url': app.eureka_url,
+                'compose_project_dir': app.compose_project_dir,
+                'ip': app.ip,
+                'port': app.port,
                 'server_id': app.server_id,
                 'server_name': server.name if server else None,
                 'type': app.app_type,
                 'status': app.status,
                 'version': app.version,
-                'group_name': app.group_name,
+                'group_name': group.name if group else None,
                 'instance_number': app.instance_number,
                 'start_time': app.start_time.isoformat() if app.start_time else None
-            })
+            }
+            
+            # Добавляем теги если запрошены
+            if include_tags:
+                app_data['tags'] = []
+                instance = instances_map.get(app.id) if 'instances_map' in locals() else None
+                if instance and instance.id in tags_map:
+                    app_data['tags'] = [
+                        {
+                            'id': tag.id,
+                            'name': tag.name,
+                            'category': tag.category,
+                            'color': tag.color,
+                            'description': tag.description
+                        }
+                        for tag in tags_map[instance.id]
+                    ]
+            
+            result.append(app_data)
         
         return jsonify({
             'success': True,
             'applications': result
         })
+        
     except Exception as e:
         logger.error(f"Ошибка при получении списка приложений: {str(e)}")
         return jsonify({
@@ -2283,6 +2364,136 @@ def test_playbook_execution(app_id):
         
     except Exception as e:
         logger.error(f"Ошибка при тестировании playbook: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# endpoint для фильтрации по тегам:
+@bp.route('/applications/by-tags', methods=['GET'])
+def get_applications_by_tags():
+    """Получить приложения, отфильтрованные по тегам"""
+    try:
+        # Получаем параметры фильтрации
+        tag_names = request.args.getlist('tags')
+        match_all = request.args.get('match_all', 'false').lower() == 'true'
+        
+        if not tag_names:
+            return get_applications()  # Возвращаем все приложения
+        
+        # Получаем ID тегов по именам
+        tags = Tag.query.filter(Tag.name.in_(tag_names)).all()
+        if not tags:
+            return jsonify({
+                'success': True,
+                'applications': [],
+                'total': 0
+            })
+        
+        tag_ids = [tag.id for tag in tags]
+        
+        # Строим запрос
+        query = db.session.query(Application).distinct()
+        query = query.join(
+            ApplicationInstance,
+            Application.id == ApplicationInstance.application_id
+        )
+        
+        if match_all:
+            # Приложение должно иметь ВСЕ указанные теги
+            for tag_id in tag_ids:
+                tag_subquery = db.session.query(ApplicationInstance.id).join(
+                    ApplicationInstanceTag,
+                    ApplicationInstance.id == ApplicationInstanceTag.instance_id
+                ).filter(
+                    ApplicationInstanceTag.tag_id == tag_id
+                ).union(
+                    db.session.query(ApplicationInstance.id).join(
+                        ApplicationGroupTag,
+                        ApplicationInstance.group_id == ApplicationGroupTag.group_id
+                    ).filter(
+                        ApplicationGroupTag.tag_id == tag_id,
+                        ApplicationGroupTag.inheritable == True
+                    )
+                ).subquery()
+                
+                query = query.filter(ApplicationInstance.id.in_(tag_subquery))
+        else:
+            # Приложение должно иметь ХОТЯ БЫ ОДИН из указанных тегов
+            tags_subquery = db.session.query(ApplicationInstance.id).join(
+                ApplicationInstanceTag,
+                ApplicationInstance.id == ApplicationInstanceTag.instance_id
+            ).filter(
+                ApplicationInstanceTag.tag_id.in_(tag_ids)
+            ).union(
+                db.session.query(ApplicationInstance.id).join(
+                    ApplicationGroupTag,
+                    ApplicationInstance.group_id == ApplicationGroupTag.group_id
+                ).filter(
+                    ApplicationGroupTag.tag_id.in_(tag_ids),
+                    ApplicationGroupTag.inheritable == True
+                )
+            ).subquery()
+            
+            query = query.filter(ApplicationInstance.id.in_(tags_subquery))
+        
+        applications = query.all()
+        
+        # Формируем результат с тегами
+        result = []
+        for app in applications:
+            server = Server.query.get(app.server_id)
+            
+            # Получаем теги приложения
+            instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
+            tags_list = []
+            
+            if instance:
+                # Добавляем методы для работы с тегами
+                from app.models.tag_mixins import ApplicationInstanceTagMixin
+                for method_name in dir(ApplicationInstanceTagMixin):
+                    if not method_name.startswith('_'):
+                        method = getattr(ApplicationInstanceTagMixin, method_name)
+                        setattr(instance.__class__, method_name, method)
+                
+                all_tags = instance.get_all_tags()
+                tags_list = [
+                    {
+                        'id': tag.id,
+                        'name': tag.name,
+                        'category': tag.category,
+                        'color': tag.color,
+                        'description': tag.description
+                    }
+                    for tag in all_tags
+                ]
+            
+            app_data = {
+                'id': app.id,
+                'name': app.name,
+                'version': app.version,
+                'status': app.status,
+                'server_id': app.server_id,
+                'server_name': server.name if server else None,
+                'group_id': app.group_id,
+                'instance_number': app.instance_number,
+                'tags': tags_list
+            }
+            
+            result.append(app_data)
+        
+        return jsonify({
+            'success': True,
+            'applications': result,
+            'total': len(result),
+            'filter': {
+                'tags': tag_names,
+                'match_all': match_all
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error filtering applications by tags: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

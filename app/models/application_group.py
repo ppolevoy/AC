@@ -1,11 +1,10 @@
-# app/models/application_group.py
-# ФИНАЛЬНАЯ ВЕРСИЯ - без хранения переменных в БД
-
 from app import db
 from datetime import datetime
 from sqlalchemy import event
 
-class ApplicationGroup(db.Model):
+from app.models.tag_mixins import ApplicationGroupTagMixin, ApplicationInstanceTagMixin
+
+class ApplicationGroup(db.Model, ApplicationGroupTagMixin):
     """Группа приложений с настройками артефактов"""
     __tablename__ = 'application_groups'
     
@@ -46,7 +45,7 @@ class ApplicationGroup(db.Model):
         return f'<ApplicationGroup {self.name}>'
 
 
-class ApplicationInstance(db.Model):
+class ApplicationInstance(db.Model, ApplicationInstanceTagMixin):
     """Экземпляр приложения с возможностью переопределения настроек"""
     __tablename__ = 'application_instances'
     

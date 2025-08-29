@@ -1,0 +1,359 @@
+/* Стили для системы Badge-тегов */
+
+/* Контейнер для тегов */
+.tags-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    flex-wrap: wrap;
+    max-width: 400px;
+}
+
+/* Контейнер имени сервиса с тегами */
+.service-name-with-tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.service-name-text {
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.service-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* Базовый стиль Badge-тега */
+.tag-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    background-color: #6c757d;
+    white-space: nowrap;
+    cursor: default;
+    transition: all 0.2s ease;
+    text-transform: lowercase;
+    letter-spacing: 0.3px;
+    height: 20px;
+    line-height: 14px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Hover эффект для тегов */
+.tag-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Категории тегов с дефолтными цветами */
+.tag-badge.tag-environment {
+    font-weight: 600;
+}
+
+.tag-badge.tag-priority {
+    background: linear-gradient(135deg, var(--tag-color, #fd7e14) 0%, 
+                                     color-mix(in srgb, var(--tag-color, #fd7e14) 80%, black) 100%);
+}
+
+.tag-badge.tag-status {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.tag-badge.tag-service_type {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 10px;
+}
+
+/* Тег "еще больше" */
+.tag-badge.tag-more {
+    background-color: #e9ecef;
+    color: #495057;
+    cursor: pointer;
+    font-weight: 600;
+    min-width: 30px;
+    justify-content: center;
+}
+
+.tag-badge.tag-more:hover {
+    background-color: #dee2e6;
+}
+
+/* Выбираемые теги в модальном окне */
+.tag-badge.tag-selectable {
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.tag-badge.tag-selectable:hover {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.tag-badge.tag-selectable.selected {
+    opacity: 1;
+    outline: 2px solid #007bff;
+    outline-offset: 1px;
+}
+
+/* Загрузка тегов */
+.tags-loading {
+    color: #6c757d;
+    font-size: 11px;
+    font-style: italic;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+/* Попап со всеми тегами */
+.tags-popup {
+    position: fixed;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-width: 400px;
+    animation: fadeIn 0.2s ease;
+}
+
+.tags-popup-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+}
+
+.tags-popup-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.tags-popup-close:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.tags-popup-content {
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.tags-popup-content .tags-container {
+    max-width: none;
+    gap: 6px;
+}
+
+/* Модальное окно управления тегами */
+.tags-modal-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.tags-section {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.tags-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.tags-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tags-section h5 {
+    margin: 8px 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.current-tags,
+.inherited-tags,
+.available-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 30px;
+    align-items: center;
+}
+
+.no-tags {
+    color: #adb5bd;
+    font-size: 12px;
+    font-style: italic;
+}
+
+.tag-category {
+    margin-bottom: 16px;
+}
+
+.tags-help {
+    font-size: 11px;
+    color: #6c757d;
+    margin-bottom: 12px;
+    font-style: italic;
+}
+
+/* Форма создания нового тега */
+.new-tag-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.new-tag-form input[type="text"] {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.new-tag-form .color-picker {
+    width: 40px;
+    height: 32px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.new-tag-form select {
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+}
+
+.new-tag-form .action-btn {
+    padding: 6px 16px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.new-tag-form .action-btn:hover {
+    background: #0056b3;
+}
+
+/* Интеграция с таблицей приложений */
+.app-row td.service-name,
+.app-child-row td.service-name {
+    vertical-align: middle;
+}
+
+/* Адаптация для темной темы */
+.dark-theme .tag-badge {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dark-theme .tags-popup {
+    background: #2d3142;
+    border-color: #3d4155;
+}
+
+.dark-theme .tags-popup-header {
+    background: #252736;
+    border-color: #3d4155;
+    color: #e9ecef;
+}
+
+.dark-theme .tags-popup-close {
+    color: #adb5bd;
+}
+
+.dark-theme .tags-popup-close:hover {
+    background: #3d4155;
+    color: #e9ecef;
+}
+
+.dark-theme .tags-modal-container {
+    color: #e9ecef;
+}
+
+.dark-theme .tags-section {
+    border-color: #3d4155;
+}
+
+.dark-theme .tags-section h4,
+.dark-theme .tags-section h5 {
+    color: #adb5bd;
+}
+
+.dark-theme .no-tags {
+    color: #6c757d;
+}
+
+.dark-theme .new-tag-form input,
+.dark-theme .new-tag-form select {
+    background: #2d3142;
+    border-color: #3d4155;
+    color: #e9ecef;
+}
+
+.dark-theme .tag-badge.tag-more {
+    background-color: #3d4155;
+    color: #adb5bd;
+}
+
+.dark-theme .tag-badge.tag-more:hover {
+    background-color: #495057;
+    color: #e9ecef;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

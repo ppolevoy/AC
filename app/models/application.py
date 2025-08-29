@@ -1,8 +1,9 @@
 from app import db
 from datetime import datetime
 import re
+from app.models.tag_mixins import ApplicationTagProxyMixin
 
-class Application(db.Model):
+class Application(db.Model, ApplicationTagProxyMixin):
     __tablename__ = 'applications'
     
     id = db.Column(db.Integer, primary_key=True)
