@@ -2,6 +2,21 @@
  * Интеграция системы тегов в интерфейс приложений
  */
 
+// Проверяем доступность функций уведомлений
+(function() {
+    // Если showError не определена, создаем безопасную обертку
+    if (typeof showError === 'undefined') {
+        window.showError = function(message, duration) {
+            if (typeof showNotification === 'function') {
+                showNotification('❌ ' + message, duration || 5000);
+            } else {
+                console.error(message);
+                alert('Ошибка: ' + message);
+            }
+        };
+    }
+})();
+
 // Глобальный кеш тегов для оптимизации
 const tagsCache = new Map();
 
@@ -395,7 +410,7 @@ function initializeTagsModalHandlers(appId) {
             const data = await response.json();
             
             if (data.success) {
-                showSuccess(`Тег "${name}" создан`);
+                showNotification(`Тег "${name}" создан`);
                 // Добавляем новый тег к приложению
                 await addTagToApplication(appId, name);
                 // Перезагружаем модальное окно
@@ -426,7 +441,7 @@ async function addTagToApplication(appId, tagName) {
         if (data.success) {
             // Очищаем кеш
             tagsCache.delete(appId);
-            showSuccess(`Тег "${tagName}" добавлен`);
+            showNotification(`Тег "${tagName}" добавлен`);
             return true;
         } else {
             showError(data.error || 'Не удалось добавить тег');
@@ -453,7 +468,7 @@ async function removeTagFromApplication(appId, tagName) {
         if (data.success) {
             // Очищаем кеш
             tagsCache.delete(appId);
-            showSuccess(`Тег "${tagName}" удален`);
+            showNotification(`Тег "${tagName}" удален`);
             return true;
         } else {
             showError(data.error || 'Не удалось удалить тег');
@@ -483,7 +498,7 @@ async function batchAddTags(applicationIds, tagName) {
         const data = await response.json();
         
         if (data.success) {
-            showSuccess(`Тег добавлен к ${data.processed} приложениям`);
+            showNotification(`Тег добавлен к ${data.processed} приложениям`);
             // Очищаем кеш для обновленных приложений
             applicationIds.forEach(id => tagsCache.delete(id));
             // Обновляем отображение

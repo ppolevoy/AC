@@ -490,3 +490,329 @@ def batch_tag_applications():
     except Exception as e:
         logger.error(f"Error in batch tag operation: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+    
+@bp.route('/tags/auto-assign-all', methods=['POST'])
+def auto_assign_tags_to_all():
+    """Применить автоматические теги ко всем приложениям"""
+    try:
+        data = request.get_json() or {}
+        dry_run = data.get('dry_run', False)
+        
+        if dry_run:
+            # Предпросмотр без применения
+            applications = Application.query.all()
+            preview = []
+            
+            for app in applications:
+                if not app.instance:
+                    continue
+                
+                # Симулируем определение тегов
+                potential_tags = []
+                
+                # Тип приложения
+                if app.app_type:
+                    type_tag = AutoTaggingService._get_service_type_tag(app.app_type)
+                    if type_tag:
+                        potential_tags.append(type_tag)
+                
+                # Окружение
+                env_tag = AutoTaggingService._detect_environment(app.name)
+                if env_tag:
+                    potential_tags.append(env_tag)
+                
+                # Приоритет
+                priority_tag = AutoTaggingService._detect_priority(app.name)
+                if priority_tag:
+                    potential_tags.append(priority_tag)
+                
+                # Версия
+                if app.version:
+                    version_tag = AutoTaggingService._get_version_tag(app.version)
+                    if version_tag:
+                        potential_tags.append(version_tag)
+                
+                if potential_tags:
+                    preview.append({
+                        'app_id': app.id,
+                        'app_name': app.name,
+                        'potential_tags': potential_tags
+                    })
+            
+            return jsonify({
+                'success': True,
+                'dry_run': True,
+                'preview': preview,
+                'total_apps': len(applications),
+                'apps_to_tag': len(preview)
+            })
+        
+        else:
+            # Применяем теги
+            stats = AutoTaggingService.auto_tag_all_applications()
+            
+            return jsonify({
+                'success': True,
+                'dry_run': False,
+                'statistics': stats
+            })
+    
+    except Exception as e:
+        logger.error(f"Error in auto-assign tags to all: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/applications/<int:app_id>/auto-tag', methods=['POST'])
+def auto_tag_single_application(app_id):
+    """Применить автоматические теги к одному приложению"""
+    try:
+        app = Application.query.get_or_404(app_id)
+        
+        # Убедимся, что есть экземпляр
+        if not app.instance:
+            from app.services.application_group_service import ApplicationGroupService
+            instance = ApplicationGroupService.determine_group_for_application(app)
+            if not instance:
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not create application instance'
+                }), 500
+        
+        # Применяем теги
+        added_tags = AutoTaggingService.apply_tags_from_agent_data(app, {})
+        
+        # Очищаем конфликты
+        AutoTaggingService.cleanup_conflicting_tags(app)
+        
+        return jsonify({
+            'success': True,
+            'application': app.name,
+            'tags_added': added_tags,
+            'count': len(added_tags)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error auto-tagging application {app_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/groups/<int:group_id>/auto-tag', methods=['POST'])
+def auto_tag_group(group_id):
+    """Применить автоматические теги к группе"""
+    try:
+        group = ApplicationGroup.query.get_or_404(group_id)
+        
+        # Применяем теги к группе
+        added_tags = AutoTaggingService.apply_group_tags(group)
+        
+        return jsonify({
+            'success': True,
+            'group': group.name,
+            'tags_added': added_tags,
+            'count': len(added_tags),
+            'instances_synced': group.instances.count()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error auto-tagging group {group_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ===== НАСЛЕДОВАНИЕ ТЕГОВ =====
+
+@bp.route('/groups/<int:group_id>/inherit-tags', methods=['POST'])
+def inherit_group_tags(group_id):
+    """Принудительно синхронизировать наследуемые теги группы с экземплярами"""
+    try:
+        group = ApplicationGroup.query.get_or_404(group_id)
+        
+        # Добавляем методы тегов
+        from app.models.tag_mixins import ApplicationGroupTagMixin
+        for method_name in dir(ApplicationGroupTagMixin):
+            if not method_name.startswith('_'):
+                method = getattr(ApplicationGroupTagMixin, method_name)
+                setattr(group.__class__, method_name, method)
+        
+        # Синхронизируем теги
+        updated_count = group.sync_tags_to_instances()
+        
+        # Получаем список наследуемых тегов
+        inheritable_tags = group.get_inheritable_tags()
+        
+        return jsonify({
+            'success': True,
+            'group': group.name,
+            'inheritable_tags': [tag.name for tag in inheritable_tags],
+            'instances_updated': updated_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error syncing group tags: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/groups/<int:group_id>/tags/<int:tag_id>/inheritable', methods=['PUT'])
+def update_tag_inheritance(group_id, tag_id):
+    """Изменить флаг наследования тега в группе"""
+    try:
+        group = ApplicationGroup.query.get_or_404(group_id)
+        tag = Tag.query.get_or_404(tag_id)
+        
+        data = request.get_json()
+        inheritable = data.get('inheritable', True)
+        
+        # Находим связь
+        association = ApplicationGroupTag.query.filter_by(
+            group_id=group_id,
+            tag_id=tag_id
+        ).first()
+        
+        if not association:
+            return jsonify({
+                'success': False,
+                'error': 'Tag not found in group'
+            }), 404
+        
+        # Обновляем флаг
+        association.inheritable = inheritable
+        db.session.commit()
+        
+        # Если включили наследование, синхронизируем
+        if inheritable:
+            from app.models.tag_mixins import ApplicationGroupTagMixin
+            for method_name in dir(ApplicationGroupTagMixin):
+                if not method_name.startswith('_'):
+                    method = getattr(ApplicationGroupTagMixin, method_name)
+                    setattr(group.__class__, method_name, method)
+            
+            updated = group.sync_tags_to_instances()
+            message = f"Tag '{tag.name}' is now inheritable, synced to {updated} instances"
+        else:
+            message = f"Tag '{tag.name}' is no longer inheritable"
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'tag': tag.name,
+            'inheritable': inheritable
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating tag inheritance: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ===== СТАТИСТИКА И МОНИТОРИНГ =====
+
+@bp.route('/tags/inheritance-status', methods=['GET'])
+def get_inheritance_status():
+    """Получить статус наследования тегов по всем группам"""
+    try:
+        groups = ApplicationGroup.query.all()
+        
+        result = []
+        for group in groups:
+            # Получаем наследуемые теги
+            inheritable_tags = ApplicationGroupTag.query.filter_by(
+                group_id=group.id,
+                inheritable=True
+            ).all()
+            
+            # Подсчитываем экземпляры
+            instances_count = group.instances.count()
+            
+            # Проверяем, у всех ли экземпляров есть наследуемые теги
+            sync_status = 'synced'
+            missing_tags = []
+            
+            for tag_assoc in inheritable_tags:
+                tag = tag_assoc.tag
+                instances_without_tag = 0
+                
+                for instance in group.instances:
+                    has_tag = ApplicationInstanceTag.query.filter_by(
+                        instance_id=instance.id,
+                        tag_id=tag.id
+                    ).first() is not None
+                    
+                    if not has_tag:
+                        instances_without_tag += 1
+                
+                if instances_without_tag > 0:
+                    sync_status = 'out_of_sync'
+                    missing_tags.append({
+                        'tag': tag.name,
+                        'missing_in': instances_without_tag
+                    })
+            
+            result.append({
+                'group_id': group.id,
+                'group_name': group.name,
+                'instances_count': instances_count,
+                'inheritable_tags': [t.tag.name for t in inheritable_tags],
+                'sync_status': sync_status,
+                'missing_tags': missing_tags
+            })
+        
+        # Подсчитываем общую статистику
+        total_groups = len(result)
+        synced_groups = sum(1 for g in result if g['sync_status'] == 'synced')
+        out_of_sync_groups = total_groups - synced_groups
+        
+        return jsonify({
+            'success': True,
+            'groups': result,
+            'summary': {
+                'total_groups': total_groups,
+                'synced_groups': synced_groups,
+                'out_of_sync_groups': out_of_sync_groups
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting inheritance status: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/tags/conflicts', methods=['GET'])
+def get_tag_conflicts():
+    """Найти приложения с конфликтующими тегами"""
+    try:
+        # Определяем группы взаимоисключающих тегов
+        exclusive_groups = [
+            ['production', 'staging', 'development', 'testing'],
+            ['critical', 'high-priority', 'medium-priority', 'low-priority'],
+        ]
+        
+        conflicts = []
+        
+        # Проверяем все экземпляры
+        instances = ApplicationInstance.query.all()
+        
+        for instance in instances:
+            # Получаем теги экземпляра
+            instance_tags = ApplicationInstanceTag.query.filter_by(
+                instance_id=instance.id
+            ).all()
+            
+            tag_names = {t.tag.name for t in instance_tags}
+            
+            # Проверяем конфликты
+            for exclusive_group in exclusive_groups:
+                conflicting_tags = tag_names.intersection(exclusive_group)
+                
+                if len(conflicting_tags) > 1:
+                    app = Application.query.filter_by(id=instance.application_id).first()
+                    conflicts.append({
+                        'app_id': app.id if app else None,
+                        'app_name': app.name if app else instance.original_name,
+                        'conflicting_tags': list(conflicting_tags),
+                        'conflict_type': 'exclusive_group'
+                    })
+        
+        return jsonify({
+            'success': True,
+            'conflicts': conflicts,
+            'total': len(conflicts)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error finding tag conflicts: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500                

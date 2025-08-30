@@ -1,4 +1,3 @@
-# app/services/agent_service.py
 import aiohttp
 import asyncio
 import logging
@@ -11,6 +10,7 @@ from app.models.event import Event
 from app.config import Config
 
 from app.services.application_group_service import ApplicationGroupService
+from app.services.auto_tagging_service import AutoTaggingService
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +248,7 @@ class AgentService:
         """
         from datetime import datetime
         from app.services.application_group_service import ApplicationGroupService
+        from app.services.auto_tagging_service import AutoTaggingService
         
         server = Server.query.get(server_id)
         if not server:
@@ -274,7 +275,9 @@ class AgentService:
             # Создаем список существующих ID приложений на сервере для отслеживания удаленных
             existing_app_ids = set(app.id for app in Application.query.filter_by(server_id=server.id).all())
             updated_app_ids = set()
-            
+            # Счетчик для статистики тегов
+            total_tags_added = 0
+
             # Обрабатываем docker-приложения
             if 'docker-app' in server_data and 'applications' in server_data['docker-app']:
                 docker_apps = server_data['docker-app']['applications']
@@ -311,12 +314,23 @@ class AgentService:
                     app.ip = app_data.get('ip')
                     app.port = app_data.get('port')
                     app.status = 'online'  # Docker-приложения, которые приходят в списке, считаем онлайн
+
+                    if app.id:
+                        tags_added = AutoTaggingService.apply_tags_from_agent_data(app, app_data)
+                        total_tags_added += len(tags_added)
+                    if tags_added:
+                        logger.info(f"Добавлено {len(tags_added)} тегов для {app.name}: {', '.join(tags_added)}")                    
                     
                     # Определяем группу приложения и создаем/обновляем экземпляр
                     instance = ApplicationGroupService.resolve_application_group(app)
                     if instance:
                         logger.debug(f"Docker-приложение {container_name} привязано к группе {instance.group.name}")
-                    
+
+                    # Применяем теги к группе если она новая
+                    if instance.group and not instance.group.tag_associations:
+                        group_tags = AutoTaggingService.apply_group_tags(instance.group)
+                        if group_tags:
+                            logger.info(f"Добавлено {len(group_tags)} тегов для группы {instance.group.name}")                    
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -349,6 +363,10 @@ class AgentService:
                     else:
                         logger.info(f"Обновление существующего site-приложения {name} на сервере {server.name}")
                     
+                    if app.id:
+                        tags_added = AutoTaggingService.apply_tags_from_agent_data(app, app_data)
+                        total_tags_added += len(tags_added)
+
                     # Обновляем данные приложения
                     app.path = app_data.get('path')
                     app.log_path = app_data.get('log_path')
@@ -369,6 +387,12 @@ class AgentService:
                     if instance:
                         logger.debug(f"Site-приложение {name} привязано к группе {instance.group.name}")
                     
+                    # Применяем теги к группе если она новая
+                    if instance.group and not instance.group.tag_associations:
+                        group_tags = AutoTaggingService.apply_group_tags(instance.group)
+                        if group_tags:
+                            logger.info(f"Добавлено {len(group_tags)} тегов для группы {instance.group.name}")    
+
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -400,6 +424,10 @@ class AgentService:
                         db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
                         logger.info(f"Обновление существующего service-приложения {name} на сервере {server.name}")
+
+                    if app.id:
+                        tags_added = AutoTaggingService.apply_tags_from_agent_data(app, app_data)
+                        total_tags_added += len(tags_added)                        
                     
                     # Обновляем данные приложения
                     app.path = app_data.get('path')
@@ -421,6 +449,12 @@ class AgentService:
                     if instance:
                         logger.debug(f"Service-приложение {name} привязано к группе {instance.group.name}")
                     
+                    # Применяем теги к группе если она новая
+                    if instance.group and not instance.group.tag_associations:
+                        group_tags = AutoTaggingService.apply_group_tags(instance.group)
+                        if group_tags:
+                            logger.info(f"Добавлено {len(group_tags)} тегов для группы {instance.group.name}")                        
+
                     if app.id:
                         updated_app_ids.add(app.id)
             
@@ -437,7 +471,10 @@ class AgentService:
             
             # Коммитим изменения
             db.session.commit()
-            logger.info(f"Информация о приложениях на сервере {server.name} успешно обновлена с определением групп")
+            if total_tags_added > 0:
+                logger.info(f"Всего добавлено {total_tags_added} тегов при обновлении сервера {server.name}")
+            
+            logger.info(f"Информация о приложениях на сервере {server.name} успешно обновлена с определением групп и тегов")
             return True
             
         except Exception as e:
