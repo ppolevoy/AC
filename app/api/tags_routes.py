@@ -815,4 +815,29 @@ def get_tag_conflicts():
         
     except Exception as e:
         logger.error(f"Error finding tag conflicts: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500                
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+@bp.route('/groups/<int:group_id>/tags/<string:tag_name>', methods=['DELETE'])
+def remove_group_tag(group_id, tag_name):
+    """Удалить тег у группы"""
+    try:
+        group = ApplicationGroup.query.get_or_404(group_id)
+        
+        # Добавляем методы тегов
+        from app.models.tag_mixins import ApplicationGroupTagMixin
+        for method_name in dir(ApplicationGroupTagMixin):
+            if not method_name.startswith('_'):
+                method = getattr(ApplicationGroupTagMixin, method_name)
+                setattr(group.__class__, method_name, method)
+        
+        if group.remove_tag(tag_name):
+            return jsonify({
+                'success': True,
+                'message': f"Tag '{tag_name}' removed from group successfully"
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Tag not found'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error removing tag from group: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500    

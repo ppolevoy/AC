@@ -82,6 +82,12 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(script);
     }    
 
+window.allApplications = window.allApplications || [];
+window.groupingEnabled = false;
+window.expandedGroups = [];
+window.currentPage = 1;
+window.pageSize = 10;    
+
 document.addEventListener('DOMContentLoaded', initTagsIntegration);
 
     // Инициализация страницы
@@ -351,6 +357,7 @@ document.addEventListener('DOMContentLoaded', initTagsIntegration);
             
             if (data.success) {
                 allApplications = data.applications;
+                window.allApplications = allApplications;
                 filterAndDisplayApplications();
                 
                 // Восстанавливаем состояние таблицы после отображения данных
@@ -506,85 +513,106 @@ document.addEventListener('DOMContentLoaded', initTagsIntegration);
 		updatePagination(totalPages);
 	}
 
-	/**
-	 * Отображение сгруппированных приложений
-	 * @param {Array} applications - массив приложений для отображения
-	 */
-	function displayGroupedApplications(applications) {
-		// Группируем приложения по имени группы
-		const groups = {};
-		
-		applications.forEach(app => {
-			const groupName = app.group_name || app.name;
-			if (!groups[groupName]) {
-				groups[groupName] = [];
-			}
-			groups[groupName].push(app);
-		});
-		
-		// Convert groups to array for sorting
-		const groupEntries = Object.entries(groups).map(([name, apps]) => ({
-			name,
-			apps,
-			count: apps.length
-		}));
-		
-		// Sort groups by name
-		groupEntries.sort((a, b) => a.name.localeCompare(b.name));
-		
-		// Pagination
-		const totalGroups = groupEntries.length;
-		const totalPages = Math.ceil(totalGroups / pageSize);
-		
-		if (currentPage > totalPages && totalPages > 0) {
-			currentPage = totalPages;
-		}
-		
-		const startIndex = (currentPage - 1) * pageSize;
-		const endIndex = Math.min(startIndex + pageSize, totalGroups);
-		const displayedGroups = groupEntries.slice(startIndex, endIndex);
-		
-		// Display the groups
-		displayedGroups.forEach(group => {
-			// If only one application in group, show as regular row
-			if (group.count === 1) {
-				const appRow = createApplicationRow(group.apps[0], false);
-				applicationsTableBody.appendChild(appRow);
-				return;
-			}
-			
-			// Create the group row
-			const groupRow = createGroupRow(group.name, group.apps);
-			applicationsTableBody.appendChild(groupRow);
-			
-			// Create the wrapper row for child elements
-			const wrapperRow = document.createElement('tr');
-			wrapperRow.className = 'child-wrapper';
-			wrapperRow.setAttribute('data-group', group.name);
-			
-			// Create a cell that spans all columns
-			const wrapperCell = document.createElement('td');
-			wrapperCell.setAttribute('colspan', '6'); // Adjust based on your table columns
-			
-			// Create the container for the nested table
-			const childContainer = document.createElement('div');
-			childContainer.className = 'child-container';
-			
-			// Create the nested table
-			const childTable = document.createElement('table');
-			childTable.className = 'child-table';
-			
-			// Create table body
-			const childTableBody = document.createElement('tbody');
-			
-			// Create rows for each application in the group
-            group.apps.forEach(app => {
-                const childRow = document.createElement('tr');
+/**
+ * Отображение сгруппированных приложений с поддержкой тегов
+ * @param {Array} applications - массив приложений для отображения
+ */
+function displayGroupedApplications(applications) {
+    // Группируем приложения по имени группы
+    const groups = {};
+    applications.forEach(app => {
+        const groupName = app.group_name || app.name;
+        if (!groups[groupName]) {
+            groups[groupName] = {
+                apps: [],
+                id: app.group_id || null // Сохраняем ID группы
+            };
+        }
+        groups[groupName].apps.push(app);
+    });
+    
+    // Convert groups to array for sorting
+    const groupEntries = Object.entries(groups).map(([name, data]) => ({
+        name,
+        apps: data.apps,
+        id: data.id,
+        count: data.apps.length
+    }));
+    
+    // Sort groups by name
+    groupEntries.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Pagination
+    const totalGroups = groupEntries.length;
+    const totalPages = Math.ceil(totalGroups / pageSize);
+    
+    if (currentPage > totalPages && totalPages > 0) {
+        currentPage = totalPages;
+    }
+    
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalGroups);
+    const displayedGroups = groupEntries.slice(startIndex, endIndex);
+    
+    // Отображаем группы
+    displayedGroups.forEach(group => {
+        // Если в группе только одно приложение, покажем как обычную строку
+        if (group.count === 1) {
+            // Используем функцию с тегами если она доступна
+            let appRow;
+            if (window.TagsIntegration && window.TagsIntegration.createApplicationRowWithTags) {
+                appRow = window.TagsIntegration.createApplicationRowWithTags(group.apps[0], false);
+            } else {
+                appRow = createApplicationRow(group.apps[0], false);
+            }
+            applicationsTableBody.appendChild(appRow);
+            return;
+        }
+        
+        // Create the group row with tags support
+        let groupRow;
+        if (window.TagsIntegration && window.TagsIntegration.createGroupRowWithTags) {
+            groupRow = window.TagsIntegration.createGroupRowWithTags(group.name, group.apps, group.id);
+        } else {
+            groupRow = createGroupRow(group.name, group.apps);
+        }
+        applicationsTableBody.appendChild(groupRow);
+        
+        // Create the wrapper row for child elements
+        const wrapperRow = document.createElement('tr');
+        wrapperRow.className = 'child-wrapper';
+        wrapperRow.setAttribute('data-group', group.name);
+        
+        // Create a cell that spans all columns
+        const wrapperCell = document.createElement('td');
+        wrapperCell.setAttribute('colspan', '6'); // Adjust based on your table columns
+        
+        // Create the container for the nested table
+        const childContainer = document.createElement('div');
+        childContainer.className = 'child-container';
+        
+        // Create the nested table
+        const childTable = document.createElement('table');
+        childTable.className = 'child-table';
+        
+        // Create table body
+        const childTableBody = document.createElement('tbody');
+        
+        // Create rows for each application in the group with tags support
+        group.apps.forEach(app => {
+            let childRow;
+            
+            // Используем функцию с тегами если она доступна
+            if (window.TagsIntegration && window.TagsIntegration.createChildRowWithTags) {
+                childRow = window.TagsIntegration.createChildRowWithTags(app, group.name);
+            } else {
+                // Fallback на старую версию без тегов
+                childRow = document.createElement('tr');
                 childRow.className = 'app-child-row';
                 childRow.setAttribute('data-app-id', app.id);
                 childRow.setAttribute('data-parent', group.name);
                 
-                const statusDot = app.status === 'online' ? 
+                const statusDot = app.status === 'online' ?
                     '<span class="service-dot"></span>' : 
                     '<span class="service-dot offline"></span>';
                 
@@ -617,34 +645,35 @@ document.addEventListener('DOMContentLoaded', initTagsIntegration);
                         </div>
                     </td>
                 `;
-				
-				// Добавляем обработчик клика непосредственно для этой строки
+                
+                // Добавляем обработчик клика непосредственно для этой строки
                 childRow.addEventListener('click', function(e) {
                     if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
                         return;
                     }
                     this.classList.toggle('expanded');
                 });
-                
-                childTableBody.appendChild(childRow);
-            });
-			
-			// Assemble the nested structure
-			childTable.appendChild(childTableBody);
-			childContainer.appendChild(childTable);
-			wrapperCell.appendChild(childContainer);
-			wrapperRow.appendChild(wrapperCell);
-			
-			// Add wrapper row to the table
-			applicationsTableBody.appendChild(wrapperRow);
-		});
-		
+            }
+            
+            childTableBody.appendChild(childRow);
+        });
+        
+        // Assemble the nested structure
+        childTable.appendChild(childTableBody);
+        childContainer.appendChild(childTable);
+        wrapperCell.appendChild(childContainer);
+        wrapperRow.appendChild(wrapperCell);
+        
+        // Add wrapper row to the table
+        applicationsTableBody.appendChild(wrapperRow);
+    });
+    
     setupAppActionButtons();
     setupGroupActionButtons();
     
     // Обновляем пагинацию
     updatePagination(totalPages);
-	}
+}
 
 	// Создание строки группы
 	function createGroupRow(groupName, groupApps) {
@@ -3767,6 +3796,76 @@ function getArtifactsCacheAge(appId) {
         return (Date.now() - artifactsCache[cacheKey].timestamp) / 1000; // в секундах
     }
     return Infinity;
+}
+
+/**
+ * Helper функция для получения ID группы из данных приложения
+ * Эту функцию нужно добавить в applications.js
+ */
+function getGroupIdFromApplications(groupName, applications) {
+    // Ищем первое приложение с этим именем группы и возвращаем его group_id
+    const appWithGroup = applications.find(app => 
+        (app.group_name === groupName || app.name === groupName) && app.group_id
+    );
+    return appWithGroup ? appWithGroup.group_id : null;
+}
+
+/**
+ * Функция для обновления отображения после загрузки приложений
+ * Заменяет или дополняет существующую функцию loadApplications
+ */
+function enhanceLoadApplications() {
+    const originalLoadApplications = window.loadApplications;
+    
+    window.loadApplications = async function() {
+        // Вызываем оригинальную функцию
+        if (originalLoadApplications) {
+            await originalLoadApplications.apply(this, arguments);
+        }
+        
+        // После загрузки приложений проверяем наличие group_id
+        // и обновляем данные для правильной работы тегов
+        if (allApplications && allApplications.length > 0) {
+            // Группируем приложения для получения информации о группах
+            const groupsMap = {};
+            allApplications.forEach(app => {
+                if (app.group_name && app.group_id) {
+                    if (!groupsMap[app.group_name]) {
+                        groupsMap[app.group_name] = app.group_id;
+                    }
+                }
+            });
+            
+            // Сохраняем map групп для использования при рендеринге
+            window.applicationGroupsMap = groupsMap;
+        }
+    };
+}
+
+
+// После объявления функций, экспортируем их тоже:
+window.displayGroupedApplications = displayGroupedApplications;
+window.createGroupRow = createGroupRow;
+window.createApplicationRow = createApplicationRow;
+window.loadApplications = loadApplications;
+window.filterAndDisplayApplications = filterAndDisplayApplications;
+
+// Экспортируем функцию createActionMenuItems или создаем её
+window.createActionMenuItems = window.createActionMenuItems || function(app) {
+    return `
+        <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
+        <a href="#" class="app-start-btn" data-app-id="${app.id}">Запустить</a>
+        <a href="#" class="app-stop-btn" data-app-id="${app.id}">Остановить</a>
+        <a href="#" class="app-restart-btn" data-app-id="${app.id}">Перезапустить</a>
+        <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+    `;
+};
+
+// Вызываем функцию расширения при загрузке
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enhanceLoadApplications);
+} else {
+    enhanceLoadApplications();
 }
 
 // Добавляем глобальную функцию для отладки кэша

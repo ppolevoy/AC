@@ -346,6 +346,362 @@
     color: #e9ecef;
 }
 
+/* Стили для тегов в группах */
+.group-name-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.group-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+}
+
+/* Стили для тегов в дочерних строках */
+.app-child-row .service-name {
+    padding-left: 30px; /* Отступ для дочерних элементов */
+}
+
+.app-child-row .service-name-with-tags {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.app-child-row .app-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Общие стили для контейнера имени сервиса с тегами */
+.service-name-with-tags {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.service-name-text {
+    font-weight: 500;
+}
+
+/* Стили для индикатора загрузки тегов */
+.tags-loading {
+    color: #999;
+    font-size: 0.85em;
+    font-style: italic;
+}
+
+/* Адаптация существующих стилей тегов для групп */
+.group-row .tag-badge {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+}
+
+.app-child-row .tag-badge {
+    font-size: 0.7rem;
+    padding: 2px 5px;
+}
+
+/* Стили для компактного отображения тегов */
+.tags-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: wrap;
+    max-width: 300px; /* Ограничиваем ширину для компактности */
+}
+
+/* Hover эффект для кнопки "еще теги" */
+.tag-more {
+    cursor: pointer;
+    background-color: #6c757d !important;
+    transition: background-color 0.2s;
+}
+
+.tag-more:hover {
+    background-color: #5a6268 !important;
+}
+
+/* Стили для dist-details с учетом тегов */
+.service-name-with-tags + .dist-details {
+    margin-top: 5px;
+    width: 100%;
+}
+
+/* Модальное окно тегов группы */
+.tags-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tags-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.tags-modal-container {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 25px;
+}
+
+.group-tags-modal-content h3 {
+    margin: 0 0 20px 0;
+    color: #333;
+    font-size: 1.4em;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 10px;
+}
+
+.group-tags-modal-content h4 {
+    margin: 15px 0 10px 0;
+    color: #555;
+    font-size: 1.1em;
+}
+
+.group-tags-modal-content h5 {
+    margin: 10px 0 8px 0;
+    color: #666;
+    font-size: 0.95em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Секции тегов */
+.tags-section {
+    margin-bottom: 25px;
+}
+
+.current-group-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    min-height: 40px;
+    align-items: center;
+}
+
+/* Тег с возможностью удаления */
+.tag-removable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 20px !important;
+    transition: all 0.2s;
+}
+
+.tag-removable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.tag-remove {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.tag-removable:hover .tag-remove {
+    opacity: 1;
+}
+
+/* Индикатор наследования */
+.tag-inheritable {
+    margin-left: 4px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+/* Переключатель наследования */
+.inheritable-toggle {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #e7f3ff;
+    border-radius: 5px;
+}
+
+.inheritable-toggle label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+
+.inheritable-toggle input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* Контейнер доступных тегов */
+.available-tags-container {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.tag-category {
+    margin-bottom: 15px;
+}
+
+.available-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Выбираемый тег */
+.tag-selectable {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: all 0.2s;
+}
+
+.tag-selectable:hover {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.tag-selectable.tag-active {
+    opacity: 1;
+    box-shadow: 0 0 0 2px #28a745;
+}
+
+/* Форма создания нового тега */
+.new-tag-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.new-tag-form input[type="text"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.new-tag-form select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.new-tag-form button {
+    padding: 8px 16px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.new-tag-form button:hover {
+    background: #0056b3;
+}
+
+/* Кнопки действий модального окна */
+.modal-actions {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.modal-actions button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-sync {
+    background: #28a745;
+    color: white;
+}
+
+.btn-sync:hover {
+    background: #218838;
+}
+
+.btn-close {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-close:hover {
+    background: #5a6268;
+}
+
+/* Сообщение об отсутствии тегов */
+.no-tags {
+    color: #999;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+/* Анимация появления модального окна */
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.tags-modal-container {
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+
 /* Анимации */
 @keyframes fadeIn {
     from {

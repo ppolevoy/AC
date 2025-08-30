@@ -3911,3 +3911,43 @@ body.light-theme .field-with-error input {
     transition: opacity 0.2s ease;
     min-height: 300px;
 }
+
+.dropdown-divider {
+    height: 0;
+    margin: 5px 0;
+    overflow: hidden;
+    border-top: 1px solid #e9ecef;
+}
+
+.dropdown-item {
+    display: block;
+    padding: 8px 15px;
+    text-decoration: none;
+    color: #333;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa;
+    color: #007bff;
+}
+
+.dropdown-icon {
+    margin-right: 8px;
+    font-style: normal;
+}
+
+/* Специальные стили для кнопок управления тегами */
+.manage-group-tags {
+    color: #007bff !important;
+}
+
+.sync-group-tags {
+    color: #28a745 !important;
+}
+
+.manage-group-tags:hover,
+.sync-group-tags:hover {
+    background-color: #e7f3ff !important;
+}

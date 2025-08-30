@@ -396,7 +396,8 @@ def get_applications():
                 'type': app.app_type,
                 'status': app.status,
                 'version': app.version,
-                'group_name': group.name if group else None,
+                'group_id': app.group_id,                
+                'group_name': group.name if group else None,                
                 'instance_number': app.instance_number,
                 'start_time': app.start_time.isoformat() if app.start_time else None
             }
