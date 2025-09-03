@@ -69,7 +69,7 @@ class Config:
     SSH_COMMAND_TIMEOUT = int(os.environ.get('SSH_COMMAND_TIMEOUT') or 300)
     ANSIBLE_PATH = os.environ.get('ANSIBLE_PATH') or '/etc/ansible'
 
-    MAX_ARTIFACTS_DISPLAY = int(os.environ.get('MAX_ARTIFACTS_DISPLAY') or 20)
+    MAX_ARTIFACTS_DISPLAY = int(os.environ.get('MAX_ARTIFACTS_DISPLAY') or 120)
     INCLUDE_SNAPSHOT_VERSIONS = os.environ.get('INCLUDE_SNAPSHOT_VERSIONS', 'true').lower() == 'true'
 
     # Настройки для Docker

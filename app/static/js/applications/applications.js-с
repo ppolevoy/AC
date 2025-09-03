@@ -1,0 +1,2680 @@
+/**
+ * Faktura Apps - Модуль управления приложениями
+ * Полная оптимизированная версия с правильной архитектурой
+ */
+
+(function() {
+    'use strict';
+
+    // ===========================
+    // МОДУЛЬ УПРАВЛЕНИЯ ПРИЛОЖЕНИЯМИ
+    // ===========================
+    const ApplicationsModule = {
+        // Состояние приложения
+        state: {
+            allApplications: [],
+            filteredApplications: [],
+            currentPage: 1,
+            pageSize: 10,
+            selectedServerId: 'all',
+            sortColumn: 'name',
+            sortDirection: 'asc',
+            searchQuery: '',
+            groupingEnabled: true,
+            activeDropdown: null,
+            dropdownOverlay: null,
+            expandedGroups: [],
+            selectedItems: {
+                applications: new Set(),
+                groups: new Set()
+            }
+        },
+
+        // Конфигурация
+        config: {
+            LOADING_CONFIG: {
+                MIN_LOADING_TIME: 800,
+                PROGRESS_STEPS: {
+                    FETCH_START: 30,
+                    FETCH_COMPLETE: 70,
+                    PARSE_COMPLETE: 100
+                },
+                CACHE_LIFETIME: 5 * 60 * 1000,
+                ANIMATION_DELAYS: {
+                    FADE_IN: 100,
+                    FIELD_STAGGER: 100
+                }
+            },
+            CACHE_LIFETIME: 5 * 60 * 1000
+        },
+
+        // Кэш артефактов
+        artifactsCache: {},
+
+        // DOM элементы (инициализируются в init)
+        elements: {},
+
+        // ===========================
+        // ИНИЦИАЛИЗАЦИЯ
+        // ===========================
+        init() {
+            this.initElements();
+            this.initEventHandlers();
+            this.initDropdowns();
+            this.loadServers();
+            this.loadApplications();
+        },
+
+        initElements() {
+            this.elements = {
+                serverDropdown: document.getElementById('server-selected'),
+                serverList: document.getElementById('server-list'),
+                searchInput: document.getElementById('search-input'),
+                refreshBtn: document.getElementById('refresh-btn'),
+                selectAllCheckbox: document.getElementById('select-all'),
+                applicationsTableBody: document.getElementById('applications-table-body'),
+                pageSizeSelect: document.getElementById('page-size-select'),
+                paginationControls: document.getElementById('pagination-controls'),
+                startBtn: document.getElementById('start-btn'),
+                restartBtn: document.getElementById('restart-btn'),
+                stopBtn: document.getElementById('stop-btn'),
+                updateBtn: document.getElementById('update-btn'),
+                unloadBtn: document.getElementById('unload-btn'),
+                groupToggleBtn: document.getElementById('group-toggle-btn')
+            };
+        },
+
+        initEventHandlers() {
+            // Группировка
+            if (this.elements.groupToggleBtn) {
+                this.state.groupingEnabled = this.elements.groupToggleBtn.classList.contains('active');
+                this.elements.groupToggleBtn.addEventListener('click', () => this.toggleGrouping());
+            }
+
+            // Выбрать все
+            if (this.elements.selectAllCheckbox) {
+                this.elements.selectAllCheckbox.addEventListener('change', (e) => this.handleSelectAll(e));
+            }
+
+            // Поиск
+            if (this.elements.searchInput) {
+                this.elements.searchInput.addEventListener('input', (e) => this.handleSearch(e));
+            }
+
+            // Размер страницы
+            if (this.elements.pageSizeSelect) {
+                this.elements.pageSizeSelect.addEventListener('change', (e) => this.handlePageSizeChange(e));
+            }
+
+            // Обновление
+            if (this.elements.refreshBtn) {
+                this.elements.refreshBtn.addEventListener('click', () => this.handleRefresh());
+            }
+
+            // Сортировка
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', (e) => this.handleSort(e));
+            });
+
+            // Кнопки действий
+            this.initActionButtons();
+
+            // Обработчик отправки форм обновления
+            document.addEventListener('submit', (e) => this.handleUpdateFormSubmit(e));
+        },
+
+        initActionButtons() {
+            const actions = ['start', 'restart', 'stop', 'update', 'unload'];
+            actions.forEach(action => {
+                const btn = this.elements[`${action}Btn`];
+                if (btn) {
+                    btn.addEventListener('click', () => this.handleBatchAction(action));
+                }
+            });
+        },
+
+        initDropdowns() {
+            // Создаем overlay для выпадающих меню
+            if (!this.state.dropdownOverlay) {
+                this.state.dropdownOverlay = document.createElement('div');
+                this.state.dropdownOverlay.className = 'dropdown-overlay';
+                document.body.appendChild(this.state.dropdownOverlay);
+                
+                this.state.dropdownOverlay.addEventListener('click', () => {
+                    this.closeAllDropdowns();
+                });
+            }
+
+            // Делегирование событий для выпадающих меню
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('actions-button')) {
+                    e.stopPropagation();
+                    this.toggleDropdown(e.target);
+                }
+            });
+
+            // Обработчик для серверного dropdown
+            if (this.elements.serverDropdown) {
+                this.elements.serverDropdown.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (this.elements.serverList) {
+                        this.elements.serverList.style.display = 
+                            this.elements.serverList.style.display === 'block' ? 'none' : 'block';
+                    }
+                });
+            }
+        },
+
+        // ===========================
+        // ЗАГРУЗКА ДАННЫХ
+        // ===========================
+        async loadServers() {
+            try {
+                const response = await fetch('/api/servers');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.renderServerList(data.servers);
+                } else {
+                    console.error('Ошибка при загрузке серверов:', data.error);
+                    showError('Не удалось загрузить список серверов');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке серверов:', error);
+                showError('Не удалось загрузить список серверов');
+            }
+        },
+
+        async loadApplications() {
+            this.clearCheckboxState();
+            this.saveTableState();
+            
+            try {
+                this.elements.applicationsTableBody.innerHTML = 
+                    '<tr><td colspan="6" class="table-loading">Загрузка приложений...</td></tr>';
+                
+                let url = '/api/applications';
+                const params = new URLSearchParams();
+                
+                if (this.state.selectedServerId !== 'all') {
+                    params.append('server_id', this.state.selectedServerId);
+                }
+                
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.state.allApplications = data.applications;
+                    this.filterAndDisplayApplications();
+                } else {
+                    console.error('Ошибка при загрузке приложений:', data.error);
+                    showError('Не удалось загрузить список приложений');
+                    this.elements.applicationsTableBody.innerHTML = 
+                        '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке приложений:', error);
+                showError('Не удалось загрузить список приложений');
+                this.elements.applicationsTableBody.innerHTML = 
+                    '<tr><td colspan="6" class="table-loading error">Ошибка загрузки приложений</td></tr>';
+            }
+        },
+
+        async loadArtifactsForApp(appId, forceRefresh = false) {
+            const cacheKey = `app_${appId}`;
+            const now = Date.now();
+            
+            // Проверяем кэш
+            if (!forceRefresh && this.artifactsCache[cacheKey]) {
+                const cacheEntry = this.artifactsCache[cacheKey];
+                const age = now - cacheEntry.timestamp;
+                
+                if (age < this.config.CACHE_LIFETIME) {
+                    console.log(`Используем кэш артефактов для приложения ${appId} (возраст: ${Math.round(age/1000)}с)`);
+                    return cacheEntry.data;
+                }
+            }
+            
+            // Загружаем свежие данные
+            try {
+                const maxVersions = window.APP_CONFIG?.MAX_ARTIFACTS_DISPLAY || 20;
+                const response = await fetch(`/api/applications/${appId}/artifacts?limit=${maxVersions}`);
+                const data = await response.json();
+                
+                if (data.success && data.versions && data.versions.length > 0) {
+                    const artifacts = data.versions.slice(0, maxVersions);
+                    
+                    // Сохраняем в кэш
+                    this.artifactsCache[cacheKey] = {
+                        timestamp: now,
+                        data: artifacts
+                    };
+                    
+                    console.log(`Загружено ${artifacts.length} версий для приложения ${appId}`);
+                    return artifacts;
+                }
+            } catch (error) {
+                console.error(`Ошибка при загрузке артефактов для приложения ${appId}:`, error);
+            }
+            
+            return null;
+        },
+
+        // ===========================
+        // ОТОБРАЖЕНИЕ ДАННЫХ
+        // ===========================
+        filterAndDisplayApplications() {
+            this.saveCheckboxState();
+            
+            // Фильтрация
+            if (this.state.searchQuery) {
+                const query = this.state.searchQuery.toLowerCase();
+                this.state.filteredApplications = this.state.allApplications.filter(app => 
+                    app.name.toLowerCase().includes(query) || 
+                    (app.version && app.version.toLowerCase().includes(query)) ||
+                    (app.server_name && app.server_name.toLowerCase().includes(query))
+                );
+            } else {
+                this.state.filteredApplications = [...this.state.allApplications];
+            }
+            
+            // Сортировка
+            this.state.filteredApplications.sort((a, b) => {
+                let valueA, valueB;
+                
+                if (this.state.sortColumn === 'name') {
+                    valueA = a.name.toLowerCase();
+                    valueB = b.name.toLowerCase();
+                } else if (this.state.sortColumn === 'state') {
+                    valueA = a.status ? a.status.toLowerCase() : '';
+                    valueB = b.status ? b.status.toLowerCase() : '';
+                }
+                
+                if (valueA < valueB) return this.state.sortDirection === 'asc' ? -1 : 1;
+                if (valueA > valueB) return this.state.sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            // Очищаем таблицу
+            this.elements.applicationsTableBody.innerHTML = '';
+            
+            if (this.state.filteredApplications.length === 0) {
+                this.elements.applicationsTableBody.innerHTML = 
+                    '<tr><td colspan="6" class="table-loading">Нет приложений, соответствующих критериям поиска</td></tr>';
+                this.updatePagination(0);
+                return;
+            }
+            
+            // Отображаем приложения
+            if (this.state.groupingEnabled) {
+                this.displayGroupedApplications(this.state.filteredApplications);
+            } else {
+                this.displayFlatApplications(this.state.filteredApplications);
+            }
+            
+            // Настраиваем обработчики событий
+            this.setupTableEventHandlers();
+            
+            // Восстанавливаем состояние чекбоксов
+            this.restoreCheckboxState();
+        },
+
+        displayFlatApplications(applications) {
+            const totalPages = Math.ceil(applications.length / this.state.pageSize);
+            if (this.state.currentPage > totalPages && totalPages > 0) {
+                this.state.currentPage = totalPages;
+            }
+            
+            const startIndex = (this.state.currentPage - 1) * this.state.pageSize;
+            const endIndex = Math.min(startIndex + this.state.pageSize, applications.length);
+            const displayedApplications = applications.slice(startIndex, endIndex);
+            
+            displayedApplications.forEach(app => {
+                const row = this.createApplicationRow(app, false);
+                this.elements.applicationsTableBody.appendChild(row);
+            });
+            
+            this.updatePagination(totalPages);
+        },
+
+        displayGroupedApplications(applications) {
+            // Группируем приложения
+            const groups = {};
+            
+            applications.forEach(app => {
+                const groupName = app.group_name || app.name;
+                if (!groups[groupName]) {
+                    groups[groupName] = [];
+                }
+                groups[groupName].push(app);
+            });
+            
+            // Преобразуем в массив для сортировки
+            const groupEntries = Object.entries(groups).map(([name, apps]) => ({
+                name,
+                apps,
+                count: apps.length
+            }));
+            
+            // Сортируем группы по имени
+            groupEntries.sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Пагинация
+            const totalGroups = groupEntries.length;
+            const totalPages = Math.ceil(totalGroups / this.state.pageSize);
+            
+            if (this.state.currentPage > totalPages && totalPages > 0) {
+                this.state.currentPage = totalPages;
+            }
+            
+            const startIndex = (this.state.currentPage - 1) * this.state.pageSize;
+            const endIndex = Math.min(startIndex + this.state.pageSize, totalGroups);
+            const displayedGroups = groupEntries.slice(startIndex, endIndex);
+            
+            // Отображаем группы
+            displayedGroups.forEach(group => {
+                if (group.count === 1) {
+                    const appRow = this.createApplicationRow(group.apps[0], false);
+                    this.elements.applicationsTableBody.appendChild(appRow);
+                    return;
+                }
+                
+                const groupRow = this.createGroupRow(group.name, group.apps);
+                this.elements.applicationsTableBody.appendChild(groupRow);
+                
+                const wrapperRow = this.createGroupWrapperRow(group.name, group.apps);
+                this.elements.applicationsTableBody.appendChild(wrapperRow);
+            });
+            
+            this.setupAppActionButtons();
+            this.setupGroupActionButtons();
+            
+            this.updatePagination(totalPages);
+        },
+
+        // ===========================
+        // СОЗДАНИЕ ЭЛЕМЕНТОВ DOM
+        // ===========================
+        createApplicationRow(app, isChild) {
+            const row = document.createElement('tr');
+            row.className = isChild ? 'app-row child-row' : 'app-row';
+            row.setAttribute('data-app-id', app.id);
+            row.setAttribute('data-app-name', app.name.toLowerCase());
+            
+            const statusDot = app.status === 'online' ? 
+                '<span class="service-dot"></span>' : 
+                '<span class="service-dot offline"></span>';
+            
+            row.innerHTML = `
+                <td>
+                    <div class="checkbox-container">
+                        <label class="custom-checkbox">
+                            <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+                            <span class="checkmark"></span>
+                        </label>
+                    </div>
+                </td>
+                <td class="service-name ${isChild ? 'child-indent' : ''}">
+                    ${app.name}
+                    <div class="dist-details">
+                        <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                        <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                        <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
+                    </div>
+                </td>
+                <td>${app.version || 'Н/Д'}</td>
+                <td>${statusDot} ${app.status}</td>
+                <td>${app.server_name || 'Н/Д'}</td>
+                <td>
+                    <div class="actions-menu">
+                        <button class="actions-button">...</button>
+                        <div class="actions-dropdown">
+                            ${this.createActionMenuItems(app)}
+                        </div>
+                    </div>
+                </td>
+            `;
+            
+            return row;
+        },
+
+        createGroupRow(groupName, groupApps) {
+            const row = document.createElement('tr');
+            row.className = 'group-row';
+            row.setAttribute('data-group', groupName);
+            
+            const versions = new Set(groupApps.map(app => app.version || '*'));
+            const versionText = versions.size === 1 ? 
+                (groupApps[0].version || '*') : 
+                '<span class="version-different">*</span>';
+            
+            const hasOffline = groupApps.some(app => app.status !== 'online');
+            const statusDot = hasOffline ? 
+                '<span class="service-dot offline"></span>' : 
+                '<span class="service-dot"></span>';
+            
+            const serverName = groupApps[0].server_name || 'Н/Д';
+            
+            row.innerHTML = `
+                <td>
+                    <div class="checkbox-container">
+                        <label class="custom-checkbox">
+                            <input type="checkbox" class="group-checkbox" data-group="${groupName}">
+                            <span class="checkmark"></span>
+                        </label>
+                    </div>
+                </td>
+                <td class="service-name">
+                    <div class="group-name-container">
+                        <span class="group-toggle">▶</span>
+                        <span class="group-name">${groupName} (${groupApps.length})</span>
+                    </div>
+                </td>
+                <td>${versionText}</td>
+                <td>${statusDot}</td>
+                <td>${serverName}</td>
+                <td>
+                    <div class="actions-menu">
+                        <button class="actions-button">...</button>
+                        <div class="actions-dropdown">
+                            <a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+                            <a href="#" class="group-start-btn" data-group="${groupName}">Запустить все</a>
+                            <a href="#" class="group-stop-btn" data-group="${groupName}">Остановить все</a>
+                            <a href="#" class="group-restart-btn" data-group="${groupName}">Перезапустить все</a>
+                            <a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
+                        </div>
+                    </div>
+                </td>
+            `;
+            
+            return row;
+        },
+
+        createGroupWrapperRow(groupName, groupApps) {
+            const wrapperRow = document.createElement('tr');
+            wrapperRow.className = 'child-wrapper';
+            wrapperRow.setAttribute('data-group', groupName);
+            
+            const wrapperCell = document.createElement('td');
+            wrapperCell.setAttribute('colspan', '6');
+            
+            const childContainer = document.createElement('div');
+            childContainer.className = 'child-container';
+            
+            const childTable = document.createElement('table');
+            childTable.className = 'child-table';
+            
+            const childTableBody = document.createElement('tbody');
+            
+            groupApps.forEach(app => {
+                const childRow = document.createElement('tr');
+                childRow.className = 'app-child-row';
+                childRow.setAttribute('data-app-id', app.id);
+                childRow.setAttribute('data-parent', groupName);
+                
+                const statusDot = app.status === 'online' ? 
+                    '<span class="service-dot"></span>' : 
+                    '<span class="service-dot offline"></span>';
+                
+                childRow.innerHTML = `
+                    <td>
+                        <div class="checkbox-container">
+                            <label class="custom-checkbox">
+                                <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
+                    </td>
+                    <td class="service-name">
+                        ${app.name}
+                        <div class="dist-details">
+                            <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                            <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                            <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
+                        </div>
+                    </td>
+                    <td>${app.version || 'Н/Д'}</td>
+                    <td>${statusDot} ${app.status}</td>
+                    <td>${app.server_name || 'Н/Д'}</td>
+                    <td>
+                        <div class="actions-menu">
+                            <button class="actions-button">...</button>
+                            <div class="actions-dropdown">
+                                ${this.createActionMenuItems(app)}
+                            </div>
+                        </div>
+                    </td>
+                `;
+                
+                childRow.addEventListener('click', function(e) {
+                    if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                        return;
+                    }
+                    this.classList.toggle('expanded');
+                });
+                
+                childTableBody.appendChild(childRow);
+            });
+            
+            childTable.appendChild(childTableBody);
+            childContainer.appendChild(childTable);
+            wrapperCell.appendChild(childContainer);
+            wrapperRow.appendChild(wrapperCell);
+            
+            return wrapperRow;
+        },
+
+        createActionMenuItems(app) {
+            const isOnline = app.status === 'online';
+            return `
+                <a href="#" class="app-info-btn" data-app-id="${app.id}" data-action="info">Информация</a>
+                <a href="#" class="app-start-btn ${isOnline ? 'disabled' : ''}" data-app-id="${app.id}" data-action="start">Запустить</a>
+                <a href="#" class="app-stop-btn ${!isOnline ? 'disabled' : ''}" data-app-id="${app.id}" data-action="stop">Остановить</a>
+                <a href="#" class="app-restart-btn ${!isOnline ? 'disabled' : ''}" data-app-id="${app.id}" data-action="restart">Перезапустить</a>
+                <a href="#" class="app-update-btn" data-app-id="${app.id}" data-action="update">Обновить</a>
+            `;
+        },
+
+        // ===========================
+        // ОБРАБОТЧИКИ СОБЫТИЙ
+        // ===========================
+        setupTableEventHandlers() {
+            // Раскрытие/скрытие детальной информации
+            document.querySelectorAll('tbody tr:not(.child-wrapper):not(.group-row)').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                        return;
+                    }
+                    row.classList.toggle('expanded');
+                });
+            });
+
+            // Раскрытие/скрытие группы
+            document.querySelectorAll('.group-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('.checkbox-container') || e.target.closest('.actions-menu')) {
+                        return;
+                    }
+                    
+                    const groupName = row.getAttribute('data-group');
+                    row.classList.toggle('expanded');
+                    
+                    const toggle = row.querySelector('.group-toggle');
+                    if (toggle) {
+                        toggle.style.transform = row.classList.contains('expanded') ? 
+                            'rotate(90deg)' : 'rotate(0deg)';
+                    }
+                    
+                    const wrapperRow = document.querySelector(`.child-wrapper[data-group="${groupName}"]`);
+                    if (wrapperRow) {
+                        wrapperRow.style.display = row.classList.contains('expanded') ? 
+                            'table-row' : 'none';
+                    }
+                });
+            });
+
+            // Обработчики чекбоксов
+            this.setupCheckboxHandlers();
+        },
+
+        setupCheckboxHandlers() {
+            // Чекбоксы приложений
+            document.querySelectorAll('.app-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const appId = e.target.getAttribute('data-app-id');
+                    if (e.target.checked) {
+                        this.state.selectedItems.applications.add(appId);
+                    } else {
+                        this.state.selectedItems.applications.delete(appId);
+                    }
+                    
+                    const parentGroup = e.target.closest('.child-wrapper')?.getAttribute('data-group');
+                    if (parentGroup) {
+                        this.updateGroupCheckboxState(parentGroup);
+                    }
+                    
+                    this.updateSelectAllState();
+                });
+            });
+
+            // Чекбоксы групп
+            document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const groupName = e.target.getAttribute('data-group');
+                    const isChecked = e.target.checked;
+                    
+                    if (isChecked) {
+                        this.state.selectedItems.groups.add(groupName);
+                    } else {
+                        this.state.selectedItems.groups.delete(groupName);
+                    }
+                    
+                    // Обновляем дочерние чекбоксы
+                    const childCheckboxes = document.querySelectorAll(
+                        `.child-wrapper[data-group="${groupName}"] .app-checkbox`
+                    );
+                    childCheckboxes.forEach(childBox => {
+                        childBox.checked = isChecked;
+                        const appId = childBox.getAttribute('data-app-id');
+                        if (isChecked) {
+                            this.state.selectedItems.applications.add(appId);
+                        } else {
+                            this.state.selectedItems.applications.delete(appId);
+                        }
+                    });
+                    
+                    this.updateSelectAllState();
+                });
+            });
+        },
+
+        setupAppActionButtons() {
+            document.querySelectorAll('.app-info-btn, .app-start-btn, .app-stop-btn, .app-restart-btn, .app-update-btn')
+                .forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        
+                        if (btn.classList.contains('disabled')) {
+                            return;
+                        }
+                        
+                        const appId = btn.getAttribute('data-app-id');
+                        const action = btn.getAttribute('data-action');
+                        
+                        this.handleAppAction(appId, action);
+                    });
+                });
+        },
+
+        setupGroupActionButtons() {
+            document.querySelectorAll('.group-info-btn, .group-start-btn, .group-stop-btn, .group-restart-btn, .group-update-btn')
+                .forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        
+                        if (btn.classList.contains('disabled')) {
+                            return;
+                        }
+                        
+                        const groupName = btn.getAttribute('data-group');
+                        const action = btn.getAttribute('data-action') || 
+                            (btn.className.includes('info') ? 'info' :
+                            btn.className.includes('start') ? 'start' :
+                            btn.className.includes('stop') ? 'stop' :
+                            btn.className.includes('restart') ? 'restart' :
+                            btn.className.includes('update') ? 'update' : null);
+                        
+                        this.handleGroupAction(groupName, action);
+                    });
+                });
+        },
+
+        // ===========================
+        // ДЕЙСТВИЯ С ПРИЛОЖЕНИЯМИ
+        // ===========================
+        handleAppAction(appId, action) {
+            const app = this.getAppById(appId);
+            if (!app) {
+                console.error(`Не удалось найти приложение с ID: ${appId}`);
+                return;
+            }
+            
+            if (action !== 'info' && action !== 'update' && !this.isActionAvailable(app, action)) {
+                const statusMsg = app.status === 'online' ? 'уже запущено' : 'не запущено';
+                showError(`Невозможно выполнить действие "${action}" для приложения, которое ${statusMsg}`);
+                return;
+            }
+            
+            switch(action) {
+                case 'info':
+                    this.showAppInfoModal(appId);
+                    break;
+                case 'start':
+                case 'stop':
+                case 'restart':
+                    this.showConfirmActionModal([appId], action);
+                    break;
+                case 'update':
+                    this.showUpdateModal([appId]);
+                    break;
+            }
+        },
+
+        handleGroupAction(groupName, action) {
+            const apps = this.state.allApplications.filter(app => 
+                (app.group_name || app.name) === groupName
+            );
+            
+            const appIds = apps.map(app => app.id);
+            
+            switch(action) {
+                case 'info':
+                    this.showGroupInfoModal(groupName, apps);
+                    break;
+                case 'start':
+                case 'stop':
+                case 'restart':
+                    this.showConfirmActionModal(appIds, action);
+                    break;
+                case 'update':
+                    this.showUpdateModal(appIds);
+                    break;
+            }
+        },
+
+        handleBatchAction(action) {
+            const appIds = this.getSelectedAppIds();
+            
+            if (appIds.length === 0) {
+                showError('Не выбрано ни одного приложения');
+                return;
+            }
+            
+            const filteredAppIds = appIds.filter(appId => {
+                const app = this.getAppById(appId);
+                return app && (action === 'update' || this.isActionAvailable(app, action));
+            });
+            
+            if (filteredAppIds.length === 0) {
+                showError(`Нет приложений, для которых можно выполнить действие "${action}"`);
+                return;
+            }
+            
+            const extraMessage = filteredAppIds.length < appIds.length ? 
+                `Будет выполнено только для приложений с подходящим статусом (${filteredAppIds.length} из ${appIds.length})` : null;
+            
+            if (action === 'update') {
+                this.showUpdateModal(filteredAppIds);
+            } else {
+                this.showConfirmActionModal(filteredAppIds, action, extraMessage);
+            }
+        },
+
+        async handleUpdateFormSubmit(e) {
+            if (e.target && e.target.id === 'update-form') {
+                e.preventDefault();
+                
+                // Если это форма с вкладками, не обрабатываем её здесь
+                const hasTabs = e.target.closest('.modal-content')?.querySelector('.modal-tabs');
+                if (hasTabs) {
+                    return;
+                }
+
+                const formData = new FormData(e.target);
+                const data = {};
+                
+                // Собираем данные формы
+                for (let [key, value] of formData.entries()) {
+                    data[key] = value;
+                }
+                
+                // Проверяем, если выбран custom вариант
+                const distrSelect = document.getElementById('distr-url');
+                const customInput = document.getElementById('custom-distr-url');
+                
+                if (distrSelect && distrSelect.value === 'custom' && customInput && customInput.value) {
+                    data.distr_url = customInput.value;
+                }
+                
+                // Обрабатываем форму
+                await this.processUpdateForm(data);
+            }
+        },
+
+        // ===========================
+        // МОДАЛЬНЫЕ ОКНА
+        // ===========================
+        async showAppInfoModal(appId) {
+            try {
+                const response = await fetch(`/api/applications/${appId}`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    console.error('Ошибка при получении информации о приложении:', data.error);
+                    showError('Не удалось получить информацию о приложении');
+                    return;
+                }
+                
+                const app = data.application;
+                const sections = this.createAppInfoSections(app);
+                
+                ModalUtils.showInfoModal(`Информация о приложении: ${app.name}`, sections);
+                
+                // Добавляем обработчик для кнопки сохранения пути к playbook
+                const saveBtn = document.getElementById('save-playbook-path');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', () => this.savePlaybookPath(appId));
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке информации о приложении:', error);
+                showError('Не удалось загрузить информацию о приложении');
+            }
+        },
+
+        showConfirmActionModal(appIds, action, extraMessage) {
+            const actionName = this.getActionName(action);
+            const appItems = appIds.map(appId => {
+                const app = this.getAppById(appId);
+                return app ? {
+                    id: appId,
+                    name: app.name,
+                    server: app.server_name,
+                    status: app.status
+                } : null;
+            }).filter(item => item !== null);
+            
+            const confirmAction = async () => {
+                try {
+                    const response = await fetch('/api/applications/batch-action', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            app_ids: appIds,
+                            action: action
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const successCount = data.results.filter(r => r.success).length;
+                        const errorCount = data.results.filter(r => !r.success).length;
+                        
+                        if (errorCount === 0) {
+                            showNotification(`Действие "${actionName}" успешно выполнено для всех выбранных приложений`);
+                        } else if (successCount === 0) {
+                            showError(`Не удалось выполнить действие "${actionName}" ни для одного из выбранных приложений`);
+                        } else {
+                            showNotification(`Действие "${actionName}" выполнено для ${successCount} из ${data.results.length} приложений`);
+                        }
+                        
+                        await this.loadApplications();
+                    } else {
+                        console.error('Ошибка при выполнении действия:', data.error);
+                        showError(data.error || `Не удалось выполнить действие "${actionName}"`);
+                    }
+                } catch (error) {
+                    console.error('Ошибка при выполнении действия:', error);
+                    showError(`Не удалось выполнить действие "${actionName}"`);
+                }
+            };
+            
+            let message = `Вы уверены, что хотите <span class="action-name">${actionName}</span> выбранные приложения?`;
+            if (extraMessage) {
+                message += `<br><br><small style="color: #f39c12;">${extraMessage}</small>`;
+            }
+            
+            ModalUtils.showConfirmModal(
+                `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} приложения`,
+                message,
+                appItems,
+                confirmAction,
+                `Подтвердить (${appIds.length})`,
+                'confirm-btn'
+            );
+        },
+
+        showUpdateModal(appIds) {
+            if (!appIds || appIds.length === 0) {
+                showError('Не выбрано ни одного приложения');
+                return;
+            }
+            
+            // Группируем приложения
+            const appGroups = {};
+            appIds.forEach(appId => {
+                const app = this.getAppById(appId);
+                if (app) {
+                    const groupName = app.group_name || app.name;
+                    if (!appGroups[groupName]) {
+                        appGroups[groupName] = [];
+                    }
+                    appGroups[groupName].push(app);
+                }
+            });
+            
+            // Определяем заголовок
+            let title = '';
+            if (appIds.length === 1) {
+                const app = this.getAppById(appIds[0]);
+                title = `Обновление приложения: ${app ? app.name : 'Неизвестно'}`;
+            } else {
+                title = `Обновление приложений (${appIds.length})`;
+            }
+            
+            // Если одна группа - показываем обычное окно
+            if (Object.keys(appGroups).length === 1) {
+                const groupName = Object.keys(appGroups)[0];
+                const apps = appGroups[groupName];
+                this.showSimpleUpdateModal(apps, title);
+            } else {
+                // Если несколько групп - показываем с вкладками
+                this.showTabsUpdateModal(appGroups, title);
+            }
+        },
+
+        showSimpleUpdateModal(apps, title) {
+            const firstApp = apps[0];
+            const appIds = apps.map(app => app.id);
+
+            // Формируем сразу полный интерфейс: селектор недоступен, под ним прогресс
+            const formHtml = (() => {
+                let html = '';
+                if (firstApp.app_type === 'docker') {
+                    html += `
+                        <div class="form-group animated-fade-in">
+                            <label for="distr-url">Docker образ:</label>
+                            <input type="text" id="distr-url" name="distr_url" class="form-control"
+                                   value="${firstApp.distr_path || ''}"
+                                   placeholder="Например: registry.faktura.ru/app:latest" required>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="form-group animated-fade-in">
+                            <label for="distr-url">
+                                Версия для обновления:
+                                <button type="button" id="refresh-artifacts-btn" class="refresh-btn" title="Обновить список версий">⟳</button>
+                            </label>
+                            <div class="artifact-select-wrapper loading">
+                                <select id="distr-url" name="distr_url" class="form-control artifact-select" disabled required>
+                                    <option value="" disabled selected>Загрузка версий...</option>
+                                </select>
+                                <div class="select-progress"><div class="progress-bar" style="width: 30%;"></div></div>
+                                <div class="select-spinner"></div>
+                            </div>
+                            <div id="version-notification" class="version-notification" style="display: none;"></div>
+                        </div>
+                        <div class="form-group" id="custom-url-group" style="display: none;">
+                            <label for="custom-distr-url">URL дистрибутива:</label>
+                            <input type="text" id="custom-distr-url" class="form-control" placeholder="Введите URL дистрибутива">
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div class="form-group animated-fade-in">
+                        <label>Режим обновления:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="restart" checked>
+                                В рестарт
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="immediate">
+                                Сейчас
+                            </label>
+                        </div>
+                    </div>
+                `;
+
+                if (apps.length > 1) {
+                    html += `
+                        <div class="group-apps-info animated-fade-in">
+                            <label>Приложения для обновления:</label>
+                            <div class="apps-list">${apps.map(app => `<span class="app-badge">${app.name}</span>`).join('')}</div>
+                        </div>
+                    `;
+                }
+
+                // скрытые ID приложений
+                apps.forEach(app => { html += `<input type="hidden" name="app_ids[]" value="${app.id}">`; });
+                return html;
+            })();
+
+            const formFields = [
+                { id: 'update-form-container', type: 'custom', html: formHtml }
+            ];
+
+            ModalUtils.showFormModal(title, formFields, async (formData) => {
+                await this.processUpdateForm(formData);
+            }, 'Обновить');
+
+            // Запускаем загрузку артефактов и обновляем селектор + прогресс (только не-Docker)
+            if (firstApp.app_type !== 'docker') {
+                this.initImmediateArtifactsLoad(firstApp);
+            }
+            // Подключаем обработчики (change/select, refresh) — часть логики завязана на наличии селектора
+            this.initUpdateFormHandlers();
+        },
+
+        // Загрузка артефактов для simple-модалки с немедленной отрисовкой формы
+        async initImmediateArtifactsLoad(firstApp) {
+            try {
+                const wrapper = document.querySelector('.artifact-select-wrapper');
+                const progress = document.querySelector('.artifact-select-wrapper .select-progress .progress-bar');
+                if (wrapper) wrapper.classList.add('loading');
+                if (progress) progress.style.width = '30%';
+
+                const artifacts = await this.loadArtifactsForApp(firstApp.id);
+                if (progress) progress.style.width = '70%';
+
+                const select = document.getElementById('distr-url');
+                if (!select || select.tagName !== 'SELECT') return;
+
+                if (artifacts && artifacts.length > 0) {
+                    const currentValue = select.value;
+                    select.innerHTML = artifacts.map(v => `<option value="${v.url}" data-version-type="${this.getVersionType(v.version)}">${v.version}</option>`).join('');
+                    select.innerHTML += '<option value="custom">── Указать URL вручную ──</option>';
+                    select.disabled = false;
+                    if ([...select.options].some(o => o.value === currentValue)) select.value = currentValue;
+                    if (progress) progress.style.width = '100%';
+                    if (wrapper) {
+                        setTimeout(() => { wrapper.classList.remove('loading'); }, 300);
+                    }
+                    // Прячем возможное сообщение об ошибке
+                    const err = document.getElementById('artifact-load-error');
+                    if (err) err.remove();
+                    // Триггерим change, чтобы показать подсказку по типу версии
+                    select.dispatchEvent(new Event('change'));
+                } else {
+                    // Не удалось получить версии — показываем ввод вручную
+                    if (wrapper) wrapper.classList.remove('loading');
+                    // Скрываем сам селектор, чтобы не путать пользователя
+                    const selectWrapper = select.closest('.artifact-select-wrapper');
+                    if (selectWrapper) selectWrapper.style.display = 'none';
+                    const customGroup = document.getElementById('custom-url-group');
+                    if (customGroup) customGroup.style.display = 'block';
+                    const customInput = document.getElementById('custom-distr-url');
+                    if (customInput) customInput.required = true;
+                    // Показ ошибки под полем
+                    let err = document.getElementById('artifact-load-error');
+                    if (!err) {
+                        err = document.createElement('div');
+                        err.id = 'artifact-load-error';
+                        err.className = 'error-message';
+                        err.textContent = 'Не удалось загрузить список версий';
+                        customGroup.parentNode.insertBefore(err, customGroup.nextSibling);
+                    }
+                }
+            } catch (e) {
+                console.error('Ошибка при загрузке артефактов:', e);
+                const wrapper = document.querySelector('.artifact-select-wrapper');
+                if (wrapper) wrapper.classList.remove('loading');
+                const select = document.getElementById('distr-url');
+                if (select) {
+                    const selectWrapper = select.closest('.artifact-select-wrapper');
+                    if (selectWrapper) selectWrapper.style.display = 'none';
+                }
+                const customGroup = document.getElementById('custom-url-group');
+                if (customGroup) customGroup.style.display = 'block';
+                const customInput = document.getElementById('custom-distr-url');
+                if (customInput) customInput.required = true;
+                let err = document.getElementById('artifact-load-error');
+                if (!err && customGroup && customGroup.parentNode) {
+                    err = document.createElement('div');
+                    err.id = 'artifact-load-error';
+                    err.className = 'error-message';
+                    err.textContent = 'Не удалось загрузить список версий';
+                    customGroup.parentNode.insertBefore(err, customGroup.nextSibling);
+                }
+            }
+        },
+
+        // Надежная отрисовка формы после появления DOM-элементов модалки
+        async renderUpdateFormWhenReady(firstApp, apps) {
+            const waitFor = (sel, timeout = 2000) => new Promise(resolve => {
+                const start = Date.now();
+                const tick = () => {
+                    const el = document.querySelector(sel);
+                    if (el) return resolve(el);
+                    if (Date.now() - start > timeout) return resolve(null);
+                    setTimeout(tick, 50);
+                };
+                tick();
+            });
+
+            // Ждем появления контейнера лоадера или формы
+            const container = await waitFor('#artifact-loader-container');
+            if (!container) {
+                // Фолбэк: пробуем работать напрямую через #modal-form
+                const modalForm = await waitFor('#modal-form');
+                if (!modalForm) return; // модалка закрыта
+            }
+            // Рисуем форму (не блокируемся ожиданием артефактов)
+            this.loadAndUpdateForm(firstApp, apps);
+        },
+
+        async loadAndUpdateForm(firstApp, apps) {
+            // Не блокируем форму длительным ожиданием артефактов
+            let artifacts = null;
+            let resolved = false;
+            const minDelay = (this.config?.LOADING_CONFIG?.MIN_LOADING_TIME) || 800;
+
+            const artifactsPromise = this.loadArtifactsForApp(firstApp.id)
+                .then(v => { artifacts = v; return v; })
+                .catch(err => { console.error('Ошибка загрузки артефактов:', err); return null; });
+
+            setTimeout(() => {
+                if (resolved) return;
+
+                let formHtml = '';
+
+                if (firstApp.app_type === 'docker') {
+                    formHtml += `
+                        <div class="form-group animated-fade-in">
+                            <label for="distr-url">Docker образ:</label>
+                            <input type="text" id="distr-url" name="distr_url" class="form-control" 
+                                   value="${firstApp.distr_path || ''}" 
+                                   placeholder="Например: registry.faktura.ru/app:latest" required>
+                        </div>
+                    `;
+                } else if (artifacts && artifacts.length > 0) {
+                    formHtml += `
+                        <div class="form-group animated-fade-in">
+                            <label for="distr-url">
+                                Версия для обновления:
+                                <button type="button" id="refresh-artifacts-btn" class="refresh-btn" title="Обновить список версий">⟳</button>
+                            </label>
+                            <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
+                                ${artifacts.map(version => `<option value="${version.url}" data-version-type="${this.getVersionType(version.version)}">${version.version}</option>`).join('')}
+                                <option value="custom">── Указать URL вручную ──</option>
+                            </select>
+                            <div id="version-notification" class="version-notification" style="display: none;"></div>
+                        </div>
+                        <div class="form-group" id="custom-url-group" style="display: none;">
+                            <label for="custom-distr-url">URL дистрибутива:</label>
+                            <input type="text" id="custom-distr-url" class="form-control" placeholder="Введите URL дистрибутива">
+                        </div>
+                    `;
+                } else {
+                    formHtml += `
+                        <div class="form-group animated-fade-in">
+                            <label for="distr-url">URL дистрибутива:</label>
+                            <input type="text" id="distr-url" name="distr_url" class="form-control" 
+                                   value="${firstApp.distr_path || ''}" placeholder="Введите URL дистрибутива" required>
+                        </div>
+                    `;
+                }
+
+                formHtml += `
+                    <div class="form-group animated-fade-in">
+                        <label>Режим обновления:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="restart" checked>
+                                В рестарт
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="immediate">
+                                Сейчас
+                            </label>
+                        </div>
+                    </div>
+                `;
+
+                if (apps.length > 1) {
+                    formHtml += `
+                        <div class="group-apps-info animated-fade-in">
+                            <label>Приложения для обновления:</label>
+                            <div class="apps-list">${apps.map(app => `<span class="app-badge">${app.name}</span>`).join('')}</div>
+                        </div>
+                    `;
+                }
+
+                apps.forEach(app => { formHtml += `<input type="hidden" name="app_ids[]" value="${app.id}">`; });
+
+                const modalForm = document.getElementById('modal-form');
+                if (modalForm) {
+                    const loaderContainer = document.getElementById('artifact-loader-container') ||
+                                            modalForm.querySelector('.artifact-loading-container')?.parentElement ||
+                                            modalForm;
+                    loaderContainer.innerHTML = formHtml;
+                    this.initUpdateFormHandlers();
+                    resolved = true;
+                }
+
+                artifactsPromise.then(list => {
+                    if (!list || !list.length) return;
+                    const select = document.getElementById('distr-url');
+                    if (select && select.tagName === 'SELECT') {
+                        const currentValue = select.value;
+                        select.style.opacity = '0.5';
+                        setTimeout(() => {
+                            select.innerHTML = list.map(v => `<option value="${v.url}" data-version-type="${ApplicationsModule.getVersionType(v.version)}">${v.version}</option>`).join('');
+                            select.innerHTML += '<option value="custom">── Указать URL вручную ──</option>';
+                            if ([...select.options].some(opt => opt.value === currentValue)) {
+                                select.value = currentValue;
+                            }
+                            select.style.opacity = '1';
+                            select.classList.add('animated-fade-in');
+                            select.dispatchEvent(new Event('change'));
+                        }, 200);
+                    }
+                });
+            }, minDelay);
+        },
+
+        showTabsUpdateModal(appGroups, title) {
+            const modalContent = document.createElement('div');
+            
+            // Создаем контейнер для вкладок
+            const tabsContainer = document.createElement('div');
+            tabsContainer.className = 'modal-tabs';
+            modalContent.appendChild(tabsContainer);
+            
+            // Создаем форму
+            const form = document.createElement('form');
+            form.id = 'update-form';
+            form.className = 'modal-form';
+            modalContent.appendChild(form);
+            
+            // Создаем хранилище состояний для каждой группы
+            const groupStates = {};
+            const groupContentCache = {};
+            
+            // Создаем вкладки
+            Object.keys(appGroups).forEach((groupName, index) => {
+                const tab = document.createElement('div');
+                tab.className = `modal-tab ${index === 0 ? 'active' : ''}`;
+                tab.innerHTML = `${groupName} <span class="app-count">(${appGroups[groupName].length})</span>`;
+                tab.setAttribute('data-group', groupName);
+                tabsContainer.appendChild(tab);
+                
+                // Инициализируем состояние группы
+                const apps = appGroups[groupName];
+                const firstApp = apps[0];
+                
+                groupStates[groupName] = {
+                    appIds: apps.map(app => app.id),
+                    distrUrl: firstApp?.distr_path || '',
+                    restartMode: 'restart'
+                };
+            });
+            
+            // Контейнер для динамического содержимого
+            const contentDiv = document.createElement('div');
+            contentDiv.id = 'dynamic-group-content';
+            form.appendChild(contentDiv);
+            
+            // Функция обновления содержимого для группы
+            const updateFormContent = async (groupName, forceRefresh = false) => {
+                const apps = appGroups[groupName];
+                const firstApp = apps[0];
+                
+                // Проверяем кэш
+                if (!forceRefresh && groupContentCache[groupName]) {
+                    contentDiv.innerHTML = groupContentCache[groupName];
+                    this.restoreGroupState(groupName, groupStates);
+                    return;
+                }
+                
+                // Показываем загрузчик
+                contentDiv.classList.add('loading');
+                contentDiv.innerHTML = `
+                    <div class="artifact-loading-container">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-progress">
+                            <div class="progress-bar"></div>
+                        </div>
+                        <div class="loading-text">Загрузка доступных версий для группы ${groupName}...</div>
+                    </div>
+                `;
+                
+                let artifacts = null;
+                let errorOccurred = false;
+                
+                try {
+                    // Загружаем артефакты асинхронно
+                    artifacts = await this.loadArtifactsForApp(firstApp.id);
+                } catch (error) {
+                    console.error('Ошибка загрузки артефактов:', error);
+                    errorOccurred = true;
+                }
+                
+                // Создаем HTML содержимое
+                let html = '<div class="form-content animated-fade-in">';
+                
+                // Поле версии
+                if (firstApp.app_type === 'docker') {
+                    html += `
+                        <div class="form-group">
+                            <label for="distr-url">Docker образ:</label>
+                            <input type="text" id="distr-url" class="form-control" 
+                                   value="${groupStates[groupName].distrUrl}" 
+                                   placeholder="Например: registry.faktura.ru/app:latest">
+                        </div>
+                    `;
+                } else if (artifacts && artifacts.length > 0) {
+                    html += `
+                        <div class="form-group">
+                            <label for="distr-url">
+                                Версия для обновления:
+                                <button type="button" id="refresh-artifacts-btn" class="refresh-btn" title="Обновить список версий">⟳</button>
+                            </label>
+                            <div class="artifact-select-wrapper">
+                                <select id="distr-url" class="form-control artifact-select">
+                                    ${artifacts.map(v => `<option value="${v.url}" data-version-type="${this.getVersionType(v.version)}">${v.version}</option>`).join('')}
+                                    <option value="custom">── Указать URL вручную ──</option>
+                                </select>
+                                <div class="select-progress" style="display:none"><div class="progress-bar"></div></div>
+                                <div class="select-spinner" style="display:none"></div>
+                            </div>
+                            <div id="version-notification" class="version-notification" style="display: none;"></div>
+                        </div>
+                        <div class="form-group" id="custom-url-group" style="display: none;">
+                            <label for="custom-distr-url">URL дистрибутива:</label>
+                            <input type="text" id="custom-distr-url" class="form-control" placeholder="Введите URL дистрибутива">
+                        </div>
+                    `;
+                } else if (errorOccurred) {
+                    html += `
+                        <div class="form-group">
+                            <div class="error-message">Не удалось загрузить список версий</div>
+                            <label for="distr-url">URL дистрибутива:</label>
+                            <input type="text" id="distr-url" class="form-control" 
+                                   value="${groupStates[groupName].distrUrl}" 
+                                   placeholder="Введите URL дистрибутива">
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="form-group">
+                            <label for="distr-url">URL дистрибутива:</label>
+                            <input type="text" id="distr-url" class="form-control" 
+                                   value="${groupStates[groupName].distrUrl}" 
+                                   placeholder="Введите URL дистрибутива">
+                        </div>
+                    `;
+                }
+                
+                // Режим обновления (значения совместимы с бэкендом)
+                html += `
+                    <div class="form-group">
+                        <label>Режим обновления:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="restart" 
+                                       ${groupStates[groupName].restartMode === 'restart' ? 'checked' : ''}>
+                                В рестарт
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="restart_mode" value="immediate" 
+                                       ${groupStates[groupName].restartMode === 'immediate' ? 'checked' : ''}>
+                                Сейчас
+                            </label>
+                        </div>
+                    </div>
+                `;
+                
+                // Список приложений
+                html += `
+                    <div class="group-apps-info">
+                        <label>Приложения для обновления:</label>
+                        <div class="apps-list">
+                            ${apps.map(app => `<span class="app-badge">${app.name}</span>`).join('')}
+                        </div>
+                    </div>
+                    <!-- Скрытое поле с ID первого приложения для обновления артефактов -->
+                    <input type="hidden" name="current_app_id" value="${firstApp.id}">
+                `;
+                
+                html += '</div>';
+                
+                // Заменяем содержимое с анимацией
+                setTimeout(() => {
+                    // Сохраняем в кэш и отображаем
+                    groupContentCache[groupName] = html;
+                    contentDiv.innerHTML = html;
+                    contentDiv.classList.remove('loading');
+                    
+                    // Восстанавливаем сохраненное состояние группы
+                    if (groupStates[groupName]) {
+                        this.restoreGroupState(groupName, groupStates);
+                    }
+                    
+                    // Инициализируем обработчики
+                    this.initUpdateFormHandlers();
+                }, Math.max(500, Math.random() * 200 + 400)); // Случайная задержка для реалистичности
+            };
+            
+            // Обработчики вкладок
+            tabsContainer.querySelectorAll('.modal-tab').forEach(tab => {
+                tab.addEventListener('click', async function() {
+                    if (this.classList.contains('active')) return;
+                    
+                    // Сохраняем текущее состояние
+                    const activeTab = tabsContainer.querySelector('.modal-tab.active');
+                    if (activeTab) {
+                        const activeGroup = activeTab.getAttribute('data-group');
+                        ApplicationsModule.saveGroupState(activeGroup, groupStates);
+                    }
+                    
+                    // Переключаем вкладки
+                    tabsContainer.querySelectorAll('.modal-tab').forEach(t => {
+                        t.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    
+                    // Загружаем содержимое
+                    const groupName = this.getAttribute('data-group');
+                    await updateFormContent(groupName);
+                });
+            });
+            
+            // Обработчик отправки формы
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                // Сохраняем текущее состояние
+                const activeTab = tabsContainer.querySelector('.modal-tab.active');
+                if (activeTab) {
+                    const activeGroup = activeTab.getAttribute('data-group');
+                    this.saveGroupState(activeGroup, groupStates);
+                }
+                
+                // Собираем данные для обновления
+                const updates = [];
+                for (const groupName of Object.keys(groupStates)) {
+                    const state = groupStates[groupName];
+                    if (!state.distrUrl || state.distrUrl.trim() === '') continue;
+                    
+                    for (const appId of state.appIds) {
+                        const app = this.getAppById(appId);
+                        if (!app) continue;
+                        
+                        updates.push({
+                            appId: appId,
+                            appName: app.name,
+                            groupName: groupName,
+                            distr_url: state.distrUrl,
+                            restart_mode: state.restartMode || 'restart'
+                        });
+                    }
+                }
+                
+                if (updates.length === 0) {
+                    showError('Укажите URL дистрибутива хотя бы для одной группы');
+                    return;
+                }
+                
+                await this.processMultipleUpdates(updates);
+            });
+            
+            // Кнопки действий
+            const formActions = document.createElement('div');
+            formActions.className = 'form-actions';
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'cancel-btn';
+            cancelBtn.textContent = 'Отмена';
+            cancelBtn.onclick = () => window.closeModal();
+            formActions.appendChild(cancelBtn);
+            
+            const submitBtn = document.createElement('button');
+            submitBtn.type = 'submit';
+            submitBtn.className = 'submit-btn';
+            submitBtn.textContent = 'Обновить';
+            formActions.appendChild(submitBtn);
+            
+            form.appendChild(formActions);
+            
+            // Отображаем модальное окно сразу
+            window.showModal(title, modalContent);
+            
+            // Загружаем содержимое для первой группы асинхронно
+            const firstGroup = Object.keys(appGroups)[0];
+            setTimeout(() => {
+                updateFormContent(firstGroup);
+            }, 100);
+        },
+
+        showGroupInfoModal(groupName, apps) {
+            const sections = [
+                {
+                    title: 'Информация о группе',
+                    type: 'table',
+                    rows: [
+                        { label: 'Название группы:', value: groupName },
+                        { label: 'Количество приложений:', value: apps.length },
+                        { label: 'Серверы:', value: [...new Set(apps.map(app => app.server_name))].join(', ') }
+                    ]
+                },
+                {
+                    title: 'Приложения в группе',
+                    type: 'html',
+                    content: this.createGroupAppsTable(apps)
+                }
+            ];
+            
+            ModalUtils.showInfoModal(`Группа: ${groupName}`, sections);
+        },
+
+        // ===========================
+        // ОБРАБОТКА ОБНОВЛЕНИЙ
+        // ===========================
+        async processUpdateForm(formData) {
+            try {
+                // Получаем данные из формы
+                const distrSelect = document.getElementById('distr-url');
+                const customInput = document.getElementById('custom-distr-url');
+                
+                let distrUrl = '';
+                
+                // Проверяем, если выбран custom вариант
+                if (distrSelect && distrSelect.value === 'custom' && customInput && customInput.value) {
+                    distrUrl = customInput.value.trim();
+                } else if (distrSelect) {
+                    distrUrl = distrSelect.value;
+                } else {
+                    distrUrl = formData.distr_url;
+                }
+                
+                const restartMode = formData.restart_mode || 'restart';
+                
+                // Получаем ID приложений
+                const appIdsElement = document.querySelectorAll('input[name="app_ids[]"]');
+                const appIds = Array.from(appIdsElement).map(input => input.value);
+                
+                if (!distrUrl) {
+                    showError('Укажите URL дистрибутива');
+                    return;
+                }
+                
+                if (appIds.length === 0) {
+                    showError('Не выбрано ни одного приложения');
+                    return;
+                }
+                
+                const updates = [];
+                
+                for (const appId of appIds) {
+                    const app = this.getAppById(appId);
+                    if (!app) continue;
+                    
+                    updates.push({
+                        appId: appId,
+                        appName: app.name,
+                        distr_url: distrUrl,
+                        restart_mode: restartMode
+                    });
+                }
+                
+                await this.processMultipleUpdates(updates);
+                
+            } catch (error) {
+                console.error('Ошибка при обработке формы обновления:', error);
+                showError('Произошла ошибка при обновлении приложений');
+            }
+        },
+
+        async processMultipleUpdates(updates) {
+            if (!updates || updates.length === 0) {
+                showError('Нет приложений для обновления');
+                return;
+            }
+            
+            showNotification(`Запуск обновления ${updates.length} приложений...`);
+            
+            const results = [];
+            const errors = [];
+            
+            for (const update of updates) {
+                try {
+                    console.log(`Обновление приложения ${update.appName} (ID: ${update.appId})`);
+                    
+                    const app = this.getAppById(update.appId);
+                    const updateParams = {
+                        restart_mode: update.restart_mode
+                    };
+                    
+                    if (app && app.app_type === 'docker') {
+                        updateParams.image_name = update.distr_url;
+                        updateParams.distr_url = update.distr_url;
+                    } else {
+                        updateParams.distr_url = update.distr_url;
+                    }
+                    
+                    const response = await fetch(`/api/applications/${update.appId}/update`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(updateParams)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        results.push({
+                            appId: update.appId,
+                            appName: update.appName,
+                            success: true
+                        });
+                    } else {
+                        errors.push({
+                            appName: update.appName,
+                            error: result.error || 'Неизвестная ошибка'
+                        });
+                    }
+                    
+                } catch (error) {
+                    console.error(`Ошибка при обновлении ${update.appName}:`, error);
+                    errors.push({
+                        appName: update.appName,
+                        error: error.message
+                    });
+                }
+            }
+            
+            // Показываем результаты
+            if (errors.length === 0) {
+                showNotification(`Все приложения (${results.length}) успешно обновлены`);
+            } else if (results.length === 0) {
+                showError('Не удалось обновить ни одно приложение');
+                errors.forEach(err => {
+                    console.error(`${err.appName}: ${err.error}`);
+                });
+            } else {
+                showNotification(`Обновлено ${results.length} из ${updates.length} приложений`);
+                errors.forEach(err => {
+                    showError(`Ошибка обновления ${err.appName}: ${err.error}`);
+                });
+            }
+            
+            // Обновляем список приложений
+            await this.loadApplications();
+            
+            // Закрываем модальное окно
+            window.closeModal();
+        },
+
+        // ===========================
+        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+        // ===========================
+        getAppById(appId) {
+            return this.state.allApplications.find(app => app.id == appId);
+        },
+
+        getSelectedAppIds() {
+            return Array.from(this.state.selectedItems.applications);
+        },
+
+        getActionName(action) {
+            const actionNames = {
+                'start': 'запустить',
+                'stop': 'остановить',
+                'restart': 'перезапустить',
+                'update': 'обновить',
+                'unload': 'выгрузить'
+            };
+            return actionNames[action] || action;
+        },
+
+        getVersionType(version) {
+            if (!version) return '';
+            const versionLower = version.toLowerCase();
+            if (versionLower.includes('snapshot')) return 'snapshot';
+            if (versionLower.includes('dev')) return 'dev';
+            if (versionLower.includes('release')) return 'release';
+            return '';
+        },
+
+        isActionAvailable(app, action) {
+            if (!app) return false;
+            
+            const isOnline = app.status === 'online';
+            
+            switch(action) {
+                case 'start':
+                    return !isOnline;
+                case 'stop':
+                case 'restart':
+                    return isOnline;
+                case 'update':
+                    return true;
+                default:
+                    return false;
+            }
+        },
+
+        renderServerList(servers) {
+            if (!this.elements.serverList) return;
+            
+            this.elements.serverList.innerHTML = '';
+            
+            const allItem = document.createElement('li');
+            allItem.innerHTML = '<a href="#" data-server-id="all">Все серверы</a>';
+            allItem.querySelector('a').addEventListener('click', (e) => {
+                e.preventDefault();
+                this.selectServer('all', 'Все серверы');
+            });
+            this.elements.serverList.appendChild(allItem);
+            
+            servers.forEach(server => {
+                const serverItem = document.createElement('li');
+                serverItem.innerHTML = `<a href="#" data-server-id="${server.id}">${server.name}</a>`;
+                serverItem.querySelector('a').addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.selectServer(server.id, server.name);
+                });
+                this.elements.serverList.appendChild(serverItem);
+            });
+        },
+
+        selectServer(serverId, serverName) {
+            this.state.selectedServerId = serverId;
+            if (this.elements.serverDropdown) {
+                this.elements.serverDropdown.innerHTML = `${serverName || 'Все серверы'} <span>▾</span>`;
+            }
+            this.state.currentPage = 1;
+            this.loadApplications();
+        },
+
+        initUpdateFormHandlers() {
+            const selectElement = document.getElementById('distr-url');
+            const customUrlGroup = document.getElementById('custom-url-group');
+            
+            if (selectElement && selectElement.tagName === 'SELECT') {
+                // Обработчик изменения выбора версии
+                selectElement.addEventListener('change', function() {
+                    const versionNotification = document.getElementById('version-notification');
+                    
+                    if (this.value === 'custom') {
+                        customUrlGroup.style.display = 'block';
+                        customUrlGroup.classList.add('animated-slide-down');
+                        const customInput = document.getElementById('custom-distr-url');
+                        if (customInput) {
+                            customInput.required = true;
+                        }
+                        if (versionNotification) {
+                            versionNotification.style.display = 'none';
+                        }
+                    } else {
+                        customUrlGroup.style.display = 'none';
+                        const customInput = document.getElementById('custom-distr-url');
+                        if (customInput) {
+                            customInput.required = false;
+                        }
+                        
+                        // Проверяем тип версии и показываем уведомление
+                        const selectedOption = this.options[this.selectedIndex];
+                        const versionType = selectedOption.getAttribute('data-version-type');
+                        
+                        if (versionNotification) {
+                            if (versionType === 'snapshot') {
+                                versionNotification.innerHTML = '<span class="warning-icon">⚠️</span> Внимание: вы выбрали SNAPSHOT версию. Это тестовая версия, которая может быть нестабильной.';
+                                versionNotification.className = 'version-notification warning';
+                                versionNotification.style.display = 'block';
+                            } else if (versionType === 'dev') {
+                                versionNotification.innerHTML = '<span class="info-icon">ℹ️</span> Вы выбрали версию для разработки (dev).';
+                                versionNotification.className = 'version-notification info';
+                                versionNotification.style.display = 'block';
+                            } else if (versionType === 'release') {
+                                versionNotification.innerHTML = '<span class="success-icon">✓</span> Вы выбрали стабильную release версию.';
+                                versionNotification.className = 'version-notification success';
+                                versionNotification.style.display = 'block';
+                            } else {
+                                versionNotification.style.display = 'none';
+                            }
+                        }
+                    }
+                });
+                
+                // Проверяем начальное значение
+                selectElement.dispatchEvent(new Event('change'));
+            }
+            
+            // Обработчик для кнопки обновления артефактов
+            const refreshBtn = document.getElementById('refresh-artifacts-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    refreshBtn.classList.add('rotating');
+                    refreshBtn.disabled = true;
+                    
+                    // Получаем ID приложения
+                    const appIdInput = document.querySelector('input[name="app_ids[]"]') || 
+                                       document.querySelector('input[name="current_app_id"]');
+                    if (appIdInput) {
+                        const appId = appIdInput.value;
+                        
+                        // Очищаем кэш
+                        this.clearArtifactsCache(appId);
+                        
+                        // Перезагружаем артефакты
+                        const artifacts = await this.loadArtifactsForApp(appId, true);
+                        
+                        if (artifacts && artifacts.length > 0) {
+                            const select = document.getElementById('distr-url');
+                            if (select && select.tagName === 'SELECT') {
+                                const currentValue = select.value;
+                                
+                                // Обновляем список с анимацией
+                                select.style.opacity = '0.5';
+                                
+                                setTimeout(() => {
+                                    select.innerHTML = artifacts.map(version => {
+                                        return `<option value="${version.url}" data-version-type="${ApplicationsModule.getVersionType(version.version)}">${version.version}</option>`;
+                                    }).join('');
+                                    
+                                    // Добавляем опцию custom
+                                    select.innerHTML += '<option value="custom">── Указать URL вручную ──</option>';
+                                    // Включаем селектор на случай, если он был disabled
+                                    select.disabled = false;
+                                    
+                                    // Восстанавливаем выбранное значение если возможно
+                                    if ([...select.options].some(opt => opt.value === currentValue)) {
+                                        select.value = currentValue;
+                                    }
+                                    
+                                    select.style.opacity = '1';
+                                    select.classList.add('animated-fade-in');
+                                    
+                                    // Проверяем тип версии
+                                    select.dispatchEvent(new Event('change'));
+                                }, 300);
+                            }
+                            // Скрываем ошибку, если была
+                            const err = document.getElementById('artifact-load-error');
+                            if (err) err.remove();
+                        } else {
+                            // Ошибка/пусто: показываем ручной ввод и скрываем селектор
+                            const select = document.getElementById('distr-url');
+                            if (select) {
+                                const selectWrapper = select.closest('.artifact-select-wrapper');
+                                if (selectWrapper) selectWrapper.style.display = 'none';
+                            }
+                            const customGroup = document.getElementById('custom-url-group');
+                            if (customGroup) customGroup.style.display = 'block';
+                            const customInput = document.getElementById('custom-distr-url');
+                            if (customInput) customInput.required = true;
+                            // Показ ошибки
+                            let err = document.getElementById('artifact-load-error');
+                            if (!err) {
+                                err = document.createElement('div');
+                                err.id = 'artifact-load-error';
+                                err.className = 'error-message';
+                                err.textContent = 'Не удалось загрузить список версий';
+                                customGroup.parentNode.insertBefore(err, customGroup.nextSibling);
+                            }
+                        }
+                    }
+                    
+                    setTimeout(() => {
+                        refreshBtn.classList.remove('rotating');
+                        refreshBtn.disabled = false;
+                    }, 1000);
+                });
+            }
+        },
+
+        saveGroupState(groupName, groupStates) {
+            const distrUrlElement = document.getElementById('distr-url');
+            const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
+            
+            if (distrUrlElement) {
+                let distrUrl = '';
+                if (distrUrlElement.tagName === 'SELECT') {
+                    if (distrUrlElement.value === 'custom') {
+                        const customUrlElement = document.getElementById('custom-distr-url');
+                        distrUrl = customUrlElement ? customUrlElement.value.trim() : '';
+                    } else {
+                        distrUrl = distrUrlElement.value;
+                    }
+                } else {
+                    distrUrl = distrUrlElement.value.trim();
+                }
+                groupStates[groupName].distrUrl = distrUrl;
+            }
+            
+            if (restartModeElement) {
+                groupStates[groupName].restartMode = restartModeElement.value;
+            }
+        },
+
+        restoreGroupState(groupName, groupStates) {
+            const state = groupStates ? groupStates[groupName] : null;
+            if (!state) return;
+            
+            const distrUrlElement = document.getElementById('distr-url');
+            if (distrUrlElement) {
+                if (distrUrlElement.tagName === 'SELECT') {
+                    const hasOption = [...distrUrlElement.options].some(opt => opt.value === state.distrUrl);
+                    
+                    if (hasOption) {
+                        distrUrlElement.value = state.distrUrl;
+                    } else if (state.distrUrl && state.distrUrl !== '' && state.distrUrl !== 'custom') {
+                        distrUrlElement.value = 'custom';
+                        
+                        const customUrlGroup = document.getElementById('custom-url-group');
+                        const customUrlInput = document.getElementById('custom-distr-url');
+                        
+                        if (customUrlGroup && customUrlInput) {
+                            customUrlGroup.style.display = 'block';
+                            customUrlInput.value = state.distrUrl;
+                            customUrlInput.required = true;
+                        }
+                    }
+                } else if (distrUrlElement.tagName === 'INPUT') {
+                    distrUrlElement.value = state.distrUrl || '';
+                }
+            }
+            
+            if (state.restartMode) {
+                const modeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
+                if (modeRadio) {
+                    modeRadio.checked = true;
+                }
+            }
+        },
+
+        // ===========================
+        // ОБРАБОТЧИКИ UI
+        // ===========================
+        toggleGrouping() {
+            this.elements.groupToggleBtn.classList.toggle('active');
+            this.state.groupingEnabled = this.elements.groupToggleBtn.classList.contains('active');
+            this.state.currentPage = 1;
+            this.filterAndDisplayApplications();
+        },
+
+        handleSelectAll(e) {
+            const isChecked = e.target.checked;
+            
+            if (isChecked) {
+                document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)').forEach(checkbox => {
+                    if (!checkbox.closest('tr.hidden')) {
+                        checkbox.checked = true;
+                        const appId = checkbox.getAttribute('data-app-id');
+                        if (appId) {
+                            this.state.selectedItems.applications.add(appId);
+                        }
+                    }
+                });
+                
+                document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+                    if (!checkbox.closest('tr.hidden')) {
+                        checkbox.checked = true;
+                        const groupName = checkbox.getAttribute('data-group');
+                        if (groupName) {
+                            this.state.selectedItems.groups.add(groupName);
+                        }
+                    }
+                });
+            } else {
+                document.querySelectorAll('.app-checkbox, .group-checkbox').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                this.state.selectedItems.applications.clear();
+                this.state.selectedItems.groups.clear();
+            }
+            
+            this.updateActionButtonsState(isChecked);
+        },
+
+        handleSearch(e) {
+            this.state.searchQuery = e.target.value.trim();
+            this.state.currentPage = 1;
+            this.filterAndDisplayApplications();
+        },
+
+        handlePageSizeChange(e) {
+            this.state.pageSize = parseInt(e.target.value);
+            this.state.currentPage = 1;
+            this.filterAndDisplayApplications();
+        },
+
+        handleRefresh() {
+            this.elements.refreshBtn.classList.add('rotating');
+            this.loadApplications().finally(() => {
+                this.elements.refreshBtn.classList.remove('rotating');
+            });
+        },
+
+        handleSort(e) {
+            const currentSortColumn = this.state.sortColumn;
+            this.state.sortColumn = e.currentTarget.getAttribute('data-sort');
+            
+            if (currentSortColumn === this.state.sortColumn) {
+                this.state.sortDirection = this.state.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.state.sortDirection = 'asc';
+            }
+            
+            this.filterAndDisplayApplications();
+        },
+
+        // ===========================
+        // УПРАВЛЕНИЕ СОСТОЯНИЕМ
+        // ===========================
+        saveCheckboxState() {
+            document.querySelectorAll('.app-checkbox:checked').forEach(checkbox => {
+                const appId = checkbox.getAttribute('data-app-id');
+                if (appId) {
+                    this.state.selectedItems.applications.add(appId);
+                }
+            });
+            
+            document.querySelectorAll('.group-checkbox:checked').forEach(checkbox => {
+                const groupName = checkbox.getAttribute('data-group');
+                if (groupName) {
+                    this.state.selectedItems.groups.add(groupName);
+                }
+            });
+        },
+
+        restoreCheckboxState() {
+            this.state.selectedItems.applications.forEach(appId => {
+                const checkbox = document.querySelector(`.app-checkbox[data-app-id="${appId}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            this.state.selectedItems.groups.forEach(groupName => {
+                const checkbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    this.updateGroupCheckboxState(groupName);
+                }
+            });
+            
+            this.updateSelectAllState();
+        },
+
+        clearCheckboxState() {
+            this.state.selectedItems.applications.clear();
+            this.state.selectedItems.groups.clear();
+        },
+
+        saveTableState() {
+            this.state.expandedGroups = [];
+            document.querySelectorAll('.group-row.expanded').forEach(row => {
+                const groupName = row.getAttribute('data-group');
+                if (groupName) {
+                    this.state.expandedGroups.push(groupName);
+                }
+            });
+        },
+
+        restoreTableState() {
+            if (!this.state.expandedGroups || this.state.expandedGroups.length === 0) return;
+            
+            this.state.expandedGroups.forEach(groupName => {
+                const groupRow = document.querySelector(`.group-row[data-group="${groupName}"]`);
+                if (groupRow) {
+                    groupRow.classList.add('expanded');
+                    
+                    const toggle = groupRow.querySelector('.group-toggle');
+                    if (toggle) {
+                        toggle.style.transform = 'rotate(90deg)';
+                    }
+                    
+                    const wrapperRow = document.querySelector(`.child-wrapper[data-group="${groupName}"]`);
+                    if (wrapperRow) {
+                        wrapperRow.style.display = 'table-row';
+                    }
+                }
+            });
+            
+            this.setupAppActionButtons();
+            this.setupGroupActionButtons();
+        },
+
+        updateSelectAllState() {
+            const appCheckboxes = document.querySelectorAll('.app-checkbox:not(.hidden .app-checkbox)');
+            const groupCheckboxes = document.querySelectorAll('.group-checkbox');
+            
+            const allVisibleCheckboxes = [...appCheckboxes, ...groupCheckboxes].filter(
+                checkbox => !checkbox.closest('tr.hidden') && 
+                        (!checkbox.closest('.child-wrapper') || 
+                        checkbox.closest('.child-wrapper').style.display !== 'none')
+            );
+            
+            const checkedCount = allVisibleCheckboxes.filter(checkbox => 
+                checkbox.checked || checkbox.indeterminate
+            ).length;
+            
+            if (this.elements.selectAllCheckbox) {
+                if (checkedCount === 0) {
+                    this.elements.selectAllCheckbox.checked = false;
+                    this.elements.selectAllCheckbox.indeterminate = false;
+                } else if (checkedCount === allVisibleCheckboxes.length) {
+                    this.elements.selectAllCheckbox.checked = true;
+                    this.elements.selectAllCheckbox.indeterminate = false;
+                } else {
+                    this.elements.selectAllCheckbox.checked = false;
+                    this.elements.selectAllCheckbox.indeterminate = true;
+                }
+            }
+            
+            this.updateActionButtonsState(checkedCount > 0);
+        },
+
+        updateGroupCheckboxState(groupName) {
+            const groupCheckbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+            if (!groupCheckbox) return;
+            
+            const childCheckboxes = document.querySelectorAll(
+                `.child-wrapper[data-group="${groupName}"] .app-checkbox`
+            );
+            const checkedCount = document.querySelectorAll(
+                `.child-wrapper[data-group="${groupName}"] .app-checkbox:checked`
+            ).length;
+            
+            if (checkedCount === 0) {
+                groupCheckbox.checked = false;
+                groupCheckbox.indeterminate = false;
+            } else if (checkedCount === childCheckboxes.length) {
+                groupCheckbox.checked = true;
+                groupCheckbox.indeterminate = false;
+            } else {
+                groupCheckbox.checked = false;
+                groupCheckbox.indeterminate = true;
+            }
+        },
+
+        updateActionButtonsState(hasSelection) {
+            const hasSelectedItems = this.state.selectedItems.applications.size > 0 || hasSelection;
+            
+            ['start', 'restart', 'stop', 'update', 'unload'].forEach(action => {
+                const btn = this.elements[`${action}Btn`];
+                if (btn) {
+                    btn.disabled = !hasSelectedItems;
+                    if (hasSelectedItems) {
+                        btn.classList.remove('disabled');
+                    } else {
+                        btn.classList.add('disabled');
+                    }
+                }
+            });
+        },
+
+        // ===========================
+        // ВЫПАДАЮЩИЕ МЕНЮ
+        // ===========================
+        toggleDropdown(actionButton) {
+            const dropdown = actionButton.nextElementSibling;
+            
+            if (dropdown === this.state.activeDropdown) {
+                this.closeAllDropdowns();
+                return;
+            }
+            
+            this.closeAllDropdowns();
+            
+            if (this.state.dropdownOverlay) {
+                this.state.dropdownOverlay.style.display = 'block';
+            }
+            
+            this.positionDropdown(dropdown, actionButton);
+            this.state.activeDropdown = dropdown;
+        },
+
+        positionDropdown(dropdown, actionButton) {
+            const buttonRect = actionButton.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - buttonRect.bottom;
+            const showUpwards = spaceBelow < 200;
+            
+            dropdown.style.display = 'block';
+            dropdown.style.opacity = '0';
+            dropdown.classList.remove('dropdown-up');
+            
+            if (showUpwards) {
+                dropdown.classList.add('dropdown-up');
+                dropdown.style.bottom = (window.innerHeight - buttonRect.top) + 'px';
+            } else {
+                dropdown.style.top = buttonRect.bottom + 'px';
+            }
+            
+            dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
+            dropdown.classList.add('show');
+            dropdown.style.opacity = '1';
+            actionButton.classList.add('active');
+        },
+
+        closeAllDropdowns() {
+            if (this.state.dropdownOverlay) {
+                this.state.dropdownOverlay.style.display = 'none';
+            }
+            
+            document.querySelectorAll('.actions-dropdown.show').forEach(dropdown => {
+                dropdown.classList.remove('show');
+                dropdown.style.display = '';
+                dropdown.style.top = '';
+                dropdown.style.right = '';
+                dropdown.style.bottom = '';
+                
+                const parentMenu = dropdown.closest('.actions-menu');
+                if (parentMenu) {
+                    const actionButton = parentMenu.querySelector('.actions-button');
+                    if (actionButton) {
+                        actionButton.classList.remove('active');
+                    }
+                }
+            });
+            
+            this.state.activeDropdown = null;
+        },
+
+        // ===========================
+        // ПАГИНАЦИЯ
+        // ===========================
+        updatePagination(totalPages) {
+            if (!this.elements.paginationControls) return;
+            
+            this.elements.paginationControls.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Кнопка "Предыдущая"
+            if (this.state.currentPage > 1) {
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'pagination-btn';
+                prevBtn.textContent = '‹';
+                prevBtn.onclick = () => {
+                    this.state.currentPage--;
+                    this.filterAndDisplayApplications();
+                };
+                this.elements.paginationControls.appendChild(prevBtn);
+            }
+            
+            // Номера страниц
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || 
+                    (i >= this.state.currentPage - 2 && i <= this.state.currentPage + 2)) {
+                    const pageBtn = document.createElement('button');
+                    pageBtn.className = `pagination-btn ${i === this.state.currentPage ? 'active' : ''}`;
+                    pageBtn.textContent = i;
+                    pageBtn.onclick = () => {
+                        this.state.currentPage = i;
+                        this.filterAndDisplayApplications();
+                    };
+                    this.elements.paginationControls.appendChild(pageBtn);
+                } else if (i === this.state.currentPage - 3 || i === this.state.currentPage + 3) {
+                    const dots = document.createElement('span');
+                    dots.className = 'pagination-dots';
+                    dots.textContent = '...';
+                    this.elements.paginationControls.appendChild(dots);
+                }
+            }
+            
+            // Кнопка "Следующая"
+            if (this.state.currentPage < totalPages) {
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'pagination-btn';
+                nextBtn.textContent = '›';
+                nextBtn.onclick = () => {
+                    this.state.currentPage++;
+                    this.filterAndDisplayApplications();
+                };
+                this.elements.paginationControls.appendChild(nextBtn);
+            }
+        },
+
+        // ===========================
+        // РАБОТА С КЭШЕМ
+        // ===========================
+        clearArtifactsCache(appId = null) {
+            if (appId) {
+                delete this.artifactsCache[`app_${appId}`];
+                console.log(`Кэш артефактов очищен для приложения ${appId}`);
+            } else {
+                Object.keys(this.artifactsCache).forEach(key => {
+                    delete this.artifactsCache[key];
+                });
+                console.log('Весь кэш артефактов очищен');
+            }
+        },
+
+        getArtifactsCacheAge(appId) {
+            const cacheKey = `app_${appId}`;
+            if (this.artifactsCache[cacheKey]) {
+                return (Date.now() - this.artifactsCache[cacheKey].timestamp) / 1000;
+            }
+            return Infinity;
+        },
+
+        // ===========================
+        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ МОДАЛЬНЫХ ОКОН
+        // ===========================
+        createAppInfoSections(app) {
+            const sections = [
+                {
+                    title: 'Основная информация',
+                    type: 'table',
+                    rows: [
+                        { label: 'Имя:', value: app.name },
+                        { label: 'Тип:', value: app.app_type || 'Не указан' },
+                        { label: 'Статус:', value: `<span class="status-badge ${app.status === 'online' ? 'status-completed' : 'status-failed'}">${app.status || 'Неизвестно'}</span>` },
+                        { label: 'Версия:', value: app.version || 'Не указана' },
+                        { label: 'Сервер:', value: app.server_name || 'Не указан' },
+                        { label: 'IP:', value: app.ip || 'Не указан' },
+                        { label: 'Порт:', value: app.port || 'Не указан' }
+                    ]
+                },
+                {
+                    title: 'Пути и расположение',
+                    type: 'table',
+                    rows: [
+                        { label: 'Путь приложения:', value: app.path || 'Не указан' },
+                        { label: 'Путь к логам:', value: app.log_path || 'Не указан' },
+                        { label: 'Путь к дистрибутиву:', value: app.distr_path || 'Не указан' }
+                    ]
+                }
+            ];
+            
+            // Добавляем секцию с настройками обновления
+            sections.push({
+                title: 'Настройки обновления',
+                type: 'html',
+                content: `
+                    <div class="form-group">
+                        <label for="update-playbook-path">Путь к Ansible playbook:</label>
+                        <div class="input-with-button">
+                            <input type="text" id="update-playbook-path" class="form-control" value="${app.update_playbook_path || ''}">
+                            <button type="button" id="save-playbook-path" class="action-btn">Сохранить</button>
+                        </div>
+                    </div>
+                `
+            });
+            
+            // Добавляем секцию с событиями
+            if (app.events && app.events.length > 0) {
+                let eventsHtml = '<table class="events-table"><thead><tr><th>Дата</th><th>Тип</th><th>Статус</th></tr></thead><tbody>';
+                
+                app.events.forEach(event => {
+                    const eventDate = new Date(event.timestamp);
+                    eventsHtml += `
+                        <tr class="event-row ${event.status}" title="${event.description || ''}">
+                            <td>${eventDate.toLocaleString()}</td>
+                            <td>${event.event_type}</td>
+                            <td>${event.status}</td>
+                        </tr>
+                    `;
+                });
+                
+                eventsHtml += '</tbody></table>';
+                sections.push({
+                    title: 'Последние события',
+                    type: 'html',
+                    content: eventsHtml
+                });
+            } else {
+                sections.push({
+                    title: 'Последние события',
+                    type: 'html',
+                    content: '<p>Нет записей о событиях</p>'
+                });
+            }
+            
+            return sections;
+        },
+
+        createGroupAppsTable(apps) {
+            let html = '<table class="info-table"><thead><tr><th>Приложение</th><th>Версия</th><th>Статус</th><th>Сервер</th></tr></thead><tbody>';
+            
+            apps.forEach(app => {
+                const statusClass = app.status === 'online' ? 'status-completed' : 'status-failed';
+                html += `
+                    <tr>
+                        <td>${app.name}</td>
+                        <td>${app.version || 'Н/Д'}</td>
+                        <td><span class="status-badge ${statusClass}">${app.status}</span></td>
+                        <td>${app.server_name || 'Н/Д'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            return html;
+        },
+
+        async savePlaybookPath(appId) {
+            const playbookPath = document.getElementById('update-playbook-path').value.trim();
+            
+            try {
+                const response = await fetch(`/api/applications/${appId}/update_playbook`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        playbook_path: playbookPath
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Путь к playbook успешно сохранен');
+                } else {
+                    showError(data.error || 'Не удалось сохранить путь к playbook');
+                }
+            } catch (error) {
+                console.error('Ошибка при сохранении пути к playbook:', error);
+                showError('Не удалось сохранить путь к playbook');
+            }
+        }
+    };
+
+    // ===========================
+    // ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ
+    // ===========================
+        document.addEventListener('DOMContentLoaded', function() {
+            ApplicationsModule.init();
+            
+            // Добавляем CSS стили для анимаций, если их еще нет
+            if (!document.getElementById('applications-animations-styles')) {
+                const style = document.createElement('style');
+                style.id = 'applications-animations-styles';
+                style.textContent = `
+                .rotating {
+                    animation: rotate 1s linear infinite;
+                }
+                
+                @keyframes rotate {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                
+                .animated-fade-in {
+                    animation: fadeIn 0.3s ease-in;
+                }
+                
+                @keyframes fadeIn {
+                    from { 
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to { 
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                .animated-slide-down {
+                    animation: slideDown 0.3s ease-out;
+                }
+                
+                @keyframes slideDown {
+                    from {
+                        opacity: 0;
+                        max-height: 0;
+                    }
+                    to {
+                        opacity: 1;
+                        max-height: 200px;
+                    }
+                }
+                
+                /* Оригинальные стили загрузчика */
+                .artifact-loading-container {
+                    padding: 40px 20px;
+                    text-align: center;
+                }
+
+                /* Обертка селектора артефактов с прогрессом и спиннером */
+                .artifact-select-wrapper {
+                    position: relative;
+                }
+                .artifact-select-wrapper .artifact-select {
+                    padding-right: 46px; /* место под спиннер слева от стрелки */
+                }
+                .artifact-select-wrapper .select-progress {
+                    position: absolute;
+                    left: 0;
+                    right: 0;
+                    bottom: -2px; /* ровно по нижнему краю */
+                    height: 2px;
+                    background-color: rgba(92, 165, 225, 0.15);
+                    overflow: hidden;
+                }
+                .artifact-select-wrapper .select-progress .progress-bar {
+                    height: 100%;
+                    background-color: #5ca5e1;
+                    width: 0;
+                    transition: width .25s ease;
+                }
+                .artifact-select-wrapper .select-spinner {
+                    position: absolute;
+                    right: 28px; /* смещаем левее стрелки селекта */
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid rgba(92, 165, 225, 0.25);
+                    border-top-color: #5ca5e1;
+                    border-radius: 50%;
+                    opacity: 0; /* видим только в режиме загрузки */
+                    pointer-events: none;
+                }
+                .artifact-select-wrapper.loading .select-spinner {
+                    opacity: .9;
+                    animation: spin 1s linear infinite;
+                }
+                
+                .loading-spinner {
+                    width: 50px;
+                    height: 50px;
+                    border: 4px solid rgba(92, 165, 225, 0.1);
+                    border-top: 4px solid #5ca5e1;
+                    border-radius: 50%;
+                    margin: 0 auto 20px;
+                    animation: spin 1s linear infinite;
+                }
+                
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                
+                .loading-progress {
+                    width: 200px;
+                    height: 4px;
+                    background-color: rgba(92, 165, 225, 0.1);
+                    border-radius: 2px;
+                    margin: 0 auto 15px;
+                    overflow: hidden;
+                }
+                
+                .progress-bar {
+                    height: 100%;
+                    background-color: #5ca5e1;
+                    width: 0;
+                    animation: progress 2s ease-in-out infinite;
+                }
+                
+                @keyframes progress {
+                    0% { width: 0; }
+                    50% { width: 60%; }
+                    100% { width: 100%; }
+                }
+                
+                .loading-text {
+                    color: #aaa;
+                    font-size: 14px;
+                }
+                
+                .loading {
+                    opacity: 0.5;
+                    transition: opacity 0.2s ease;
+                }
+                
+                /* Стили для уведомлений о версиях */
+                .version-notification {
+                    margin-top: 10px;
+                    padding: 10px 12px;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                
+                .version-notification.warning {
+                    background-color: rgba(243, 156, 18, 0.1);
+                    border: 1px solid rgba(243, 156, 18, 0.3);
+                    color: #f39c12;
+                }
+                
+                .version-notification.info {
+                    background-color: rgba(52, 152, 219, 0.1);
+                    border: 1px solid rgba(52, 152, 219, 0.3);
+                    color: #3498db;
+                }
+                
+                .version-notification.success {
+                    background-color: rgba(46, 204, 113, 0.1);
+                    border: 1px solid rgba(46, 204, 113, 0.3);
+                    color: #2ecc71;
+                }
+                
+                /* Сообщение об ошибке */
+                .error-message {
+                    background-color: rgba(231, 76, 60, 0.1);
+                    border: 1px solid rgba(231, 76, 60, 0.3);
+                    color: #e74c3c;
+                    padding: 10px 12px;
+                    border-radius: 4px;
+                    margin-bottom: 15px;
+                    font-size: 13px;
+                }
+                
+                .refresh-btn {
+                    display: inline-block;
+                    background: none;
+                    border: none;
+                    color: #5ca5e1;
+                    cursor: pointer;
+                    font-size: 18px;
+                    margin-left: 10px;
+                    padding: 0;
+                    transition: transform 0.2s;
+                }
+                
+                .refresh-btn:hover {
+                    transform: scale(1.1);
+                }
+                
+                .refresh-btn:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    });
+
+    // Экспортируем модуль в глобальную область видимости
+    window.ApplicationsModule = ApplicationsModule;
+
+    // Добавляем глобальную функцию для отладки кэша
+    window.debugArtifactsCache = function() {
+        console.log('=== Artifacts Cache Debug ===');
+        Object.keys(ApplicationsModule.artifactsCache).forEach(key => {
+            const cache = ApplicationsModule.artifactsCache[key];
+            const age = Math.round((Date.now() - cache.timestamp) / 1000);
+            console.log(`${key}: ${cache.data.length} versions, age: ${age}s`);
+        });
+        console.log('===========================');
+    };
+
+})();

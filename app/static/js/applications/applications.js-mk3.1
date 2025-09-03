@@ -1,6 +1,6 @@
 /**
  * Faktura Apps - Управление приложениями
- * Оптимизированная версия с исправлениями
+ * Оптимизированная версия с полным сохранением функционала
  */
 
 (function() {
@@ -168,51 +168,39 @@
                 }
 
                 if (data.success && data.versions && data.versions.length > 0) {
-                    // ИСПРАВЛЕНИЕ 8: Сортируем версии только по номеру (от большего к меньшему)
+                    // Сортируем версии: сначала релизные, потом dev, потом snapshot
                     const sortedVersions = data.versions.sort((a, b) => {
-                        // Функция для извлечения числовых частей версии
-                        const extractVersion = (versionObj) => {
-                            // Удаляем префиксы типа 'v' и суффиксы типа '-SNAPSHOT', '-dev'
-                            const cleanVersion = versionObj.version
-                                .replace(/^v/i, '')
-                                .replace(/[-_](snapshot|dev|alpha|beta|rc).*$/i, '');
-                            
-                            // Разбиваем на числовые части
-                            const parts = cleanVersion.split(/[.-]/).map(part => {
-                                const num = parseInt(part, 10);
-                                return isNaN(num) ? 0 : num;
-                            });
-                            
-                            // Дополняем нулями до 4 частей для корректного сравнения
-                            while (parts.length < 4) parts.push(0);
-                            
-                            return parts;
+                        const aLower = a.version.toLowerCase();
+                        const bLower = b.version.toLowerCase();
+                        
+                        // Приоритеты: release = 3, обычные = 2, dev = 1, snapshot = 0
+                        const getPriority = (version) => {
+                            const vLower = version.version.toLowerCase();
+                            if (version.is_release) return 3;
+                            if (vLower.includes('snapshot')) return 0;
+                            if (vLower.includes('dev')) return 1;
+                            return 2;
                         };
                         
-                        const aParts = extractVersion(a);
-                        const bParts = extractVersion(b);
+                        const aPriority = getPriority(a);
+                        const bPriority = getPriority(b);
                         
-                        // Сравниваем по частям (от большего к меньшему)
-                        for (let i = 0; i < 4; i++) {
-                            if (bParts[i] !== aParts[i]) {
-                                return bParts[i] - aParts[i];
-                            }
+                        if (aPriority !== bPriority) {
+                            return bPriority - aPriority; // Больший приоритет первым
                         }
                         
-                        // Если версии одинаковые, release версии приоритетнее
-                        if (a.is_release && !b.is_release) return -1;
-                        if (!a.is_release && b.is_release) return 1;
-                        
-                        return 0;
+                        // Если приоритеты одинаковые, сортируем по версии в обратном порядке
+                        return bLower.localeCompare(aLower);
                     });
                     
                     console.log(`Загружено ${sortedVersions.length} версий для приложения ${appId}`);
-                    return sortedVersions.slice(0, limit);
+                    return sortedVersions.slice(0, limit); // Применяем лимит
                 }
                 
                 return null;
             } catch (error) {
                 console.error('Ошибка загрузки артефактов:', error);
+                // Не показываем глобальную ошибку, только локальную в форме
                 return null;
             }
         },
@@ -298,7 +286,7 @@
                 const versionLower = version.version.toLowerCase();
 
                 if (versionLower.includes('snapshot')) {
-                    label += ' 📸';
+                    label += ' 🔸';
                     className = 'version-snapshot';
                 } else if (versionLower.includes('dev')) {
                     label += ' 🔹';
@@ -332,7 +320,7 @@
 
         init() {
             this.elements.applicationsTableBody = document.getElementById('applications-table-body');
-            this.elements.selectAllCheckbox = document.getElementById('select-all');
+            this.elements.selectAllCheckbox = document.getElementById('select-all-checkbox');
             this.elements.serverDropdown = document.getElementById('server-dropdown');
             this.elements.searchInput = document.getElementById('search-input');
             this.elements.groupToggleBtn = document.getElementById('group-toggle-btn');
@@ -637,40 +625,34 @@
             return data.slice(startIndex, endIndex);
         },
 
-        // ИСПРАВЛЕНИЕ 4: Правильная обработка пагинации
         updatePagination(totalItems) {
             const totalPages = Math.ceil(totalItems / StateManager.state.pageSize);
-            const paginationControls = document.getElementById('pagination-controls');
-            if (!paginationControls) return;
+            const paginationContainer = document.getElementById('pagination');
+            if (!paginationContainer) return;
 
+            let html = '';
             const { currentPage } = StateManager.state;
-            
-            // ТОЛЬКО обновляем визуальное состояние, НЕ трогаем обработчики
-            
-            // Обновляем номер текущей страницы
-            const pageNumberElement = paginationControls.querySelector('.page-number');
-            if (pageNumberElement) {
-                pageNumberElement.textContent = totalPages > 0 ? currentPage : '0';
+
+            // Кнопка "Предыдущая"
+            if (currentPage > 1) {
+                html += `<button class="page-btn" data-page="${currentPage - 1}">◀</button>`;
             }
-            
-            // Обновляем состояние кнопок (только disabled, не обработчики!)
-            const prevButton = paginationControls.querySelector('.prev-page');
-            const nextButton = paginationControls.querySelector('.next-page');
-            
-            if (prevButton) {
-                prevButton.disabled = currentPage <= 1 || totalPages === 0;
+
+            // Номера страниц
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
+                } else if (i === currentPage - 3 || i === currentPage + 3) {
+                    html += '<span>...</span>';
+                }
             }
-            
-            if (nextButton) {
-                nextButton.disabled = currentPage >= totalPages || totalPages === 0;
+
+            // Кнопка "Следующая"
+            if (currentPage < totalPages) {
+                html += `<button class="page-btn" data-page="${currentPage + 1}">▶</button>`;
             }
-            
-            // Сохраняем информацию о страницах в data-атрибутах для отладки
-            if (paginationControls) {
-                paginationControls.setAttribute('data-current-page', currentPage);
-                paginationControls.setAttribute('data-total-pages', totalPages);
-                paginationControls.setAttribute('data-total-items', totalItems);
-            }
+
+            paginationContainer.innerHTML = html;
         },
 
         updateActionButtonsState(hasSelection) {
@@ -802,7 +784,7 @@
         },
 
         updateSelectAllState() {
-            const selectAllCheckbox = document.getElementById('select-all');
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
             if (!selectAllCheckbox) return;
             
             const allCheckboxes = document.querySelectorAll('.app-checkbox');
@@ -818,7 +800,7 @@
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = true;
             }
-        }       
+        }
     };
 
     // ========================================
@@ -928,6 +910,18 @@
                 }
                 
                 this.updateVersionSelector(artifacts, firstApp.distr_path, firstApp.id);
+                
+                if (!artifacts) {
+                    // Показываем только локальное сообщение об ошибке
+                    const container = document.querySelector('.artifact-loading-container');
+                    if (container) {
+                        container.innerHTML = `
+                            <label for="distr-url">URL дистрибутива:</label>
+                            <input type="text" id="distr-url" name="distr_url" class="form-control" value="${firstApp.distr_path || ''}" required>
+                            <div class="error-message">Не удалось загрузить список версий</div>
+                        `;
+                    }
+                }
             }, 100);
 
             // Обработчик отправки формы
@@ -972,7 +966,7 @@
                 tabContent.innerHTML = `${groupName} <span class="app-count">(${appGroups[groupName].length})</span>`;
                 tab.appendChild(tabContent);
                 
-                // ИСПРАВЛЕНИЕ 6: Кнопка удаления группы
+                // Кнопка удаления группы
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'tab-remove-btn';
                 removeBtn.innerHTML = '×';
@@ -986,15 +980,14 @@
                     // Удаляем вкладку
                     tab.remove();
                     
-                    // Проверяем оставшиеся вкладки
-                    const remainingTabs = tabsContainer.querySelectorAll('.modal-tab');
-                    
-                    if (remainingTabs.length === 0) {
-                        // Если вкладок не осталось, закрываем модальное окно
-                        closeModal();
-                    } else if (tab.classList.contains('active')) {
-                        // Если это была активная вкладка, переключаемся на первую оставшуюся
-                        remainingTabs[0].click();
+                    // Если это была активная вкладка, переключаемся на другую
+                    if (tab.classList.contains('active')) {
+                        const remainingTabs = tabsContainer.querySelectorAll('.modal-tab');
+                        if (remainingTabs.length > 0) {
+                            remainingTabs[0].click();
+                        } else {
+                            dynamicContent.innerHTML = '<div class="no-groups-message">Все группы исключены из обновления</div>';
+                        }
                     }
                     
                     // Удаляем из состояний
@@ -1016,14 +1009,11 @@
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
                 
-                // ИСПРАВЛЕНИЕ 1: Исправлена синтаксическая ошибка
                 groupStates[groupName] = {
                     appIds: apps.map(app => app.id),
                     distrUrl: firstApp?.distr_path || '',
                     restartMode: 'restart',
-                    artifactsLoaded: false,
-                    customUrl: '',
-                    isCustom: false
+                    artifactsLoaded: false
                 };
                 
                 this.groupContentLoaded[groupName] = false;
@@ -1038,37 +1028,10 @@
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
                 
-                // ИСПРАВЛЕНИЕ 2: Проверяем кэш и восстанавливаем состояние
+                // Проверяем кэш
                 if (!force && this.groupContentLoaded[groupName] && this.groupContentCache[groupName]) {
                     console.log(`✨ Используем кэшированное содержимое для группы "${groupName}"`);
                     dynamicContent.innerHTML = this.groupContentCache[groupName];
-                    
-                    // Восстанавливаем значения из сохраненного состояния
-                    const distrUrlElement = document.getElementById('distr-url');
-                    const customUrlElement = document.getElementById('custom-distr-url');
-                    const customGroup = document.getElementById('custom-url-group');
-                    
-                    if (state.isCustom && customUrlElement) {
-                        if (distrUrlElement && distrUrlElement.tagName === 'SELECT') {
-                            distrUrlElement.value = 'custom';
-                        }
-                        customUrlElement.value = state.customUrl || '';
-                        if (customGroup) {
-                            customGroup.style.display = 'block';
-                        }
-                    } else if (distrUrlElement) {
-                        if (distrUrlElement.tagName === 'SELECT') {
-                            distrUrlElement.value = state.distrUrl || '';
-                        } else {
-                            distrUrlElement.value = state.distrUrl || '';
-                        }
-                    }
-                    
-                    // Восстанавливаем режим обновления
-                    const restartModeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
-                    if (restartModeRadio) {
-                        restartModeRadio.checked = true;
-                    }
                     
                     // Восстанавливаем обработчики
                     this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent);
@@ -1098,6 +1061,7 @@
                     } else {
                         loadingError = true;
                         console.error(`❌ Не удалось загрузить версии для группы "${groupName}"`);
+                        // Не показываем глобальную ошибку, только локальную в форме
                     }
                 }
                 
@@ -1111,29 +1075,7 @@
                 let formHTML = `<div class="form-content-animated">`;
                 formHTML += `<input type="hidden" id="app-ids" name="app_ids" value="${state.appIds.join(',')}">`;
                 
-                // ИСПРАВЛЕНИЕ 3: Показываем кнопку обновления и при ошибке
-                if (!artifacts || artifacts.length === 0) {
-                    const errorClass = loadingError ? 'field-with-error' : '';
-                    formHTML += `
-                        <div class="form-group animated-fade-in ${errorClass}" style="animation-delay: 0.1s">
-                            <div class="artifact-selector-wrapper">
-                                <div class="artifact-selector-header">
-                                    <label for="distr-url">URL дистрибутива:</label>
-                                    <button type="button" class="refresh-artifacts-btn" data-group="${groupName}" title="Попробовать загрузить версии снова">
-                                        <span class="refresh-icon">🔄</span>
-                                    </button>
-                                </div>
-                                <input type="text" id="distr-url" name="distr_url" class="form-control" value="${state.distrUrl}" required>
-                                ${loadingError ? `
-                                    <div class="field-error-message">
-                                        <span class="error-icon">⚠</span>
-                                        Не удалось загрузить список версий. Введите URL вручную.
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    `;
-                } else {
+                if (artifacts && artifacts.length > 0) {
                     formHTML += `
                         <div class="form-group animated-fade-in" style="animation-delay: 0.1s">
                             <div class="artifact-selector-wrapper">
@@ -1143,14 +1085,14 @@
                                         <span class="version-count">(${artifacts.length} версий)</span>
                                     </label>
                                     <button type="button" class="refresh-artifacts-btn" data-group="${groupName}" title="Обновить список версий">
-                                        <span class="refresh-icon">🔄</span>
+                                        <span class="refresh-icon">⟳</span>
                                     </button>
                                 </div>
                                 <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
                                     ${ArtifactsManager.createVersionSelect(artifacts, state.distrUrl)}
                                 </select>
                                 ${StateManager.getArtifactsCacheAge(firstApp.id) < 60 ? 
-                                    '<div class="cache-status"><span class="cache-fresh">✔ Данные актуальны</span></div>' : 
+                                    '<div class="cache-status"><span class="cache-fresh">✓ Данные актуальны</span></div>' : 
                                     '<div class="cache-status"><span class="cache-old">Обновлено ' + Math.round(StateManager.getArtifactsCacheAge(firstApp.id) / 60) + ' мин. назад</span></div>'
                                 }
                             </div>
@@ -1158,6 +1100,22 @@
                         <div class="form-group animated-fade-in" id="custom-url-group" style="display: none; animation-delay: 0.2s">
                             <label for="custom-distr-url">URL дистрибутива:</label>
                             <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control">
+                        </div>
+                    `;
+                } else {
+                    const errorClass = loadingError ? 'field-with-error' : '';
+                    formHTML += `
+                        <div class="form-group animated-fade-in ${errorClass}" style="animation-delay: 0.1s">
+                            <div class="distr-url-wrapper">
+                                <label for="distr-url">URL дистрибутива:</label>
+                                <input type="text" id="distr-url" name="distr_url" class="form-control" value="${state.distrUrl}" required>
+                                ${loadingError ? `
+                                    <div class="field-error-message">
+                                        <span class="error-icon">⚠</span>
+                                        Не удалось загрузить список версий. Введите URL вручную.
+                                    </div>
+                                ` : ''}
+                            </div>
                         </div>
                     `;
                 }
@@ -1276,26 +1234,11 @@
             await updateFormContent(firstGroup);
         },
 
-        // ИСПРАВЛЕНИЕ 3: Обновленная функция updateVersionSelector
         updateVersionSelector(artifacts, currentValue, appId = null) {
             const container = document.querySelector('.artifact-loading-container');
             if (!container) return;
 
-            if (!artifacts) {
-                // Показываем поле ввода с кнопкой обновления при ошибке
-                container.innerHTML = `
-                    <div class="artifact-selector-wrapper">
-                        <div class="artifact-selector-header">
-                            <label for="distr-url">URL дистрибутива:</label>
-                            <button type="button" class="refresh-artifacts-btn" ${appId ? `data-app-id="${appId}"` : ''} title="Попробовать загрузить версии снова">
-                                <span class="refresh-icon">🔄</span>
-                            </button>
-                        </div>
-                        <input type="text" id="distr-url" name="distr_url" class="form-control" value="${currentValue || ''}" required>
-                        <div class="error-message">Не удалось загрузить список версий</div>
-                    </div>
-                `;
-            } else if (artifacts.length > 0) {
+            if (artifacts && artifacts.length > 0) {
                 container.innerHTML = `
                     <div class="artifact-selector-wrapper">
                         <div class="artifact-selector-header">
@@ -1304,13 +1247,19 @@
                                 <span class="version-count">(${artifacts.length} версий)</span>
                             </label>
                             <button type="button" class="refresh-artifacts-btn" ${appId ? `data-app-id="${appId}"` : ''} title="Обновить список версий">
-                                <span class="refresh-icon">🔄</span>
+                                <span class="refresh-icon">⟳</span>
                             </button>
                         </div>
                         <select id="distr-url" name="distr_url" class="form-control artifact-select" required>
                             ${ArtifactsManager.createVersionSelect(artifacts, currentValue)}
                         </select>
                     </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <label for="distr-url">URL дистрибутива:</label>
+                    <input type="text" id="distr-url" name="distr_url" class="form-control" value="${currentValue || ''}" required>
+                    <div class="error-message">Не удалось загрузить список версий</div>
                 `;
             }
 
@@ -1407,7 +1356,6 @@
             }
         },
 
-        // ИСПРАВЛЕНИЕ 2: Улучшенная функция сохранения состояния группы
         saveGroupState(groupName, groupStates) {
             if (!groupStates[groupName]) return;
             
@@ -1416,16 +1364,11 @@
             const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
             
             let distrUrl = '';
-            let isCustom = false;
-            let customUrl = '';
-            
             if (distrUrlElement) {
                 if (distrUrlElement.tagName === 'SELECT') {
-                    if (distrUrlElement.value === 'custom') {
-                        isCustom = true;
-                        customUrl = customUrlElement?.value || '';
-                        distrUrl = customUrl;
-                    } else {
+                    if (distrUrlElement.value === 'custom' && customUrlElement?.value) {
+                        distrUrl = customUrlElement.value;
+                    } else if (distrUrlElement.value !== 'custom') {
                         distrUrl = distrUrlElement.value;
                     }
                 } else {
@@ -1435,8 +1378,6 @@
             
             groupStates[groupName].distrUrl = distrUrl;
             groupStates[groupName].restartMode = restartModeElement?.value || 'restart';
-            groupStates[groupName].customUrl = customUrl;
-            groupStates[groupName].isCustom = isCustom;
         },
 
         async processUpdateForm(formData) {
@@ -1744,30 +1685,26 @@
             }
         },
 
-        // ИСПРАВЛЕНИЕ 7: Правильная обработка чекбокса "выбрать все"
         initCheckboxHandlers() {
-            const selectAllCheckbox = document.getElementById('select-all');
+            // Обработчик выбора всех
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
             if (selectAllCheckbox) {
-                selectAllCheckbox.addEventListener('change', function(e) {
-                    const isChecked = this.checked;
+                selectAllCheckbox.addEventListener('change', (e) => {
+                    const isChecked = e.target.checked;
                     
-                    // Выбираем/снимаем выбор со всех видимых чекбоксов приложений
                     document.querySelectorAll('.app-checkbox').forEach(checkbox => {
                         checkbox.checked = isChecked;
                         const appId = checkbox.dataset.appId;
-                        if (appId) {
-                            if (isChecked) {
-                                StateManager.addSelectedApp(appId);
-                            } else {
-                                StateManager.removeSelectedApp(appId);
-                            }
+                        if (isChecked) {
+                            StateManager.addSelectedApp(appId);
+                        } else {
+                            StateManager.removeSelectedApp(appId);
                         }
                     });
                     
                     // Обновляем групповые чекбоксы
                     document.querySelectorAll('.group-checkbox').forEach(checkbox => {
                         checkbox.checked = isChecked;
-                        checkbox.indeterminate = false;
                     });
                     
                     UIRenderer.updateActionButtonsState(StateManager.state.selectedItems.applications.size > 0);
@@ -1819,6 +1756,25 @@
                     UIRenderer.updateActionButtonsState(hasSelection);
                 }
             });
+        },
+
+        updateGroupCheckbox(groupName) {
+            const groupCheckbox = document.querySelector(`.group-checkbox[data-group="${groupName}"]`);
+            if (!groupCheckbox) return;
+            
+            const childCheckboxes = document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`);
+            const checkedCount = Array.from(childCheckboxes).filter(cb => cb.checked).length;
+            
+            if (checkedCount === 0) {
+                groupCheckbox.checked = false;
+                groupCheckbox.indeterminate = false;
+            } else if (checkedCount === childCheckboxes.length) {
+                groupCheckbox.checked = true;
+                groupCheckbox.indeterminate = false;
+            } else {
+                groupCheckbox.checked = false;
+                groupCheckbox.indeterminate = true;
+            }
         },
 
         initActionButtons() {
@@ -1906,103 +1862,27 @@
         },
 
         initPagination() {
-            // Устанавливаем обработчики ОДИН РАЗ при инициализации
-            
-            // Обработчик для кнопки "Предыдущая"
-            const prevButton = document.querySelector('.prev-page');
-            if (prevButton) {
-                prevButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Берем актуальное состояние из StateManager
-                    if (!prevButton.disabled && StateManager.state.currentPage > 1) {
-                        StateManager.state.currentPage--;
-                        console.log('← Prev: страница', StateManager.state.currentPage);
+            // Обработчик кнопок пагинации
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('page-btn')) {
+                    const page = parseInt(e.target.dataset.page);
+                    if (!isNaN(page)) {
+                        StateManager.state.currentPage = page;
                         this.filterAndDisplayApplications();
                     }
-                });
-                console.log('✓ Обработчик prev-page установлен');
-            }
-            
-            // Обработчик для кнопки "Следующая"
-            const nextButton = document.querySelector('.next-page');
-            if (nextButton) {
-                nextButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    if (!nextButton.disabled) {
-                        // Вычисляем актуальное количество страниц
-                        const filtered = this.getFilteredApplications();
-                        const totalPages = Math.ceil(filtered.length / StateManager.state.pageSize);
-                        
-                        if (StateManager.state.currentPage < totalPages) {
-                            StateManager.state.currentPage++;
-                            console.log('→ Next: страница', StateManager.state.currentPage, 'из', totalPages);
-                            this.filterAndDisplayApplications();
-                        }
-                    }
-                });
-                console.log('✓ Обработчик next-page установлен');
-            }
-            
-            // Обработчик изменения размера страницы
-            const pageSizeSelect = document.getElementById('page-size-select');
-            if (pageSizeSelect) {
-                pageSizeSelect.addEventListener('change', (e) => {
-                    const newSize = parseInt(e.target.value);
-                    
-                    if (!isNaN(newSize) && newSize > 0) {
-                        console.log('📏 Размер страницы:', newSize);
-                        StateManager.state.pageSize = newSize;
-                        StateManager.state.currentPage = 1; // Сброс на первую страницу
-                        this.filterAndDisplayApplications();
-                    }
-                });
-                console.log('✓ Обработчик page-size установлен');
-            }
-        },
-
-        getFilteredApplications() {
-            let filtered = [...StateManager.state.allApplications];
-            
-            // Применяем поиск
-            if (StateManager.state.searchQuery) {
-                filtered = filtered.filter(app => 
-                    app.name.toLowerCase().includes(StateManager.state.searchQuery) ||
-                    app.status?.toLowerCase().includes(StateManager.state.searchQuery) ||
-                    app.server_name?.toLowerCase().includes(StateManager.state.searchQuery)
-                );
-            }
-            
-            // Применяем сортировку
-            filtered.sort((a, b) => {
-                let valueA, valueB;
-                const field = StateManager.state.sortColumn;
-                
-                if (field === 'name') {
-                    valueA = a.name?.toLowerCase() || '';
-                    valueB = b.name?.toLowerCase() || '';
-                } else if (field === 'status') {
-                    valueA = a.status?.toLowerCase() || '';
-                    valueB = b.status?.toLowerCase() || '';
-                } else if (field === 'version') {
-                    valueA = a.version?.toLowerCase() || '';
-                    valueB = b.version?.toLowerCase() || '';
-                } else if (field === 'server') {
-                    valueA = a.server_name?.toLowerCase() || '';
-                    valueB = b.server_name?.toLowerCase() || '';
                 }
-                
-                const direction = StateManager.state.sortDirection === 'asc' ? 1 : -1;
-                if (valueA < valueB) return -direction;
-                if (valueA > valueB) return direction;
-                return 0;
             });
             
-            return filtered;
-        },        
+            // Обработчик изменения размера страницы
+            const pageSizeSelect = document.getElementById('page-size');
+            if (pageSizeSelect) {
+                pageSizeSelect.addEventListener('change', (e) => {
+                    StateManager.state.pageSize = parseInt(e.target.value);
+                    StateManager.state.currentPage = 1;
+                    this.filterAndDisplayApplications();
+                });
+            }
+        },
 
         initTableActions() {
             // Делегирование событий для действий в таблице
@@ -2127,6 +2007,9 @@
         },
 
         async loadApplications() {
+            // Не очищаем выбранные элементы при обычной перезагрузке
+            // StateManager.clearSelection();
+            
             const tbody = document.getElementById('applications-table-body');
             if (tbody) {
                 tbody.innerHTML = '<tr><td colspan="6" class="table-loading">Загрузка приложений...</td></tr>';
@@ -2138,37 +2021,45 @@
             this.filterAndDisplayApplications();
         },
 
-        // Удалено дублирование: используйте updateSelectAllState()
-
         filterAndDisplayApplications() {
-            // Получаем отфильтрованные данные
-            const filtered = this.getFilteredApplications();
+            let filtered = [...StateManager.state.allApplications];
             
-            // Проверяем и корректируем текущую страницу
-            const totalPages = Math.ceil(filtered.length / StateManager.state.pageSize);
-            
-            // Если текущая страница больше общего числа страниц, возвращаемся на последнюю
-            if (StateManager.state.currentPage > totalPages && totalPages > 0) {
-                StateManager.state.currentPage = totalPages;
+            // Фильтрация по поиску
+            if (StateManager.state.searchQuery) {
+                filtered = filtered.filter(app => 
+                    app.name.toLowerCase().includes(StateManager.state.searchQuery) ||
+                    app.status?.toLowerCase().includes(StateManager.state.searchQuery) ||
+                    app.server_name?.toLowerCase().includes(StateManager.state.searchQuery)
+                );
             }
             
-            // Если текущая страница меньше 1, устанавливаем 1
-            if (StateManager.state.currentPage < 1 && filtered.length > 0) {
-                StateManager.state.currentPage = 1;
-            }
+            // Сортировка
+            filtered.sort((a, b) => {
+                let valueA, valueB;
+                const field = StateManager.state.sortColumn;
+                
+                if (field === 'name') {
+                    valueA = a.name?.toLowerCase() || '';
+                    valueB = b.name?.toLowerCase() || '';
+                } else if (field === 'status') {
+                    valueA = a.status?.toLowerCase() || '';
+                    valueB = b.status?.toLowerCase() || '';
+                } else if (field === 'version') {
+                    valueA = a.version?.toLowerCase() || '';
+                    valueB = b.version?.toLowerCase() || '';
+                } else if (field === 'server') {
+                    valueA = a.server_name?.toLowerCase() || '';
+                    valueB = b.server_name?.toLowerCase() || '';
+                }
+                
+                const direction = StateManager.state.sortDirection === 'asc' ? 1 : -1;
+                if (valueA < valueB) return -direction;
+                if (valueA > valueB) return direction;
+                return 0;
+            });
             
-            // Если нет данных, сбрасываем на 1
-            if (filtered.length === 0) {
-                StateManager.state.currentPage = 1;
-            }
-            
-            console.log(`Отображение: страница ${StateManager.state.currentPage}/${totalPages}, элементов: ${filtered.length}`);
-            
-            // Вызываем рендеринг
             UIRenderer.renderApplications(filtered);
-            
-            // Состояние "выбрать все" уже обновлено внутри renderApplications
-        }       
+        }
     };
 
     // ========================================
@@ -2287,7 +2178,7 @@
         }
     });
 
-    // КРИТИЧНО: Экспорт модулей в глобальную область для доступа извне
+    // Экспорт функций для отладки
     window.ApplicationsDebug = {
         getState: () => StateManager.state,
         getCache: () => StateManager.artifactsCache,
@@ -2302,13 +2193,5 @@
             console.log('===========================');
         }
     };
-    
-    // КРИТИЧНО: Экспорт обработчиков событий для доступа из обработчиков
-    window.EventHandlers = EventHandlers;
-    window.StateManager = StateManager;
-    window.UIRenderer = UIRenderer;
-    window.ModalManager = ModalManager;
-    window.ApiService = ApiService;
-    window.ArtifactsManager = ArtifactsManager;
 
 })();
