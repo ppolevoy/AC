@@ -545,35 +545,51 @@
         createApplicationRow(app, isChild) {
             const row = document.createElement('tr');
             row.className = isChild ? 'app-row child-row' : 'app-row';
+            
+            // НЕ экранируем в data-атрибутах, они безопасны
             row.setAttribute('data-app-id', app.id);
             row.setAttribute('data-app-name', (app.name || '').toLowerCase());
 
             // Создаем ячейки безопасно
-            // Чекбокс
+            
+            // 1. Чекбокс (безопасно, без пользовательских данных)
             const checkboxTd = document.createElement('td');
-            const checkboxContainer = SecurityUtils.createSafeElement('div', {className: 'checkbox-container'});
-            const checkboxLabel = SecurityUtils.createSafeElement('label', {className: 'custom-checkbox'});
-            const checkbox = SecurityUtils.createSafeElement('input', {
-                type: 'checkbox',
-                className: 'app-checkbox',
-                dataset: {appId: app.id}
-            });
-            const checkmark = SecurityUtils.createSafeElement('span', {className: 'checkmark'});
+            const checkboxContainer = document.createElement('div');
+            checkboxContainer.className = 'checkbox-container';
+            
+            const checkboxLabel = document.createElement('label');
+            checkboxLabel.className = 'custom-checkbox';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'app-checkbox';
+            checkbox.setAttribute('data-app-id', app.id);
+            
+            const checkmark = document.createElement('span');
+            checkmark.className = 'checkmark';
+            
             checkboxLabel.appendChild(checkbox);
             checkboxLabel.appendChild(checkmark);
             checkboxContainer.appendChild(checkboxLabel);
             checkboxTd.appendChild(checkboxContainer);
             
-            // Имя сервиса
+            // 2. Имя сервиса (ЗДЕСЬ нужна защита от XSS)
             const nameTd = document.createElement('td');
             nameTd.className = isChild ? 'service-name child-indent' : 'service-name';
-            nameTd.textContent = app.name || '';
             
-            const details = SecurityUtils.createSafeElement('div', {className: 'dist-details'});
+            // Используем textContent для безопасной вставки имени
+            const nameText = document.createTextNode(app.name || '');
+            nameTd.appendChild(nameText);
+            
+            const details = document.createElement('div');
+            details.className = 'dist-details';
+            
             const startTimeDiv = document.createElement('div');
             startTimeDiv.textContent = `Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}`;
+            
             const pathDiv = document.createElement('div');
             pathDiv.textContent = `Путь приложения: ${app.path || 'Н/Д'}`;
+            
             const distrDiv = document.createElement('div');
             distrDiv.textContent = `Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}`;
             
@@ -582,24 +598,26 @@
             details.appendChild(distrDiv);
             nameTd.appendChild(details);
             
-            // Версия
+            // 3. Версия (безопасно через textContent)
             const versionTd = document.createElement('td');
             versionTd.textContent = app.version || 'Н/Д';
             
-            // Статус
+            // 4. Статус (иконка безопасна, текст через textContent)
             const statusTd = document.createElement('td');
-            const statusDot = SecurityUtils.createSafeElement('span', {
-                className: app.status === 'online' ? 'service-dot' : 'service-dot offline'
-            });
+            const statusDot = document.createElement('span');
+            statusDot.className = app.status === 'online' ? 'service-dot' : 'service-dot offline';
             statusTd.appendChild(statusDot);
-            statusTd.appendChild(document.createTextNode(` ${app.status || ''}`));
             
-            // Сервер
+            const statusText = document.createTextNode(` ${app.status || ''}`);
+            statusTd.appendChild(statusText);
+            
+            // 5. Сервер (безопасно через textContent)
             const serverTd = document.createElement('td');
             serverTd.textContent = app.server_name || 'Н/Д';
             
-            // Действия (временно оставляем старый метод)
+            // 6. Действия (временно используем innerHTML для меню, но без пользовательских данных)
             const actionsTd = document.createElement('td');
+            // createActionsMenu должен возвращать безопасный HTML без пользовательских данных
             actionsTd.innerHTML = this.createActionsMenu(app);
             
             // Собираем строку
@@ -723,16 +741,17 @@
         },
 
         createActionsMenu(app) {
-            const isOnline = app.status === 'online';
+            const appId = parseInt(app.id, 10); // Дополнительная защита - приводим к числу
+            
             return `
                 <div class="actions-menu">
                     <button class="actions-button">...</button>
                     <div class="actions-dropdown">
-                        <a href="#" class="app-info-btn" data-app-id="${app.id}">Информация</a>
-                        <a href="#" class="app-start-btn ${isOnline ? 'disabled' : ''}" data-app-id="${app.id}">Запустить</a>
-                        <a href="#" class="app-stop-btn ${!isOnline ? 'disabled' : ''}" data-app-id="${app.id}">Остановить</a>
-                        <a href="#" class="app-restart-btn ${!isOnline ? 'disabled' : ''}" data-app-id="${app.id}">Перезапустить</a>
-                        <a href="#" class="app-update-btn" data-app-id="${app.id}">Обновить</a>
+                        <a href="#" class="app-info-btn" data-app-id="${appId}">Информация</a>
+                        <a href="#" class="app-start-btn ${app.status === 'online' ? 'disabled' : ''}" data-app-id="${appId}">Запустить</a>
+                        <a href="#" class="app-stop-btn ${app.status !== 'online' ? 'disabled' : ''}" data-app-id="${appId}">Остановить</a>
+                        <a href="#" class="app-restart-btn ${app.status !== 'online' ? 'disabled' : ''}" data-app-id="${appId}">Перезапустить</a>
+                        <a href="#" class="app-update-btn" data-app-id="${appId}">Обновить</a>
                     </div>
                 </div>
             `;
@@ -2451,6 +2470,8 @@
     };
     
     // Экспорт обработчиков событий для доступа из обработчиков
+    window.SecurityUtils = SecurityUtils;
+    window.DOMUtils = DOMUtils;   
     window.EventHandlers = EventHandlers;
     window.StateManager = StateManager;
     window.UIRenderer = UIRenderer;
