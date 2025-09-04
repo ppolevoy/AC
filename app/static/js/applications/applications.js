@@ -8,7 +8,75 @@
 
     // ========================================
     // КОНСТАНТЫ И КОНФИГУРАЦИЯ
-    // ========================================
+    // ========================================    
+
+    // Утилиты безопасности для предотвращения XSS
+    const SecurityUtils = {
+        escapeHtml(text) {
+            if (text == null) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;',
+                '/': '&#x2F;'
+            };
+            return String(text).replace(/[&<>"'\/]/g, char => map[char]);
+        },
+        
+        createSafeElement(tag, attrs = {}, content = '') {
+            const element = document.createElement(tag);
+            
+            Object.keys(attrs).forEach(key => {
+                if (key === 'className') {
+                    element.className = attrs.className;
+                } else if (key === 'dataset') {
+                    Object.assign(element.dataset, attrs.dataset);
+                } else if (key === 'innerHTML' && attrs.trustHtml) {
+                    element.innerHTML = attrs.innerHTML;
+                } else {
+                    element.setAttribute(key, attrs[key]);
+                }
+            });
+            
+            if (typeof content === 'string') {
+                element.textContent = content;
+            }
+            
+            return element;
+        }
+    };
+    
+    // Утилиты для работы с DOM
+    const DOMUtils = {
+        getTableContext() {
+            return document.getElementById('applications-table-body');
+        },
+        
+        querySelectorInTable(selector) {
+            const tableBody = this.getTableContext();
+            return tableBody ? tableBody.querySelectorAll(selector) : [];
+        },
+        
+        getTableColumnCount() {
+            const headers = document.querySelectorAll('#applications-table thead th');
+            return headers.length || 6;
+        },
+        
+        debounce(func, wait = 300) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+    };    
+   
     const CONFIG = {
         PROGRESS: {
             START: 10,
@@ -370,7 +438,8 @@
             tbody.innerHTML = '';
             
             if (applications.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="table-loading">Нет приложений</td></tr>';
+                const colspan = DOMUtils.getTableColumnCount();
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="table-loading">Нет приложений</td></tr>`;
                 this.updatePagination(0);
                 return;
             }
@@ -477,35 +546,70 @@
             const row = document.createElement('tr');
             row.className = isChild ? 'app-row child-row' : 'app-row';
             row.setAttribute('data-app-id', app.id);
-            row.setAttribute('data-app-name', app.name.toLowerCase());
+            row.setAttribute('data-app-name', (app.name || '').toLowerCase());
 
-            const statusDot = app.status === 'online' ? 
-                '<span class="service-dot"></span>' : 
-                '<span class="service-dot offline"></span>';
-
-            row.innerHTML = `
-                <td>
-                    <div class="checkbox-container">
-                        <label class="custom-checkbox">
-                            <input type="checkbox" class="app-checkbox" data-app-id="${app.id}">
-                            <span class="checkmark"></span>
-                        </label>
-                    </div>
-                </td>
-                <td class="service-name ${isChild ? 'child-indent' : ''}">
-                    ${app.name}
-                    <div class="dist-details">
-                        <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-                        <div>Путь приложения: ${app.path || 'Н/Д'}</div>
-                        <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
-                    </div>
-                </td>
-                <td>${app.version || 'Н/Д'}</td>
-                <td>${statusDot} ${app.status}</td>
-                <td>${app.server_name || 'Н/Д'}</td>
-                <td>${this.createActionsMenu(app)}</td>
-            `;
-
+            // Создаем ячейки безопасно
+            // Чекбокс
+            const checkboxTd = document.createElement('td');
+            const checkboxContainer = SecurityUtils.createSafeElement('div', {className: 'checkbox-container'});
+            const checkboxLabel = SecurityUtils.createSafeElement('label', {className: 'custom-checkbox'});
+            const checkbox = SecurityUtils.createSafeElement('input', {
+                type: 'checkbox',
+                className: 'app-checkbox',
+                dataset: {appId: app.id}
+            });
+            const checkmark = SecurityUtils.createSafeElement('span', {className: 'checkmark'});
+            checkboxLabel.appendChild(checkbox);
+            checkboxLabel.appendChild(checkmark);
+            checkboxContainer.appendChild(checkboxLabel);
+            checkboxTd.appendChild(checkboxContainer);
+            
+            // Имя сервиса
+            const nameTd = document.createElement('td');
+            nameTd.className = isChild ? 'service-name child-indent' : 'service-name';
+            nameTd.textContent = app.name || '';
+            
+            const details = SecurityUtils.createSafeElement('div', {className: 'dist-details'});
+            const startTimeDiv = document.createElement('div');
+            startTimeDiv.textContent = `Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}`;
+            const pathDiv = document.createElement('div');
+            pathDiv.textContent = `Путь приложения: ${app.path || 'Н/Д'}`;
+            const distrDiv = document.createElement('div');
+            distrDiv.textContent = `Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}`;
+            
+            details.appendChild(startTimeDiv);
+            details.appendChild(pathDiv);
+            details.appendChild(distrDiv);
+            nameTd.appendChild(details);
+            
+            // Версия
+            const versionTd = document.createElement('td');
+            versionTd.textContent = app.version || 'Н/Д';
+            
+            // Статус
+            const statusTd = document.createElement('td');
+            const statusDot = SecurityUtils.createSafeElement('span', {
+                className: app.status === 'online' ? 'service-dot' : 'service-dot offline'
+            });
+            statusTd.appendChild(statusDot);
+            statusTd.appendChild(document.createTextNode(` ${app.status || ''}`));
+            
+            // Сервер
+            const serverTd = document.createElement('td');
+            serverTd.textContent = app.server_name || 'Н/Д';
+            
+            // Действия (временно оставляем старый метод)
+            const actionsTd = document.createElement('td');
+            actionsTd.innerHTML = this.createActionsMenu(app);
+            
+            // Собираем строку
+            row.appendChild(checkboxTd);
+            row.appendChild(nameTd);
+            row.appendChild(versionTd);
+            row.appendChild(statusTd);
+            row.appendChild(serverTd);
+            row.appendChild(actionsTd);
+            
             return row;
         },
 
@@ -514,36 +618,70 @@
             row.className = 'group-row';
             row.setAttribute('data-group', groupName);
 
+            // Безопасное создание ячеек
+            // Чекбокс
+            const checkboxTd = document.createElement('td');
+            const checkboxContainer = SecurityUtils.createSafeElement('div', {className: 'checkbox-container'});
+            const checkboxLabel = SecurityUtils.createSafeElement('label', {className: 'custom-checkbox'});
+            const checkbox = SecurityUtils.createSafeElement('input', {
+                type: 'checkbox',
+                className: 'group-checkbox',
+                dataset: {group: groupName}
+            });
+            const checkmark = SecurityUtils.createSafeElement('span', {className: 'checkmark'});
+            checkboxLabel.appendChild(checkbox);
+            checkboxLabel.appendChild(checkmark);
+            checkboxContainer.appendChild(checkboxLabel);
+            checkboxTd.appendChild(checkboxContainer);
+
+            // Имя группы
+            const nameTd = document.createElement('td');
+            nameTd.className = 'service-name';
+            const nameContainer = SecurityUtils.createSafeElement('div', {className: 'group-name-container'});
+            const toggle = SecurityUtils.createSafeElement('span', {
+                className: 'group-toggle',
+                innerHTML: '▶',
+                trustHtml: true
+            });
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'group-name';
+            nameSpan.textContent = `${groupName} (${apps.length})`;
+            nameContainer.appendChild(toggle);
+            nameContainer.appendChild(nameSpan);
+            nameTd.appendChild(nameContainer);
+
+            // Версии
+            const versionTd = document.createElement('td');
             const versions = new Set(apps.map(app => app.version || 'Н/Д'));
-            const versionText = versions.size === 1 ? 
-                (apps[0].version || 'Н/Д') : 
-                '<span class="version-different">*</span>';
+            if (versions.size === 1) {
+                versionTd.textContent = apps[0].version || 'Н/Д';
+            } else {
+                versionTd.innerHTML = '<span class="version-different">*</span>';
+            }
 
+            // Статус
+            const statusTd = document.createElement('td');
             const hasOffline = apps.some(app => app.status !== 'online');
-            const statusDot = hasOffline ? 
-                '<span class="service-dot offline"></span>' : 
-                '<span class="service-dot"></span>';
+            const statusDot = SecurityUtils.createSafeElement('span', {
+                className: hasOffline ? 'service-dot offline' : 'service-dot'
+            });
+            statusTd.appendChild(statusDot);
 
-            row.innerHTML = `
-                <td>
-                    <div class="checkbox-container">
-                        <label class="custom-checkbox">
-                            <input type="checkbox" class="group-checkbox" data-group="${groupName}">
-                            <span class="checkmark"></span>
-                        </label>
-                    </div>
-                </td>
-                <td class="service-name">
-                    <div class="group-name-container">
-                        <span class="group-toggle">▶</span>
-                        <span class="group-name">${groupName} (${apps.length})</span>
-                    </div>
-                </td>
-                <td>${versionText}</td>
-                <td>${statusDot}</td>
-                <td>${apps[0].server_name || 'Н/Д'}</td>
-                <td>${this.createGroupActionsMenu(groupName, apps)}</td>
-            `;
+            // Сервер
+            const serverTd = document.createElement('td');
+            serverTd.textContent = apps[0].server_name || 'Н/Д';
+
+            // Действия
+            const actionsTd = document.createElement('td');
+            actionsTd.innerHTML = this.createGroupActionsMenu(groupName, apps);
+
+            // Собираем строку
+            row.appendChild(checkboxTd);
+            row.appendChild(nameTd);
+            row.appendChild(versionTd);
+            row.appendChild(statusTd);
+            row.appendChild(serverTd);
+            row.appendChild(actionsTd);
 
             return row;
         },
@@ -805,8 +943,9 @@
             const selectAllCheckbox = document.getElementById('select-all');
             if (!selectAllCheckbox) return;
             
-            const allCheckboxes = document.querySelectorAll('.app-checkbox');
-            const checkedCheckboxes = document.querySelectorAll('.app-checkbox:checked');
+            // Используем контекст таблицы вместо всего документа
+            const allCheckboxes = DOMUtils.querySelectorInTable('.app-checkbox');
+            const checkedCheckboxes = DOMUtils.querySelectorInTable('.app-checkbox:checked');
             
             if (checkedCheckboxes.length === 0) {
                 selectAllCheckbox.checked = false;
@@ -818,7 +957,7 @@
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = true;
             }
-        }       
+        }     
     };
 
     // ========================================
@@ -1613,6 +1752,9 @@
             const spaceBelow = window.innerHeight - buttonRect.bottom;
             const showUpwards = spaceBelow < 200;
             
+            // Сначала сбрасываем все позиции
+            dropdown.style.top = '';
+            dropdown.style.bottom = '';
             dropdown.style.display = 'block';
             dropdown.style.opacity = '0';
             dropdown.classList.remove('dropdown-up');
@@ -1620,8 +1762,10 @@
             if (showUpwards) {
                 dropdown.classList.add('dropdown-up');
                 dropdown.style.bottom = (window.innerHeight - buttonRect.top) + 'px';
+                dropdown.style.top = 'auto'; // Явно убираем top
             } else {
                 dropdown.style.top = buttonRect.bottom + 'px';
+                dropdown.style.bottom = 'auto'; // Явно убираем bottom
             }
             
             dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
@@ -1697,10 +1841,15 @@
         initSearch() {
             const searchInput = document.getElementById('search-input');
             if (searchInput) {
-                searchInput.addEventListener('input', (e) => {
-                    StateManager.state.searchQuery = e.target.value.trim().toLowerCase();
+                // Создаем debounced версию функции поиска
+                const debouncedSearch = DOMUtils.debounce((value) => {
+                    StateManager.state.searchQuery = value.trim().toLowerCase();
                     StateManager.state.currentPage = 1;
                     this.filterAndDisplayApplications();
+                }, 250); // 250ms задержка
+                
+                searchInput.addEventListener('input', (e) => {
+                    debouncedSearch(e.target.value);
                 });
             }
         },
@@ -1744,15 +1893,15 @@
             }
         },
 
-        // ИСПРАВЛЕНИЕ 7: Правильная обработка чекбокса "выбрать все"
+        // обработка чекбокса "выбрать все"
         initCheckboxHandlers() {
             const selectAllCheckbox = document.getElementById('select-all');
             if (selectAllCheckbox) {
                 selectAllCheckbox.addEventListener('change', function(e) {
                     const isChecked = this.checked;
                     
-                    // Выбираем/снимаем выбор со всех видимых чекбоксов приложений
-                    document.querySelectorAll('.app-checkbox').forEach(checkbox => {
+                    // Используем контекст таблицы
+                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
                         checkbox.checked = isChecked;
                         const appId = checkbox.dataset.appId;
                         if (appId) {
@@ -1764,8 +1913,8 @@
                         }
                     });
                     
-                    // Обновляем групповые чекбоксы
-                    document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+                    // Обновляем групповые чекбоксы тоже в контексте таблицы
+                    DOMUtils.querySelectorInTable('.group-checkbox').forEach(checkbox => {
                         checkbox.checked = isChecked;
                         checkbox.indeterminate = false;
                     });
@@ -2138,8 +2287,6 @@
             this.filterAndDisplayApplications();
         },
 
-        // Удалено дублирование: используйте updateSelectAllState()
-
         filterAndDisplayApplications() {
             // Получаем отфильтрованные данные
             const filtered = this.getFilteredApplications();
@@ -2287,7 +2434,7 @@
         }
     });
 
-    // КРИТИЧНО: Экспорт модулей в глобальную область для доступа извне
+    // Экспорт модулей в глобальную область для доступа извне
     window.ApplicationsDebug = {
         getState: () => StateManager.state,
         getCache: () => StateManager.artifactsCache,
@@ -2303,7 +2450,7 @@
         }
     };
     
-    // КРИТИЧНО: Экспорт обработчиков событий для доступа из обработчиков
+    // Экспорт обработчиков событий для доступа из обработчиков
     window.EventHandlers = EventHandlers;
     window.StateManager = StateManager;
     window.UIRenderer = UIRenderer;
