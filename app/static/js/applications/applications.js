@@ -1,6 +1,6 @@
 /**
  * Faktura Apps - Управление приложениями
- * Оптимизированная версия с исправлениями
+ *
  */
 
 (function() {
@@ -236,7 +236,7 @@
                 }
 
                 if (data.success && data.versions && data.versions.length > 0) {
-                    // ИСПРАВЛЕНИЕ 8: Сортируем версии только по номеру (от большего к меньшему)
+                    // Сортируем версии только по номеру (от большего к меньшему)
                     const sortedVersions = data.versions.sort((a, b) => {
                         // Функция для извлечения числовых частей версии
                         const extractVersion = (versionObj) => {
@@ -794,16 +794,14 @@
             return data.slice(startIndex, endIndex);
         },
 
-        // ИСПРАВЛЕНИЕ 4: Правильная обработка пагинации
+        // обработка пагинации
         updatePagination(totalItems) {
             const totalPages = Math.ceil(totalItems / StateManager.state.pageSize);
             const paginationControls = document.getElementById('pagination-controls');
             if (!paginationControls) return;
 
             const { currentPage } = StateManager.state;
-            
-            // ТОЛЬКО обновляем визуальное состояние, НЕ трогаем обработчики
-            
+                    
             // Обновляем номер текущей страницы
             const pageNumberElement = paginationControls.querySelector('.page-number');
             if (pageNumberElement) {
@@ -1130,7 +1128,7 @@
                 tabContent.innerHTML = `${groupName} <span class="app-count">(${appGroups[groupName].length})</span>`;
                 tab.appendChild(tabContent);
                 
-                // ИСПРАВЛЕНИЕ 6: Кнопка удаления группы
+                // Кнопка удаления группы
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'tab-remove-btn';
                 removeBtn.innerHTML = '×';
@@ -1174,7 +1172,7 @@
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
                 
-                // ИСПРАВЛЕНИЕ 1: Исправлена синтаксическая ошибка
+                
                 groupStates[groupName] = {
                     appIds: apps.map(app => app.id),
                     distrUrl: firstApp?.distr_path || '',
@@ -1196,7 +1194,7 @@
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
                 
-                // ИСПРАВЛЕНИЕ 2: Проверяем кэш и восстанавливаем состояние
+                // Проверяем кэш и восстанавливаем состояние
                 if (!force && this.groupContentLoaded[groupName] && this.groupContentCache[groupName]) {
                     console.log(`✨ Используем кэшированное содержимое для группы "${groupName}"`);
                     dynamicContent.innerHTML = this.groupContentCache[groupName];
@@ -1269,7 +1267,7 @@
                 let formHTML = `<div class="form-content-animated">`;
                 formHTML += `<input type="hidden" id="app-ids" name="app_ids" value="${state.appIds.join(',')}">`;
                 
-                // ИСПРАВЛЕНИЕ 3: Показываем кнопку обновления и при ошибке
+                // Показываем кнопку обновления и при ошибке
                 if (!artifacts || artifacts.length === 0) {
                     const errorClass = loadingError ? 'field-with-error' : '';
                     formHTML += `
@@ -1434,7 +1432,7 @@
             await updateFormContent(firstGroup);
         },
 
-        // ИСПРАВЛЕНИЕ 3: Обновленная функция updateVersionSelector
+        // Обновленная функция updateVersionSelector
         updateVersionSelector(artifacts, currentValue, appId = null) {
             const container = document.querySelector('.artifact-loading-container');
             if (!container) return;
@@ -1565,7 +1563,7 @@
             }
         },
 
-        // ИСПРАВЛЕНИЕ 2: Улучшенная функция сохранения состояния группы
+        // функция сохранения состояния группы
         saveGroupState(groupName, groupStates) {
             if (!groupStates[groupName]) return;
             
