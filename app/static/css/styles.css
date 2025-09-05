@@ -3911,3 +3911,48 @@ body.light-theme .field-with-error input {
     transition: opacity 0.2s ease;
     min-height: 300px;
 }
+
+/* Статус No Data - красная точка (такая же как offline) */
+.service-dot.no-data {
+    background-color: #e74c3c;
+}
+
+/* Оранжевая точка для групп с проблемами */
+.service-dot.warning {
+    background-color: #f39c12;
+}
+
+/* Обновленные стили для dist-details - убираем третий div */
+.dist-details div {
+    word-break: break-word;
+    white-space: normal;
+    line-height: 1.4;
+    max-width: 100%;
+    color: #aaa;
+}
+
+body.light-theme .dist-details div {
+    color: #666;
+}
+
+/* Стилизация только первых двух div в dist-details */
+.dist-details div:nth-child(1),
+.dist-details div:nth-child(2) {
+    font-family: monospace;
+    font-size: 13px;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+body.light-theme .dist-details div:nth-child(1),
+body.light-theme .dist-details div:nth-child(2) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Обновляем max-height для двух строк вместо трех */
+.app-row.expanded .dist-details,
+.app-child-row.expanded .dist-details {
+    max-height: 80px; /* Уменьшаем высоту т.к. теперь только 2 строки */
+    padding: 10px;
+}

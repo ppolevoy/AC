@@ -51,7 +51,7 @@ def create_app(config_name=None):
 #            if '/api/' in rule.rule:
 #                logger.info(f"  {rule.methods} {rule.rule}")
     
-    return app    
+      
     
     # Инициализация задач (вынесено в отдельный блок, после всех импортов)
     with app.app_context():

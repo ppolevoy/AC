@@ -1,4 +1,4 @@
-# app/services/agent_service.py
+# -*- coding: utf-8 -*-
 import aiohttp
 import asyncio
 import logging
@@ -257,7 +257,13 @@ class AgentService:
         # Проверяем доступность агента
         is_online = await AgentService.check_agent(server)
         if not is_online:
-            logger.warning(f"Сервер {server.name} не в сети. Пропускаем обновление приложений.")
+            logger.warning(f"Сервер {server.name} не в сети. Помечаем все приложения как 'No Data'")
+            
+            # Помечаем все приложения сервера как "No Data"
+            apps = Application.query.filter_by(server_id=server_id).all()
+            for app in apps:
+                app.status = 'no_data'  # Используем специальный статус для "No Data"
+            
             db.session.commit()
             return False
         
@@ -515,6 +521,7 @@ class AgentService:
                         logger.warning(f"Некорректный формат времени запуска для приложения {app_name}: {app_data['start_time']}")
             
             return app
+        
             
         except Exception as e:
             logger.error(f"Ошибка при обработке приложения {app_name}: {str(e)}")

@@ -545,14 +545,12 @@
         createApplicationRow(app, isChild) {
             const row = document.createElement('tr');
             row.className = isChild ? 'app-row child-row' : 'app-row';
-            
-            // НЕ экранируем в data-атрибутах, они безопасны
             row.setAttribute('data-app-id', app.id);
             row.setAttribute('data-app-name', (app.name || '').toLowerCase());
 
             // Создаем ячейки безопасно
             
-            // 1. Чекбокс (безопасно, без пользовательских данных)
+            // 1. Чекбокс
             const checkboxTd = document.createElement('td');
             const checkboxContainer = document.createElement('div');
             checkboxContainer.className = 'checkbox-container';
@@ -573,11 +571,10 @@
             checkboxContainer.appendChild(checkboxLabel);
             checkboxTd.appendChild(checkboxContainer);
             
-            // 2. Имя сервиса (ЗДЕСЬ нужна защита от XSS)
+            // 2. Имя сервиса 
             const nameTd = document.createElement('td');
             nameTd.className = isChild ? 'service-name child-indent' : 'service-name';
             
-            // Используем textContent для безопасной вставки имени
             const nameText = document.createTextNode(app.name || '');
             nameTd.appendChild(nameText);
             
@@ -590,12 +587,8 @@
             const pathDiv = document.createElement('div');
             pathDiv.textContent = `Путь приложения: ${app.path || 'Н/Д'}`;
             
-            const distrDiv = document.createElement('div');
-            distrDiv.textContent = `Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}`;
-            
             details.appendChild(startTimeDiv);
             details.appendChild(pathDiv);
-            details.appendChild(distrDiv);
             nameTd.appendChild(details);
             
             // 3. Версия (безопасно через textContent)
@@ -605,11 +598,22 @@
             // 4. Статус (иконка безопасна, текст через textContent)
             const statusTd = document.createElement('td');
             const statusDot = document.createElement('span');
-            statusDot.className = app.status === 'online' ? 'service-dot' : 'service-dot offline';
-            statusTd.appendChild(statusDot);
             
-            const statusText = document.createTextNode(` ${app.status || ''}`);
-            statusTd.appendChild(statusText);
+            let statusText;
+            if (app.status === 'no_data' || app.status === 'unknown') {
+                statusDot.className = 'service-dot no-data';
+                statusText = 'Н/Д';
+            } else if (app.status === 'online') {
+                statusDot.className = 'service-dot';
+                statusText = app.status;
+            } else {
+                statusDot.className = 'service-dot offline';
+                statusText = app.status || 'offline';
+            }
+            
+            statusTd.appendChild(statusDot);
+            const statusTextNode = document.createTextNode(` ${statusText}`);
+            statusTd.appendChild(statusTextNode);
             
             // 5. Сервер (безопасно через textContent)
             const serverTd = document.createElement('td');
@@ -679,15 +683,18 @@
 
             // Статус
             const statusTd = document.createElement('td');
-            const hasOffline = apps.some(app => app.status !== 'online');
+            const hasOffline = apps.some(app => app.status === 'offline');
+            const hasNoData = apps.some(app => app.status === 'no_data' || app.status === 'unknown');
+            const hasProblems = hasOffline || hasNoData;
+            
             const statusDot = SecurityUtils.createSafeElement('span', {
-                className: hasOffline ? 'service-dot offline' : 'service-dot'
+                className: hasProblems ? 'service-dot warning' : 'service-dot'  // warning для оранжевой точки
             });
             statusTd.appendChild(statusDot);
 
             // Сервер
             const serverTd = document.createElement('td');
-            serverTd.textContent = apps[0].server_name || 'Н/Д';
+            serverTd.textContent = '—';
 
             // Действия
             const actionsTd = document.createElement('td');
@@ -710,9 +717,18 @@
             row.setAttribute('data-app-id', app.id);
             row.setAttribute('data-parent', groupName);
 
-            const statusDot = app.status === 'online' ? 
-                '<span class="service-dot"></span>' : 
-                '<span class="service-dot offline"></span>';
+            // ОБНОВЛЯЕМ только логику определения statusDot
+            let statusDot, statusText;
+            if (app.status === 'no_data' || app.status === 'unknown') {
+                statusDot = '<span class="service-dot no-data"></span>';
+                statusText = 'Н/Д';
+            } else if (app.status === 'online') {
+                statusDot = '<span class="service-dot"></span>';
+                statusText = app.status;
+            } else {
+                statusDot = '<span class="service-dot offline"></span>';
+                statusText = app.status || 'offline';
+            }
 
             row.innerHTML = `
                 <td>
@@ -728,11 +744,10 @@
                     <div class="dist-details">
                         <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
                         <div>Путь приложения: ${app.path || 'Н/Д'}</div>
-                        <div>Путь к дистрибутиву: ${app.distr_path || 'Н/Д'}</div>
                     </div>
                 </td>
                 <td>${app.version || 'Н/Д'}</td>
-                <td>${statusDot} ${app.status}</td>
+                <td>${statusDot} ${statusText}</td>
                 <td>${app.server_name || 'Н/Д'}</td>
                 <td>${this.createActionsMenu(app)}</td>
             `;
@@ -2173,6 +2188,9 @@
         initTableActions() {
             // Делегирование событий для действий в таблице
             document.addEventListener('click', (e) => {
+                // Флаг для определения, был ли клик по элементу меню
+                const isMenuAction = e.target.closest('.actions-dropdown a');    
+                            
                 // Обработчики действий для приложений
                 if (e.target.classList.contains('app-info-btn')) {
                     e.preventDefault();
@@ -2211,6 +2229,10 @@
                         }
                     }
                 });
+                // Закрываем меню после клика на любой пункт
+                if (isMenuAction) {
+                    setTimeout(() => this.closeAllDropdowns(), 100);
+                }                
             });
         },
 
