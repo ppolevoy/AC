@@ -11,6 +11,8 @@ from urllib.parse import urljoin, urlparse
 import aiohttp
 import asyncio
 from datetime import datetime
+import re
+from typing import Tuple
 
 from app.models.application_group import ApplicationGroup, ApplicationInstance
 
@@ -240,6 +242,51 @@ class NexusArtifactService:
         
         return await self.get_artifacts(application_group.artifact_list_url, artifact_extension)
     
+    def parse_version_for_sorting(self, version_string: str) -> Tuple[Tuple[int, ...], str, bool, bool]:
+        """
+        Парсинг версии для правильной сортировки.
+        
+        Разбивает версию на числовые части для корректного сравнения.
+        Например, "3.131.1-SNAPSHOT" -> ((3, 131, 1), "SNAPSHOT", True, False)
+        
+        Args:
+            version_string: Строка версии (например: "3.131.1", "3.100-SNAPSHOT")
+            
+        Returns:
+            Кортеж: (числовые_части, суффикс, is_snapshot, is_special)
+            - числовые_части: кортеж чисел для сортировки
+            - суффикс: текстовый суффикс после основной версии
+            - is_snapshot: True если это SNAPSHOT версия
+            - is_special: True если есть специальный суффикс (DSE, TEST и т.д.)
+        """
+        # Разделяем основную версию и суффикс
+        match = re.match(r'^([\d.]+)(-.*)?$', version_string)
+        if not match:
+            # Если формат версии нестандартный, возвращаем минимальные значения
+            return ((0,), version_string, 'SNAPSHOT' in version_string.upper(), True)
+        
+        main_version = match.group(1)
+        suffix = match.group(2) or ''
+        
+        # Парсим числовые части основной версии
+        try:
+            parts = tuple(int(p) for p in main_version.split('.') if p.isdigit())
+            if not parts:
+                parts = (0,)
+        except (ValueError, AttributeError):
+            parts = (0,)
+        
+        # Дополняем нулями до 4 частей для корректного сравнения
+        # (major, minor, patch, build)
+        parts = parts + (0,) * (4 - len(parts))
+        
+        # Определяем тип версии
+        is_snapshot = 'SNAPSHOT' in suffix.upper()
+        is_special = bool(suffix) and not is_snapshot
+        
+        return (parts, suffix.lower(), is_snapshot, is_special)    
+      
+    
     async def get_artifacts(self, metadata_url: str, extension: str = 'jar') -> List[Artifact]:
         """
         Получение списка артефактов по URL к maven-metadata.xml
@@ -290,13 +337,27 @@ class NexusArtifactService:
             )
             artifacts.append(artifact)
         
-        # Сортируем артефакты: сначала релизы, потом по версии (новые первые)
-        artifacts.sort(key=lambda a: (not a.is_release, not a.version), reverse=True)
+        # Сортируем артефакты по числовым частям версии в порядке убывания
+        artifacts.sort(
+            key=lambda a: (
+                # Первый критерий: релизы приоритетнее
+                not a.is_release,
+                # Второй критерий: числовые части версии (от большего к меньшему)
+                # Инвертируем кортеж для сортировки по убыванию
+                tuple(-part for part in self.parse_version_for_sorting(a.version)[0]),
+                # Третий критерий: не-SNAPSHOT версии приоритетнее
+                a.is_snapshot,
+                # Четвертый критерий: версии без специальных суффиксов приоритетнее
+                self.parse_version_for_sorting(a.version)[3],
+                # Пятый критерий: алфавитная сортировка суффикса
+                self.parse_version_for_sorting(a.version)[1]
+            )
+        )
         
         logger.info(f"Получено {len(artifacts)} артефактов для {group_id}:{artifact_id}")
         
         return artifacts
-    
+      
     async def get_latest_artifact(self, metadata_url: str, extension: str = 'jar',
                                  include_snapshots: bool = False) -> Optional[Artifact]:
         """

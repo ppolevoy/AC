@@ -7,6 +7,7 @@ import aiohttp
 import asyncio
 from datetime import datetime
 import re
+from typing import Tuple
 
 from app.models.application_group import ApplicationGroup, ApplicationInstance
 
@@ -179,20 +180,80 @@ class NexusDockerService:
         except Exception as e:
             logger.debug(f"Ошибка при получении манифеста: {str(e)}")
             return None
-    
+
+    def parse_tag_version(self, tag: str) -> Tuple[Tuple[int, ...], str, bool, bool]:
+        """
+        Парсинг тега Docker образа для правильной сортировки.
+        
+        Разбивает тег на числовые части для корректного сравнения.
+        Например: "0.2.1-SNAPSHOT" -> ((0, 2, 1), "snapshot", True, False)
+        
+        Args:
+            tag: Тег Docker образа (например: "0.2.1", "1.0.0-dev", "latest")
+            
+        Returns:
+            Кортеж: (числовые_части, суффикс, is_snapshot, is_special)
+        """
+        # Особые случаи
+        if tag == 'latest':
+            # latest всегда должен быть первым
+            return ((999999, 999999, 999999, 999999), '', False, False)
+        
+        # Разделяем основную версию и суффикс
+        # Поддерживаем форматы: X.Y.Z, X.Y.Z-suffix, X.Y, X.Y.Z.W и т.д.
+        match = re.match(r'^v?([\d.]+)(-.*)?$', tag, re.IGNORECASE)
+        if not match:
+            # Если формат тега нестандартный
+            return ((0, 0, 0, 0), tag.lower(), self.is_snapshot_tag(tag), True)
+        
+        main_version = match.group(1)
+        suffix = match.group(2) or ''
+        
+        # Парсим числовые части основной версии
+        try:
+            parts = tuple(int(p) for p in main_version.split('.') if p.isdigit())
+            if not parts:
+                parts = (0,)
+        except (ValueError, AttributeError):
+            parts = (0,)
+        
+        # Дополняем нулями до 4 частей для корректного сравнения
+        # (major, minor, patch, build)
+        parts = parts[:4] + (0,) * (4 - min(len(parts), 4))
+        
+        # Определяем тип версии
+        is_snapshot = self.is_snapshot_tag(tag)
+        is_dev = self.is_dev_tag(tag)
+        is_special = bool(suffix) and not is_snapshot and not is_dev
+        
+        return (parts, suffix.lower(), is_snapshot, is_special)
+
     def is_dev_tag(self, tag: str) -> bool:
         """Проверка, является ли тег dev версией"""
         tag_lower = tag.lower()
-        return 'dev' in tag_lower or 'develop' in tag_lower
+        # Расширенная проверка для dev версий
+        dev_patterns = ['dev', 'develop', 'development', '-dev', '.dev']
+        return any(pattern in tag_lower for pattern in dev_patterns)
     
     def is_snapshot_tag(self, tag: str) -> bool:
         """Проверка, является ли тег snapshot версией"""
         tag_lower = tag.lower()
-        return 'snapshot' in tag_lower or 'snap' in tag_lower
+        # Расширенная проверка для snapshot версий
+        snapshot_patterns = ['snapshot', 'snap', '-snapshot', '.snapshot']
+        return any(pattern in tag_lower for pattern in snapshot_patterns)
     
     def sort_tags(self, tags: List[str]) -> List[str]:
         """
-        Сортировка тегов: сначала релизные версии (новые первые), потом dev/snapshot.
+        сортировка тегов Docker образов.
+        
+        Приоритеты:
+        1. latest (всегда первый)
+        2. Релизные версии (чистые числовые версии)
+        3. Dev версии
+        4. Snapshot версии
+        5. Прочие версии со специальными суффиксами
+        
+        Внутри каждой категории - сортировка по числовым частям версии (от новых к старым)
         
         Args:
             tags: Список тегов
@@ -201,28 +262,30 @@ class NexusDockerService:
             Отсортированный список тегов
         """
         def tag_sort_key(tag):
-            # Приоритет: релизные версии (0), dev (1), snapshot (2), остальные (3)
-            if self.is_snapshot_tag(tag):
-                priority = 2
-            elif self.is_dev_tag(tag):
-                priority = 1
-            elif re.match(r'^\d+\.\d+(\.\d+)?$', tag) or tag == 'latest':
+            parsed = self.parse_tag_version(tag)
+            version_parts, suffix, is_snapshot, is_special = parsed
+            
+            # Приоритет категории
+            if tag == 'latest':
                 priority = 0
-            else:
+            elif re.match(r'^v?\d+\.\d+(\.\d+)?(\.\d+)?$', tag, re.IGNORECASE):
+                # Чистые релизные версии (например: 1.0.0, v2.3.4)
+                priority = 1
+            elif self.is_dev_tag(tag):
+                priority = 2
+            elif is_snapshot:
                 priority = 3
-            
-            # Пытаемся извлечь версию для правильной сортировки
-            version_match = re.match(r'^(\d+)\.(\d+)(?:\.(\d+))?', tag)
-            if version_match:
-                major = int(version_match.group(1))
-                minor = int(version_match.group(2))
-                patch = int(version_match.group(3)) if version_match.group(3) else 0
-                version_tuple = (major, minor, patch)
+            elif is_special:
+                priority = 4
             else:
-                version_tuple = (0, 0, 0)
+                priority = 5
             
-            # Возвращаем кортеж для сортировки: (приоритет, -major, -minor, -patch, tag)
-            return (priority, -version_tuple[0], -version_tuple[1], -version_tuple[2], tag)
+            # Возвращаем кортеж для сортировки:
+            # (приоритет_категории, инвертированные_числовые_части, суффикс)
+            # Инвертируем числовые части для сортировки по убыванию
+            inverted_version = tuple(-part for part in version_parts)
+            
+            return (priority, inverted_version, suffix, tag)
         
         return sorted(tags, key=tag_sort_key)
     
