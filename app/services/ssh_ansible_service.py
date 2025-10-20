@@ -718,58 +718,93 @@ class SSHAnsibleService:
                                      app_name: str, server_name: str, action: str) -> Tuple[bool, str, str]:
         """Выполняет команду Ansible через SSH с отслеживанием этапов"""
         ssh_cmd = self._build_ssh_command(ansible_cmd)
-        
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *ssh_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            
+
             stdout_lines = []
             stderr_lines = []
-            
+
             async def read_stdout():
+                """Читает stdout чанками для обработки длинных строк без переносов"""
+                buffer = b''
+                chunk_size = 8192  # Размер чанка для чтения
+
                 while True:
-                    line = await process.stdout.readline()
-                    if not line:
+                    chunk = await process.stdout.read(chunk_size)
+                    if not chunk:
+                        # Обрабатываем остаток буфера
+                        if buffer:
+                            line_str = buffer.decode('utf-8', errors='ignore').strip()
+                            if line_str:
+                                stdout_lines.append(line_str)
+                                stage_info = self._parse_ansible_output(line_str)
+                                if stage_info:
+                                    logger.info(f"Ansible {action} для {app_name}: {stage_info['message']}")
                         break
-                    line_str = line.decode('utf-8', errors='ignore').strip()
-                    stdout_lines.append(line_str)
-                    
-                    stage_info = self._parse_ansible_output(line_str)
-                    if stage_info:
-                        logger.info(f"Ansible {action} для {app_name}: {stage_info['message']}")
-            
+
+                    buffer += chunk
+
+                    # Разбиваем буфер на строки по символу новой строки
+                    while b'\n' in buffer:
+                        line, buffer = buffer.split(b'\n', 1)
+                        line_str = line.decode('utf-8', errors='ignore').strip()
+
+                        if line_str:
+                            stdout_lines.append(line_str)
+                            stage_info = self._parse_ansible_output(line_str)
+                            if stage_info:
+                                logger.info(f"Ansible {action} для {app_name}: {stage_info['message']}")
+
             async def read_stderr():
+                """Читает stderr чанками для обработки длинных строк без переносов"""
+                buffer = b''
+                chunk_size = 8192  # Размер чанка для чтения
+
                 while True:
-                    line = await process.stderr.readline()
-                    if not line:
+                    chunk = await process.stderr.read(chunk_size)
+                    if not chunk:
+                        # Обрабатываем остаток буфера
+                        if buffer:
+                            line_str = buffer.decode('utf-8', errors='ignore').strip()
+                            if line_str:
+                                stderr_lines.append(line_str)
+                                logger.warning(f"Ansible stderr: {line_str}")
                         break
-                    line_str = line.decode('utf-8', errors='ignore').strip()
-                    stderr_lines.append(line_str)
-                    
-                    if line_str:
-                        logger.warning(f"Ansible stderr: {line_str}")
-            
+
+                    buffer += chunk
+
+                    # Разбиваем буфер на строки по символу новой строки
+                    while b'\n' in buffer:
+                        line, buffer = buffer.split(b'\n', 1)
+                        line_str = line.decode('utf-8', errors='ignore').strip()
+
+                        if line_str:
+                            stderr_lines.append(line_str)
+                            logger.warning(f"Ansible stderr: {line_str}")
+
             await asyncio.gather(
                 read_stdout(),
                 read_stderr()
             )
-            
+
             try:
                 await asyncio.wait_for(process.wait(), timeout=self.ssh_config.command_timeout)
             except asyncio.TimeoutError:
                 process.kill()
                 await process.wait()
                 return False, "", "Таймаут выполнения команды Ansible"
-            
+
             success = process.returncode == 0
             stdout_output = '\n'.join(stdout_lines)
             stderr_output = '\n'.join(stderr_lines)
-            
+
             return success, stdout_output, stderr_output
-            
+
         except Exception as e:
             logger.error(f"Исключение при выполнении Ansible команды: {str(e)}")
             return False, "", str(e)
