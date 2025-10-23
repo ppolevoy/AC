@@ -583,55 +583,66 @@ class TaskQueue:
     
     def _process_update_task(self, task):
         """
-        Обработка задачи обновления приложения.
-        
+        Обработка задачи обновления приложения через SSH Ansible сервис.
+
         Args:
-            task: Задача
-            
+            task: Задача с параметрами обновления
+
         Returns:
             str: Результат выполнения задачи
         """
         import asyncio
-        
+
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
-        
+
         # Получаем данные внутри контекста приложения
         with self.app.app_context():
             from app.models.application import Application
             from app.models.server import Server
-            from app.services.ansible_service import AnsibleService
-            
+            from app.services.ssh_ansible_service import SSHAnsibleService
+            from app import db
+
             # Получаем информацию о приложении и сервере
             app = Application.query.get(task.application_id)
             if not app:
                 raise ValueError(f"Приложение с id {task.application_id} не найдено")
-            
+
             server = Server.query.get(app.server_id)
             if not server:
                 raise ValueError(f"Сервер для приложения {app.name} не найден")
-            
+
+            # Получаем параметры из задачи
             distr_url = task.params.get("distr_url")
             if not distr_url:
                 raise ValueError("URL дистрибутива не указан")
-            
+
             restart_mode = task.params.get("restart_mode", "restart")
-            
+            playbook_path = task.params.get("playbook_path")
+
+            if not playbook_path:
+                raise ValueError("Путь к playbook не указан в параметрах задачи")
+
             # Сохраняем необходимые данные для использования вне контекста приложения
             app_id = app.id
             app_name = app.name
+            app_type = app.app_type
+            server_id = server.id
             server_name = server.name
-            playbook_path = app.update_playbook_path
-        
+
         # Создаем event loop внутри метода
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
         try:
-            # Запускаем асинхронную функцию внутри event loop
+            # Запускаем асинхронное обновление через SSH Ansible внутри контекста приложения
+            # Это необходимо, так как ssh_service.update_application создает события в БД
             with self.app.app_context():
+                # Создаем SSH Ansible сервис внутри контекста
+                ssh_service = SSHAnsibleService.from_config()
+
                 success, message = loop.run_until_complete(
-                    AnsibleService.update_application(
+                    ssh_service.update_application(
                         server_name=server_name,
                         app_name=app_name,
                         app_id=app_id,
@@ -640,11 +651,31 @@ class TaskQueue:
                         playbook_path=playbook_path
                     )
                 )
-                
-                if not success:
-                    raise Exception(message)
-                
-                return message
+
+                # Обновляем информацию о приложении при успешном обновлении
+                if success:
+                    app = Application.query.get(app_id)
+                    if app:
+                        app.distr_path = distr_url
+
+                        # Для Docker приложений пытаемся извлечь версию из тега
+                        if app_type == 'docker' and ':' in distr_url:
+                            app.version = distr_url.split(':')[-1]
+                        else:
+                            # Для обычных приложений пытаемся извлечь версию из URL
+                            import re
+                            version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
+                            if version_match:
+                                app.version = version_match.group(1)
+
+                        db.session.commit()
+                        logger.info(f"Обновлена информация о приложении {app_name}: distr_path={distr_url}, version={app.version}")
+
+            if not success:
+                raise Exception(message)
+
+            return message
+
         finally:
             # Закрываем event loop
             loop.close()

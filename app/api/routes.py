@@ -513,7 +513,7 @@ def update_application(app_id):
             }), 500
         
         logger.info(f"Финальный путь к playbook для {app.name}: {playbook_path}")
-        
+
         # Создаем задачу для обновления
         task = Task(
             task_type='update',
@@ -525,15 +525,14 @@ def update_application(app_id):
                 'distr_url': distr_url,
                 'restart_mode': restart_mode,
                 'playbook_path': playbook_path
-                # УДАЛЕНО: 'additional_vars': additional_vars
             },
             server_id=server.id,
             application_id=app.id
         )
-        
-        # Добавляем задачу в очередь
+
+        # Добавляем задачу в очередь для асинхронной обработки
         task_queue.add_task(task)
-        
+
         # Логируем событие
         event = Event(
             event_type='update',
@@ -544,75 +543,15 @@ def update_application(app_id):
         )
         db.session.add(event)
         db.session.commit()
-        
-        # Запускаем ansible playbook через SSH сервис
-        from app.services.ssh_ansible_service import SSHAnsibleService
-        ssh_service = SSHAnsibleService.from_config()
-        
-        # Асинхронный запуск ansible playbook
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # ИСПРАВЛЕНО: Вызов БЕЗ additional_vars
-            success, result = loop.run_until_complete(
-                ssh_service.update_application(
-                    server_name=server.name,
-                    app_name=app.name,
-                    app_id=app.id,
-                    distr_url=distr_url,
-                    restart_mode=restart_mode,
-                    playbook_path=playbook_path
-                    # УДАЛЕНО: additional_vars больше не передается!
-                )
-            )
-        finally:
-            loop.close()
-        
-        # Обновляем статус задачи и события
-        if success:
-            task.status = 'completed'
-            task.result = result
-            event.status = 'success'
-            
-            # Обновляем информацию о версии и пути дистрибутива
-            app.distr_path = distr_url
-            
-            # Для Docker приложений пытаемся извлечь версию из тега
-            if app.app_type == 'docker':
-                # Извлекаем тег из имени образа (часть после последнего ':')
-                if ':' in distr_url:
-                    app.version = distr_url.split(':')[-1]
-            else:
-                # Для обычных приложений пытаемся извлечь версию из URL
-                import re
-                version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
-                if version_match:
-                    app.version = version_match.group(1)
-            
-            db.session.commit()
-            
-            logger.info(f"Обновление {app.name} выполнено успешно: {result}")
-            
-            return jsonify({
-                'success': True,
-                'message': f"Обновление приложения {app.name} запущено успешно",
-                'result': result
-            })
-        else:
-            task.status = 'failed'
-            task.error = result
-            event.status = 'failed'
-            event.description += f"\nОшибка: {result}"
-            db.session.commit()
-            
-            logger.error(f"Ошибка обновления {app.name}: {result}")
-            
-            return jsonify({
-                'success': False,
-                'error': result
-            }), 500
+
+        logger.info(f"Задача обновления {app.name} добавлена в очередь (task_id: {task.id})")
+
+        # Возвращаем успешный ответ сразу - обработка будет происходить асинхронно
+        return jsonify({
+            'success': True,
+            'message': f"Обновление приложения {app.name} добавлено в очередь",
+            'task_id': task.id
+        })
             
     except Exception as e:
         logger.error(f"Ошибка при запуске обновления приложения {app_id}: {str(e)}")
@@ -2052,17 +1991,47 @@ def get_docker_versions_for_app(app):
 @bp.route('/ansible/variables', methods=['GET'])
 def get_available_variables():
     """
-    Получить список доступных переменных для использования в playbook path
+    Получить список доступных переменных и информацию о кастомных параметрах
     """
     try:
         from app.services.ssh_ansible_service import SSHAnsibleService
         
         return jsonify({
             'success': True,
-            'variables': SSHAnsibleService.AVAILABLE_VARIABLES, 
-            'description': 'Переменные доступные для использования в playbook path',
-            'example': '/playbook.yml {server} {app} {distr_url}',
-            'note': 'Значения переменных формируются динамически при запуске'
+            'dynamic_variables': SSHAnsibleService.AVAILABLE_VARIABLES,
+            'custom_parameters': {
+                'description': 'Кастомные параметры можно задавать с явными значениями',
+                'format': '{parameter_name=value}',
+                'examples': [
+                    '{onlydeliver=true}',
+                    '{env=production}',
+                    '{timeout=30}',
+                    '{debug=false}'
+                ],
+                'validation': {
+                    'name_pattern': '^[a-zA-Z_][a-zA-Z0-9_]*$',
+                    'value_pattern': '^[a-zA-Z0-9_\\-\\./:\\@\\=\\s]+$',
+                    'description': 'Имя должно начинаться с буквы или _, значение может содержать буквы, цифры и безопасные символы'
+                }
+            },
+            'usage_examples': [
+                {
+                    'description': 'Только динамические параметры',
+                    'playbook_path': '/playbook.yml {server} {app} {distr_url}',
+                    'result': 'ansible-playbook /playbook.yml -e server="srv01" -e app="myapp" -e distr_url="http://nexus/app.jar"'
+                },
+                {
+                    'description': 'Смешанные параметры',
+                    'playbook_path': '/playbook.yml {server} {app} {onlydeliver=true} {env=staging}',
+                    'result': 'ansible-playbook /playbook.yml -e server="srv01" -e app="myapp" -e onlydeliver="true" -e env="staging"'
+                },
+                {
+                    'description': 'Только кастомные параметры',
+                    'playbook_path': '/custom.yml {deploy_mode=blue-green} {rollback=false} {timeout=300}',
+                    'result': 'ansible-playbook /custom.yml -e deploy_mode="blue-green" -e rollback="false" -e timeout="300"'
+                }
+            ],
+            'note': 'Динамические параметры берутся из контекста события, кастомные используют явные значения'
         })
     except Exception as e:
         logger.error(f"Ошибка при получении списка переменных: {str(e)}")
@@ -2078,7 +2047,7 @@ def validate_playbook_config():
     
     Body:
     {
-        "playbook_path": "/path/to/playbook.yml {server} {app} {custom_param}"
+        "playbook_path": "/path/to/playbook.yml {server} {app} {onlydeliver=true}"
     }
     """
     try:
@@ -2100,55 +2069,83 @@ def validate_playbook_config():
         # Валидируем параметры
         is_valid, invalid_params = ssh_service.validate_parameters(playbook_config.parameters)
         
-        # Формируем список валидных параметров с описанием
-        valid_params = []
+        # Формируем детальную информацию о параметрах
+        parameters_info = []
         for param in playbook_config.parameters:
-            if param in SSHAnsibleService.AVAILABLE_VARIABLES:
-                valid_params.append({
-                    'name': param,
-                    'description': SSHAnsibleService.AVAILABLE_VARIABLES[param]
-                })
+            param_info = {
+                'name': param.name,
+                'type': 'custom' if param.is_custom else 'dynamic',
+                'value': param.value if param.is_custom else None,
+                'is_valid': True
+            }
+            
+            if param.is_custom:
+                param_info['description'] = f"Кастомный параметр со значением '{param.value}'"
+            else:
+                if param.name in SSHAnsibleService.AVAILABLE_VARIABLES:
+                    param_info['description'] = SSHAnsibleService.AVAILABLE_VARIABLES[param.name]
+                else:
+                    param_info['is_valid'] = False
+                    param_info['description'] = "Неизвестный динамический параметр"
+            
+            parameters_info.append(param_info)
         
         # Пример команды
         example_vars = {}
         for param in playbook_config.parameters:
-            if param == 'server':
-                example_vars[param] = 'web01.example.com'
-            elif param == 'app' or param == 'app_name':
-                example_vars[param] = 'myapp'
-            elif param == 'distr_url':
-                example_vars[param] = 'http://nexus/app.jar'
-            elif param == 'restart_mode':
-                example_vars[param] = 'now'
-            elif param == 'image_url':
-                example_vars[param] = 'docker.io/myapp:latest'
-            elif param == 'app_id':
-                example_vars[param] = '1'
-            elif param == 'server_id':
-                example_vars[param] = '1'
+            if param.is_custom:
+                # Для кастомных параметров используем их явные значения
+                example_vars[param.name] = param.value or ''
             else:
-                example_vars[param] = '<value>'
+                # Для динамических параметров генерируем примеры
+                if param.name == 'server':
+                    example_vars[param.name] = 'web01.example.com'
+                elif param.name in ['app', 'app_name']:
+                    example_vars[param.name] = 'myapp'
+                elif param.name == 'distr_url':
+                    example_vars[param.name] = 'http://nexus/app.jar'
+                elif param.name == 'restart_mode':
+                    example_vars[param.name] = 'now'
+                elif param.name == 'image_url':
+                    example_vars[param.name] = 'docker.io/myapp:latest'
+                elif param.name == 'app_id':
+                    example_vars[param.name] = '1'
+                elif param.name == 'server_id':
+                    example_vars[param.name] = '1'
+                else:
+                    example_vars[param.name] = '<значение>'
         
         example_command = f"ansible-playbook {playbook_config.path}"
         for key, value in example_vars.items():
             example_command += f' -e {key}="{value}"'
         
+        # Подсчет динамических и кастомных параметров
+        dynamic_count = sum(1 for p in playbook_config.parameters if not p.is_custom)
+        custom_count = sum(1 for p in playbook_config.parameters if p.is_custom)
+
         response = {
             'success': True,
             'is_valid': is_valid,
             'playbook_path': playbook_config.path,
-            'parameters': playbook_config.parameters,
-            'valid_parameters': valid_params,
+            'parameters': parameters_info,
             'invalid_parameters': invalid_params,
-            'example_command': example_command
+            'example_command': example_command,
+            # Для совместимости с фронтендом
+            'dynamic_count': dynamic_count,
+            'custom_count': custom_count,
+            'statistics': {
+                'total_parameters': len(playbook_config.parameters),
+                'dynamic_parameters': dynamic_count,
+                'custom_parameters': custom_count
+            }
         }
-        
+
         if not is_valid:
-            response['message'] = f"Найдены неизвестные параметры: {', '.join(invalid_params)}"
-            response['hint'] = "Используйте GET /api/ansible/variables для получения списка доступных переменных"
+            response['message'] = f"Найдены недопустимые параметры: {', '.join(invalid_params)}"
+            response['hint'] = "Проверьте имена динамических параметров и формат кастомных параметров"
         else:
-            response['message'] = "Все параметры валидны"
-        
+            response['message'] = "Все параметры валидны и готовы к использованию"
+
         return jsonify(response)
         
     except Exception as e:
@@ -2156,19 +2153,20 @@ def validate_playbook_config():
         return jsonify({
             'success': False,
             'error': str(e)
-        }), 500    
+        }), 500
 
 @bp.route('/applications/<int:app_id>/test-playbook', methods=['POST'])
 def test_playbook_execution(app_id):
     """
     Тестовый прогон - показывает какая команда будет выполнена (dry run)
+    Поддерживает как динамические, так и кастомные параметры
     
     Body:
     {
-        "playbook_path": "/playbook.yml {server} {app} {distr_url}",
-        "action": "update",  // или "start", "stop", "restart"
-        "distr_url": "http://nexus/app.jar",  // для update
-        "restart_mode": "now"  // для update
+        "playbook_path": "/playbook.yml {server} {app} {distr_url} {onlydeliver=true}",
+        "action": "update",
+        "distr_url": "http://nexus/app.jar",
+        "restart_mode": "now"
     }
     """
     try:
@@ -2214,9 +2212,9 @@ def test_playbook_execution(app_id):
         if not is_valid:
             return jsonify({
                 'success': False,
-                'error': f"Неизвестные параметры: {', '.join(invalid_params)}",
+                'error': f"Недопустимые параметры: {', '.join(invalid_params)}",
                 'invalid_parameters': invalid_params,
-                'hint': "Используйте только параметры из списка доступных переменных"
+                'hint': "Проверьте параметры playbook"
             }), 400
         
         # Определяем image_url для Docker приложений
@@ -2228,7 +2226,7 @@ def test_playbook_execution(app_id):
             if hasattr(app, 'docker_image'):
                 image_url = app.docker_image
         
-        # Формируем контекст - ТОЛЬКО из параметров события, НЕ из БД!
+        # Формируем контекст
         context_vars = ssh_service.build_context_vars(
             server_name=server.name,
             app_name=app.name,
@@ -2239,8 +2237,19 @@ def test_playbook_execution(app_id):
             image_url=image_url
         )
         
-        # Формируем extra_vars только для параметров из playbook_path
+        # Формируем extra_vars с учетом кастомных параметров
         extra_vars = ssh_service.build_extra_vars(playbook_config, context_vars)
+        
+        # Разделяем параметры по типам для отображения
+        dynamic_params = {}
+        custom_params = {}
+        
+        for param in playbook_config.parameters:
+            if param.is_custom:
+                custom_params[param.name] = param.value
+            else:
+                if param.name in extra_vars:
+                    dynamic_params[param.name] = extra_vars[param.name]
         
         # Формируем команду
         playbook_full_path = os.path.join(
@@ -2272,13 +2281,22 @@ def test_playbook_execution(app_id):
             'playbook_config': {
                 'path': playbook_config.path,
                 'full_path': playbook_full_path,
-                'parameters': playbook_config.parameters
+                'total_parameters': len(playbook_config.parameters)
             },
-            'context_variables': context_vars,
+            'parameters': {
+                'dynamic': {
+                    'description': 'Параметры из контекста события',
+                    'values': dynamic_params
+                },
+                'custom': {
+                    'description': 'Параметры с явными значениями',
+                    'values': custom_params
+                }
+            },
             'extra_vars': extra_vars,
             'command': readable_command,
             'message': 'Это тестовый прогон. Команда не была выполнена.',
-            'note': 'Значения переменных сформированы из контекста события'
+            'note': 'Динамические параметры взяты из контекста, кастомные используют явные значения'
         })
         
     except Exception as e:
