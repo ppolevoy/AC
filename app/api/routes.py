@@ -432,7 +432,7 @@ def update_application(app_id):
             }), 400
         
         # Получаем параметры обновления
-        restart_mode = data.get('restart_mode', 'restart')
+        mode = data.get('mode', 'night-restart')
         
         # Определяем URL/имя дистрибутива в зависимости от типа приложения
         if app.app_type == 'docker':
@@ -523,7 +523,7 @@ def update_application(app_id):
                 'app_type': app.app_type,
                 'server_name': server.name,
                 'distr_url': distr_url,
-                'restart_mode': restart_mode,
+                'mode': mode,
                 'playbook_path': playbook_path
             },
             server_id=server.id,
@@ -567,6 +567,145 @@ def update_application(app_id):
         
         db.session.commit()
         
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/update-group', methods=['POST'])
+def update_applications_batch():
+    """Запуск группового обновления приложений (несколько приложений на одном сервере)"""
+    try:
+        # Получаем данные из запроса
+        data = request.json
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': "Отсутствуют данные для обновления"
+            }), 400
+
+        # Получаем параметры обновления
+        app_ids = data.get('app_ids', [])
+        app_names = data.get('app_names', '')  # Строка с именами через запятую
+        mode = data.get('mode', 'night-restart')
+        distr_url = data.get('distr_url')
+
+        if not app_ids or len(app_ids) == 0:
+            return jsonify({
+                'success': False,
+                'error': "Не указаны ID приложений"
+            }), 400
+
+        if not distr_url:
+            return jsonify({
+                'success': False,
+                'error': "Не указан URL дистрибутива"
+            }), 400
+
+        # Получаем первое приложение для определения сервера и типа
+        first_app = Application.query.get(app_ids[0])
+        if not first_app:
+            return jsonify({
+                'success': False,
+                'error': f"Приложение с id {app_ids[0]} не найдено"
+            }), 404
+
+        # Получаем сервер
+        server = Server.query.get(first_app.server_id)
+        if not server:
+            return jsonify({
+                'success': False,
+                'error': "Сервер приложения не найден"
+            }), 404
+
+        # Проверяем, что все приложения на одном сервере
+        for app_id in app_ids:
+            app = Application.query.get(app_id)
+            if not app:
+                return jsonify({
+                    'success': False,
+                    'error': f"Приложение с id {app_id} не найдено"
+                }), 404
+            if app.server_id != server.id:
+                return jsonify({
+                    'success': False,
+                    'error': "Все приложения должны быть на одном сервере"
+                }), 400
+
+        # Определяем путь к playbook (берем от первого приложения)
+        playbook_path = None
+        if first_app.update_playbook_path:
+            playbook_path = first_app.update_playbook_path
+            logger.info(f"Используется playbook приложения: {playbook_path}")
+        else:
+            instance = ApplicationInstance.query.filter_by(application_id=app_ids[0]).first()
+            if instance:
+                if instance.custom_playbook_path:
+                    playbook_path = instance.custom_playbook_path
+                elif instance.group and instance.group.update_playbook_path:
+                    playbook_path = instance.group.update_playbook_path
+                elif hasattr(instance, 'get_effective_playbook_path'):
+                    playbook_path = instance.get_effective_playbook_path()
+
+        if not playbook_path:
+            from app.config import Config
+            if first_app.app_type == 'docker':
+                playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+            else:
+                playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+
+        if not playbook_path or playbook_path.strip() == '':
+            return jsonify({
+                'success': False,
+                'error': "Не настроен путь к Ansible playbook"
+            }), 500
+
+        # Создаем задачу для обновления группы приложений
+        task = Task(
+            task_type='update',
+            params={
+                'app_id': app_ids[0],  # ID первого приложения для совместимости
+                'app_name': app_names,  # Имена приложений через запятую!
+                'app_type': first_app.app_type,
+                'server_name': server.name,
+                'distr_url': distr_url,
+                'mode': mode,
+                'playbook_path': playbook_path
+            },
+            server_id=server.id,
+            application_id=app_ids[0]
+        )
+
+        # Добавляем задачу в очередь
+        task_queue.add_task(task)
+
+        # Создаем события для всех приложений
+        for app_id in app_ids:
+            app = Application.query.get(app_id)
+            event = Event(
+                event_type='update',
+                description=f"Запущено групповое обновление {app.app_type} приложения {app.name} на версию из {distr_url}",
+                status='pending',
+                server_id=server.id,
+                application_id=app_id
+            )
+            db.session.add(event)
+
+        db.session.commit()
+
+        logger.info(f"Задача группового обновления {len(app_ids)} приложений добавлена в очередь (task_id: {task.id})")
+
+        return jsonify({
+            'success': True,
+            'message': f"Обновление {len(app_ids)} приложений добавлено в очередь",
+            'task_id': task.id
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка при запуске группового обновления: {str(e)}")
+        db.session.rollback()
+
         return jsonify({
             'success': False,
             'error': str(e)
@@ -2104,8 +2243,8 @@ def validate_playbook_config():
                     example_vars[param.name] = 'myapp'
                 elif param.name == 'distr_url':
                     example_vars[param.name] = 'http://nexus/app.jar'
-                elif param.name == 'restart_mode':
-                    example_vars[param.name] = 'now'
+                elif param.name == 'mode':
+                    example_vars[param.name] = 'immediate'
                 elif param.name == 'image_url':
                     example_vars[param.name] = 'docker.io/myapp:latest'
                 elif param.name == 'app_id':
@@ -2166,7 +2305,7 @@ def test_playbook_execution(app_id):
         "playbook_path": "/playbook.yml {server} {app} {distr_url} {onlydeliver=true}",
         "action": "update",
         "distr_url": "http://nexus/app.jar",
-        "restart_mode": "now"
+        "mode": "immediate"
     }
     """
     try:
@@ -2233,7 +2372,7 @@ def test_playbook_execution(app_id):
             app_id=app.id,
             server_id=server.id,
             distr_url=data.get('distr_url'),
-            restart_mode=data.get('restart_mode'),
+            mode=data.get('mode'),
             image_url=image_url
         )
         

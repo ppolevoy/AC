@@ -617,7 +617,7 @@ class TaskQueue:
             if not distr_url:
                 raise ValueError("URL дистрибутива не указан")
 
-            restart_mode = task.params.get("restart_mode", "restart")
+            mode = task.params.get("mode", "night-restart")
             playbook_path = task.params.get("playbook_path")
 
             if not playbook_path:
@@ -647,7 +647,7 @@ class TaskQueue:
                         app_name=app_name,
                         app_id=app_id,
                         distr_url=distr_url,
-                        restart_mode=restart_mode,
+                        mode=mode,
                         playbook_path=playbook_path
                     )
                 )
