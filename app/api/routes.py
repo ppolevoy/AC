@@ -590,6 +590,7 @@ def update_applications_batch():
         app_names = data.get('app_names', '')  # Строка с именами через запятую
         mode = data.get('mode', 'night-restart')
         distr_url = data.get('distr_url')
+        playbook_path_override = data.get('playbook_path')  # Опциональный playbook path из фронтенда
 
         if not app_ids or len(app_ids) == 0:
             return jsonify({
@@ -633,27 +634,34 @@ def update_applications_batch():
                     'error': "Все приложения должны быть на одном сервере"
                 }), 400
 
-        # Определяем путь к playbook (берем от первого приложения)
+        # Определяем путь к playbook
         playbook_path = None
-        if first_app.update_playbook_path:
-            playbook_path = first_app.update_playbook_path
-            logger.info(f"Используется playbook приложения: {playbook_path}")
-        else:
-            instance = ApplicationInstance.query.filter_by(application_id=app_ids[0]).first()
-            if instance:
-                if instance.custom_playbook_path:
-                    playbook_path = instance.custom_playbook_path
-                elif instance.group and instance.group.update_playbook_path:
-                    playbook_path = instance.group.update_playbook_path
-                elif hasattr(instance, 'get_effective_playbook_path'):
-                    playbook_path = instance.get_effective_playbook_path()
 
-        if not playbook_path:
-            from app.config import Config
-            if first_app.app_type == 'docker':
-                playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+        # Если playbook передан из фронтенда (группировка уже произошла), используем его
+        if playbook_path_override:
+            playbook_path = playbook_path_override
+            logger.info(f"Используется playbook из запроса: {playbook_path}")
+        else:
+            # Иначе определяем playbook от первого приложения
+            if first_app.update_playbook_path:
+                playbook_path = first_app.update_playbook_path
+                logger.info(f"Используется playbook приложения: {playbook_path}")
             else:
-                playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+                instance = ApplicationInstance.query.filter_by(application_id=app_ids[0]).first()
+                if instance:
+                    if instance.custom_playbook_path:
+                        playbook_path = instance.custom_playbook_path
+                    elif instance.group and instance.group.update_playbook_path:
+                        playbook_path = instance.group.update_playbook_path
+                    elif hasattr(instance, 'get_effective_playbook_path'):
+                        playbook_path = instance.get_effective_playbook_path()
+
+            if not playbook_path:
+                from app.config import Config
+                if first_app.app_type == 'docker':
+                    playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+                else:
+                    playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
 
         if not playbook_path or playbook_path.strip() == '':
             return jsonify({
@@ -666,6 +674,7 @@ def update_applications_batch():
             task_type='update',
             params={
                 'app_id': app_ids[0],  # ID первого приложения для совместимости
+                'app_ids': app_ids,  # Массив всех ID приложений
                 'app_name': app_names,  # Имена приложений через запятую!
                 'app_type': first_app.app_type,
                 'server_name': server.name,
@@ -704,6 +713,155 @@ def update_applications_batch():
 
     except Exception as e:
         logger.error(f"Ошибка при запуске группового обновления: {str(e)}")
+        db.session.rollback()
+
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/update-batch', methods=['POST'])
+def update_applications_batch_v2():
+    """Батч-обновление приложений с группировкой на сервере по (server_id, playbook_path)"""
+    try:
+        # Получаем данные из запроса
+        data = request.json
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': "Отсутствуют данные для обновления"
+            }), 400
+
+        # Получаем параметры обновления
+        app_ids = data.get('app_ids', [])
+        mode = data.get('mode', 'night-restart')
+        distr_url = data.get('distr_url')
+        image_name = data.get('image_name')  # Для Docker приложений
+
+        if not app_ids or len(app_ids) == 0:
+            return jsonify({
+                'success': False,
+                'error': "Не указаны ID приложений"
+            }), 400
+
+        if not distr_url:
+            return jsonify({
+                'success': False,
+                'error': "Не указан URL дистрибутива"
+            }), 400
+
+        # Получаем все приложения
+        applications = []
+        for app_id in app_ids:
+            app = Application.query.get(app_id)
+            if not app:
+                return jsonify({
+                    'success': False,
+                    'error': f"Приложение с id {app_id} не найдено"
+                }), 404
+            applications.append(app)
+
+        # Группируем приложения по (server_id, playbook_path)
+        groups = {}
+
+        for app in applications:
+            # Получаем server_id
+            server_id = app.server_id
+
+            # Определяем эффективный playbook_path для приложения
+            playbook_path = None
+
+            # Получаем первый instance для определения playbook
+            instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
+
+            if instance and hasattr(instance, 'get_effective_playbook_path'):
+                playbook_path = instance.get_effective_playbook_path()
+            elif app.update_playbook_path:
+                playbook_path = app.update_playbook_path
+            else:
+                # Используем дефолтный playbook в зависимости от типа
+                from app.config import Config
+                if app.app_type == 'docker':
+                    playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+                else:
+                    playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+
+            # Создаем ключ группировки
+            group_key = (server_id, playbook_path)
+
+            if group_key not in groups:
+                groups[group_key] = []
+
+            groups[group_key].append(app)
+
+        # Создаем задачи для каждой группы
+        tasks_created = 0
+        task_ids = []
+
+        for (server_id, playbook_path), group_apps in groups.items():
+            # Получаем сервер
+            server = Server.query.get(server_id)
+            if not server:
+                logger.warning(f"Сервер с id {server_id} не найден, пропускаем группу")
+                continue
+
+            # Формируем список ID и имен приложений
+            group_app_ids = [app.id for app in group_apps]
+            group_app_names = ','.join([app.name for app in group_apps])
+
+            # Создаем задачу для группы
+            task = Task(
+                task_type='update',
+                params={
+                    'app_id': group_app_ids[0],  # ID первого приложения для совместимости
+                    'app_ids': group_app_ids,  # Массив всех ID приложений в группе
+                    'app_name': group_app_names,  # Имена приложений через запятую
+                    'app_type': group_apps[0].app_type,
+                    'server_name': server.name,
+                    'distr_url': distr_url,
+                    'mode': mode,
+                    'playbook_path': playbook_path
+                },
+                server_id=server_id,
+                application_id=group_app_ids[0]
+            )
+
+            # Для Docker приложений добавляем image_name
+            if group_apps[0].app_type == 'docker' and image_name:
+                task.params['image_name'] = image_name
+
+            # Добавляем задачу в очередь
+            task_queue.add_task(task)
+            task_ids.append(task.id)
+            tasks_created += 1
+
+            # Создаем события для всех приложений в группе
+            for app in group_apps:
+                event = Event(
+                    event_type='update',
+                    description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url}",
+                    status='pending',
+                    server_id=server_id,
+                    application_id=app.id
+                )
+                db.session.add(event)
+
+            logger.info(f"Создана задача для группы: server_id={server_id}, playbook={playbook_path}, apps={group_app_names}, task_id={task.id}")
+
+        db.session.commit()
+
+        logger.info(f"Батч-обновление: создано {tasks_created} задач(и) для {len(app_ids)} приложений")
+
+        return jsonify({
+            'success': True,
+            'message': f"Создано {tasks_created} задач(и) для обновления {len(app_ids)} приложений",
+            'tasks_created': tasks_created,
+            'task_ids': task_ids
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка при запуске батч-обновления: {str(e)}")
         db.session.rollback()
 
         return jsonify({
@@ -872,6 +1030,13 @@ def get_grouped_applications():
             
             server = Server.query.get(app.server_id)
             
+            # Получаем эффективный playbook path
+            playbook_path = None
+            if hasattr(app, 'instance') and app.instance:
+                playbook_path = app.instance.get_effective_playbook_path()
+            elif app.update_playbook_path:
+                playbook_path = app.update_playbook_path
+
             grouped[group_name].append({
                 'id': app.id,
                 'name': app.name,
@@ -881,7 +1046,8 @@ def get_grouped_applications():
                 'status': app.status,
                 'version': app.version,
                 'instance_number': app.instance_number,
-                'start_time': app.start_time.isoformat() if app.start_time else None
+                'start_time': app.start_time.isoformat() if app.start_time else None,
+                'effective_playbook_path': playbook_path
             })
         
         # Сортируем приложения в каждой группе по номеру экземпляра
@@ -923,20 +1089,33 @@ def get_tasks():
         
         for task in tasks:
             task_data = task.to_dict()
-            
-            # Добавляем имена приложения и сервера вместо ID
+
+            # Добавляем имена приложений (может быть несколько через запятую)
             if task.application_id:
-                app = Application.query.get(task.application_id)
-                task_data['application_name'] = app.name if app else None
+                # Проверяем, есть ли в params массив app_ids (групповое обновление)
+                app_ids = task.params.get('app_ids', []) if task.params else []
+
+                if app_ids and len(app_ids) > 1:
+                    # Групповое обновление - получаем имена всех приложений
+                    app_names = []
+                    for app_id in app_ids:
+                        app = Application.query.get(app_id)
+                        if app:
+                            app_names.append(app.name)
+                    task_data['application_name'] = ','.join(app_names) if app_names else None
+                else:
+                    # Одиночное обновление
+                    app = Application.query.get(task.application_id)
+                    task_data['application_name'] = app.name if app else None
             else:
                 task_data['application_name'] = None
-                
+
             if task.server_id:
                 server = Server.query.get(task.server_id)
                 task_data['server_name'] = server.name if server else None
             else:
                 task_data['server_name'] = None
-                
+
             result.append(task_data)
         
         return jsonify({

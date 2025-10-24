@@ -328,6 +328,20 @@
             }
         },
 
+        async updateApplicationBatch(updateParams) {
+            try {
+                const response = await fetch(`/api/applications/update-batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateParams)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка батч-обновления приложений:', error);
+                return { success: false, error: error.message };
+            }
+        },
+
         async getApplicationInfo(appId) {
             try {
                 const response = await fetch(`/api/applications/${appId}`);
@@ -1433,46 +1447,33 @@
                 }
                 
                 // Собираем все обновления (исключая удаленные группы)
-                // Группируем приложения по серверам
-                const updates = [];
+                // Просто собираем все app_ids без группировки - группировка будет на бэкенде
+                const allAppIds = [];
+                const commonParams = {
+                    distr_url: null,
+                    mode: null
+                };
+
                 for (const groupName of Object.keys(groupStates)) {
                     if (excludedGroups.has(groupName)) continue; // Пропускаем исключенные группы
 
                     const state = groupStates[groupName];
                     if (state.distrUrl && state.distrUrl.trim() && state.distrUrl !== 'custom') {
-                        // Группируем приложения по серверам
-                        const appsByServer = {};
+                        // Добавляем все app_ids из этой группы
+                        allAppIds.push(...state.appIds);
 
-                        state.appIds.forEach(appId => {
-                            const app = StateManager.getAppById(appId);
-                            if (!app) return;
-
-                            const serverId = app.server_id;
-                            if (!appsByServer[serverId]) {
-                                appsByServer[serverId] = {
-                                    serverId: serverId,
-                                    serverName: app.server_name,
-                                    appIds: [],
-                                    appNames: [],
-                                    groupName: groupName,
-                                    distr_url: state.distrUrl,
-                                    mode: state.mode
-                                };
-                            }
-
-                            appsByServer[serverId].appIds.push(appId);
-                            appsByServer[serverId].appNames.push(app.name);
-                        });
-
-                        // Добавляем сгруппированные обновления
-                        Object.values(appsByServer).forEach(serverGroup => {
-                            updates.push(serverGroup);
-                        });
+                        // Сохраняем общие параметры (предполагаем что они одинаковые для всех групп)
+                        if (!commonParams.distr_url) {
+                            commonParams.distr_url = state.distrUrl;
+                            commonParams.mode = state.mode;
+                        }
                     }
                 }
-                
-                if (updates.length > 0) {
-                    await this.processMultipleUpdates(updates);
+
+                if (allAppIds.length > 0 && commonParams.distr_url) {
+                    // Отправляем один запрос со всеми app_ids
+                    // Бэкенд сам разделит на группы по серверам и playbook
+                    await this.processBatchUpdate(allAppIds, commonParams);
                 } else {
                     showError('Укажите URL дистрибутива хотя бы для одной группы');
                 }
@@ -1696,59 +1697,38 @@
             }
         },
 
-        async processMultipleUpdates(updates) {
+        async processBatchUpdate(appIds, params) {
             try {
-                // Подсчитываем общее количество приложений
-                const totalApps = updates.reduce((sum, update) => sum + update.appIds.length, 0);
-                showNotification(`Запуск обновления ${totalApps} приложений...`);
+                showNotification(`Запуск обновления ${appIds.length} приложений...`);
 
-                const results = [];
-                const errors = [];
+                // Отправляем один запрос со всеми app_ids
+                // Бэкенд сам сгруппирует по серверам и playbook
+                const updateParams = {
+                    app_ids: appIds,
+                    distr_url: params.distr_url,
+                    mode: params.mode
+                };
 
-                for (const update of updates) {
-                    // Для каждого сервера отправляем один запрос с несколькими приложениями
-                    const updateParams = {
-                        app_ids: update.appIds,  // Массив ID приложений
-                        app_names: update.appNames.join(','),  // Имена через запятую
-                        distr_url: update.distr_url,
-                        mode: update.mode
-                    };
-
-                    // Проверяем тип первого приложения
-                    const firstApp = StateManager.getAppById(update.appIds[0]);
-                    if (firstApp?.app_type === 'docker') {
-                        updateParams.image_name = update.distr_url;
-                    }
-
-                    // Используем новый API endpoint для групповых обновлений
-                    const result = await ApiService.updateApplicationGroup(updateParams);
-
-                    if (result.success) {
-                        results.push(...update.appIds);
-                    } else {
-                        errors.push({ ...update, error: result.error });
-                    }
+                // Проверяем тип первого приложения для Docker
+                const firstApp = StateManager.getAppById(appIds[0]);
+                if (firstApp?.app_type === 'docker') {
+                    updateParams.image_name = params.distr_url;
                 }
 
-                const successCount = results.length;
-                const errorCount = errors.length;
+                // Используем новый API endpoint для батч-обновлений
+                const result = await ApiService.updateApplicationBatch(updateParams);
 
-                if (errorCount === 0) {
-                    showNotification(`✅ Успешно запущено обновление для всех ${successCount} приложений`);
-                } else if (successCount === 0) {
-                    showError(`❌ Не удалось запустить обновление ни для одного приложения`);
+                if (result.success) {
+                    const tasksCount = result.tasks_created || 1;
+                    showNotification(`✅ Успешно создано ${tasksCount} ${tasksCount === 1 ? 'задача' : tasksCount < 5 ? 'задачи' : 'задач'} для обновления ${appIds.length} ${appIds.length === 1 ? 'приложения' : 'приложений'}`);
                 } else {
-                    showNotification(`⚠️ Обновление запущено для ${successCount} из ${totalApps} приложений`);
-                }
-
-                if (errors.length > 0) {
-                    console.error('Ошибки обновления:', errors);
+                    showError(`❌ Ошибка: ${result.error}`);
                 }
 
                 await EventHandlers.loadApplications();
                 closeModal();
             } catch (error) {
-                console.error('Ошибка при массовом обновлении:', error);
+                console.error('Ошибка при батч-обновлении:', error);
                 showError('Произошла ошибка при обновлении приложений');
             }
         }
