@@ -625,7 +625,7 @@ def batch_update_applications():
             # Получаем экземпляр приложения
             instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
 
-            # Определяем playbook_path (приоритет из get_effective_playbook_path)
+            # Определяем playbook_path и group_id
             playbook_path = None
             group_id = None
 
@@ -646,12 +646,15 @@ def batch_update_applications():
             # Ключ группировки: (server_id, playbook_path, group_id)
             group_key = (app.server_id, playbook_path, group_id)
 
+            logger.info(f"Группировка для {app.name}: server_id={app.server_id}, playbook={playbook_path}, group_id={group_id}")
+
             if group_key not in groups:
                 groups[group_key] = []
 
             groups[group_key].append(app)
 
         # Создаем задачи для каждой группы
+        logger.info(f"Создано {len(groups)} групп для {len(applications)} приложений")
         created_tasks = []
 
         for (server_id, playbook_path, group_id), apps_in_group in groups.items():
@@ -687,7 +690,7 @@ def batch_update_applications():
                 )
                 db.session.add(event)
 
-            logger.info(f"Создана задача для группы приложений (IDs: {app_ids}, task_id: {task.id})")
+            logger.info(f"Создана задача для группы приложений (IDs: {app_ids}, names: {app_names_for_log}, server_id: {server_id}, playbook: {playbook_path}, group_id: {group_id}, task_id: {task.id})")
 
         db.session.commit()
 

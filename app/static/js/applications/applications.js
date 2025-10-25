@@ -1411,37 +1411,65 @@
             // Обработчик отправки формы
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                
+
                 // Сохраняем текущее состояние
                 const activeTab = tabsContainer.querySelector('.modal-tab.active');
                 if (activeTab) {
                     this.saveGroupState(activeTab.dataset.group, groupStates);
                 }
-                
-                // Собираем все обновления (исключая удаленные группы)
-                const updates = [];
-                for (const groupName of Object.keys(groupStates)) {
-                    if (excludedGroups.has(groupName)) continue; // Пропускаем исключенные группы
-                    
-                    const state = groupStates[groupName];
-                    if (state.distrUrl && state.distrUrl.trim() && state.distrUrl !== 'custom') {
-                        state.appIds.forEach(appId => {
-                            const app = StateManager.getAppById(appId);
-                            updates.push({
-                                appId,
-                                appName: app?.name,
-                                groupName,
+
+                // Отправляем batch запрос для каждой вкладки отдельно
+                try {
+                    let totalGroups = 0;
+                    let totalApps = 0;
+                    let hasErrors = false;
+
+                    for (const groupName of Object.keys(groupStates)) {
+                        if (excludedGroups.has(groupName)) continue; // Пропускаем исключенные группы
+
+                        const state = groupStates[groupName];
+                        if (!state.distrUrl || state.distrUrl.trim() === '' || state.distrUrl === 'custom') {
+                            continue; // Пропускаем вкладки без URL
+                        }
+
+                        // Отправляем batch запрос для этой вкладки
+                        const response = await fetch('/api/applications/batch_update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                app_ids: state.appIds,
                                 distr_url: state.distrUrl,
                                 mode: state.restartMode
-                            });
+                            })
                         });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            totalGroups += result.groups_count;
+                            totalApps += state.appIds.length;
+                        } else {
+                            hasErrors = true;
+                            console.error(`Ошибка обновления группы ${groupName}:`, result.error);
+                        }
                     }
-                }
-                
-                if (updates.length > 0) {
-                    await this.processMultipleUpdates(updates);
-                } else {
-                    showError('Укажите URL дистрибутива хотя бы для одной группы');
+
+                    if (totalApps === 0) {
+                        showError('Укажите URL дистрибутива хотя бы для одной группы');
+                        return;
+                    }
+
+                    if (!hasErrors) {
+                        showNotification(`✅ Создано задач: ${totalGroups} для ${totalApps} приложений`);
+                    } else {
+                        showNotification(`⚠️ Обновление запущено с ошибками. Проверьте логи.`);
+                    }
+
+                    await EventHandlers.loadApplications();
+                    closeModal();
+                } catch (error) {
+                    console.error('Ошибка при обновлении:', error);
+                    showError('Произошла ошибка при обновлении');
                 }
             });
             
@@ -1659,45 +1687,48 @@
         async processMultipleUpdates(updates) {
             try {
                 showNotification(`Запуск обновления ${updates.length} приложений...`);
-                
-                const results = [];
-                const errors = [];
-                
-                for (const update of updates) {
-                    const app = StateManager.getAppById(update.appId);
-                    const updateParams = {
-                        distr_url: update.distr_url,
-                        mode: update.mode
-                    };
 
-                    if (app?.app_type === 'docker') {
-                        updateParams.image_name = update.distr_url;
+                // Группируем приложения по (distr_url, mode) для batch запросов
+                const batches = {};
+                updates.forEach(update => {
+                    const key = `${update.distr_url}|${update.mode}`;
+                    if (!batches[key]) {
+                        batches[key] = {
+                            app_ids: [],
+                            distr_url: update.distr_url,
+                            mode: update.mode
+                        };
                     }
+                    batches[key].app_ids.push(update.appId);
+                });
 
-                    const result = await ApiService.updateApplication(update.appId, updateParams);
-                    
+                // Отправляем batch запросы
+                let totalGroups = 0;
+                let hasErrors = false;
+
+                for (const batch of Object.values(batches)) {
+                    const response = await fetch('/api/applications/batch_update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(batch)
+                    });
+
+                    const result = await response.json();
+
                     if (result.success) {
-                        results.push(update);
+                        totalGroups += result.groups_count;
                     } else {
-                        errors.push({ ...update, error: result.error });
+                        hasErrors = true;
+                        console.error('Ошибка batch update:', result.error);
                     }
                 }
-                
-                const successCount = results.length;
-                const errorCount = errors.length;
-                
-                if (errorCount === 0) {
-                    showNotification(`✅ Успешно запущено обновление для всех ${successCount} приложений`);
-                } else if (successCount === 0) {
-                    showError(`❌ Не удалось запустить обновление ни для одного приложения`);
+
+                if (!hasErrors) {
+                    showNotification(`✅ Создано задач: ${totalGroups} для ${updates.length} приложений`);
                 } else {
-                    showNotification(`⚠️ Обновление запущено для ${successCount} из ${updates.length} приложений`);
+                    showNotification(`⚠️ Обновление запущено, но возникли ошибки. Проверьте логи.`);
                 }
-                
-                if (errors.length > 0) {
-                    console.error('Ошибки обновления:', errors);
-                }
-                
+
                 await EventHandlers.loadApplications();
                 closeModal();
             } catch (error) {
