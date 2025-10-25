@@ -489,14 +489,7 @@
             const paginatedGroups = this.paginateData(groups);
 
             paginatedGroups.forEach(group => {
-                if (group.apps.length === 1) {
-                    const row = this.createApplicationRow(group.apps[0], false);
-                    if (row && this.elements.applicationsTableBody) {
-                        this.elements.applicationsTableBody.appendChild(row);
-                    }
-                } else {
-                    this.renderApplicationGroup(group);
-                }
+                this.renderApplicationGroup(group);
             });
 
             this.updatePagination(groups.length);
