@@ -63,7 +63,7 @@ class SSHAnsibleService:
         'app_name': 'Имя приложения (алиас для app)',
         'image_url': 'URL до docker image (для docker-приложений)',
         'distr_url': 'URL артефакта/дистрибутива',
-        'restart_mode': 'Режим перезапуска (now или night-restart)',
+        'mode': 'Режим обновления (deliver, immediate, night-restart)',
         'app_id': 'ID приложения в БД',
         'server_id': 'ID сервера в БД'
     }
@@ -221,20 +221,20 @@ class SSHAnsibleService:
                           app_id: int,
                           server_id: int,
                           distr_url: Optional[str] = None,
-                          restart_mode: Optional[str] = None,
+                          mode: Optional[str] = None,
                           image_url: Optional[str] = None) -> Dict[str, str]:
         """
         Формирует контекстные переменные для подстановки в playbook
-        
+
         Args:
             server_name: Имя сервера
             app_name: Имя приложения
             app_id: ID приложения
             server_id: ID сервера
             distr_url: URL дистрибутива (опционально)
-            restart_mode: Режим перезапуска (опционально)
+            mode: Режим обновления (deliver, immediate, night-restart) (опционально)
             image_url: URL docker образа (опционально)
-            
+
         Returns:
             Dict[str, str]: Словарь с переменными контекста
         """
@@ -245,17 +245,17 @@ class SSHAnsibleService:
             'app_id': str(app_id),
             'server_id': str(server_id)
         }
-        
+
         # Добавляем опциональные переменные только если они переданы
         if distr_url:
             context_vars['distr_url'] = distr_url
-        
-        if restart_mode:
-            context_vars['restart_mode'] = restart_mode
-        
+
+        if mode:
+            context_vars['mode'] = mode
+
         if image_url:
             context_vars['image_url'] = image_url
-        
+
         return context_vars
     
     def build_extra_vars(self, 
@@ -345,24 +345,24 @@ class SSHAnsibleService:
         
         return cmd
     
-    async def update_application(self, 
-                               server_name: str, 
-                               app_name: str, 
-                               app_id: int, 
-                               distr_url: str, 
-                               restart_mode: str, 
+    async def update_application(self,
+                               server_name: str,
+                               app_name: str,
+                               app_id: int,
+                               distr_url: str,
+                               mode: str,
                                playbook_path: Optional[str] = None) -> Tuple[bool, str]:
         """
         Запуск Ansible playbook для обновления приложения через SSH
-        
+
         Args:
             server_name: Имя сервера
             app_name: Имя приложения
             app_id: ID приложения в БД
             distr_url: URL дистрибутива
-            restart_mode: Режим рестарта ('now' или 'night-restart')
+            mode: Режим обновления (deliver, immediate, night-restart)
             playbook_path: Путь к playbook с параметрами (опционально)
-        
+
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
         """
@@ -449,7 +449,7 @@ class SSHAnsibleService:
                 app_id=app_id,
                 server_id=server.id,
                 distr_url=distr_url,
-                restart_mode=restart_mode,
+                mode=mode,
                 image_url=image_url
             )
             

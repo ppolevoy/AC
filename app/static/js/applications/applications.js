@@ -1069,10 +1069,13 @@
                         <label>Режим обновления:</label>
                         <div class="radio-group">
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="restart" checked> В рестарт
+                                <input type="radio" name="mode" value="deliver" checked> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="immediate"> Сейчас
+                                <input type="radio" name="mode" value="immediate"> Сейчас
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="night-restart"> В рестарт
                             </label>
                         </div>
                     </div>
@@ -1236,9 +1239,9 @@
                     }
                     
                     // Восстанавливаем режим обновления
-                    const restartModeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
-                    if (restartModeRadio) {
-                        restartModeRadio.checked = true;
+                    const modeRadio = document.querySelector(`input[name="mode"][value="${state.restartMode}"]`);
+                    if (modeRadio) {
+                        modeRadio.checked = true;
                     }
                     
                     // Восстанавливаем обработчики
@@ -1338,10 +1341,13 @@
                         <label>Режим обновления:</label>
                         <div class="radio-group">
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="restart" ${state.restartMode === 'restart' ? 'checked' : ''}> В рестарт
+                                <input type="radio" name="mode" value="deliver" ${state.restartMode === 'deliver' ? 'checked' : ''}> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}> Сейчас
+                                <input type="radio" name="mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}> Сейчас
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="night-restart" ${state.restartMode === 'night-restart' ? 'checked' : ''}> В рестарт
                             </label>
                         </div>
                     </div>
@@ -1426,7 +1432,7 @@
                                 appName: app?.name,
                                 groupName,
                                 distr_url: state.distrUrl,
-                                restart_mode: state.restartMode
+                                mode: state.restartMode
                             });
                         });
                     }
@@ -1581,11 +1587,10 @@
         // функция сохранения состояния группы
         saveGroupState(groupName, groupStates) {
             if (!groupStates[groupName]) return;
-            
+
             const distrUrlElement = document.getElementById('distr-url');
             const customUrlElement = document.getElementById('custom-distr-url');
-            const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
-            
+
             let distrUrl = '';
             let isCustom = false;
             let customUrl = '';
@@ -1605,17 +1610,17 @@
             }
             
             groupStates[groupName].distrUrl = distrUrl;
-            groupStates[groupName].restartMode = restartModeElement?.value || 'restart';
+            groupStates[groupName].restartMode = document.querySelector('input[name="mode"]:checked')?.value || 'deliver';
             groupStates[groupName].customUrl = customUrl;
             groupStates[groupName].isCustom = isCustom;
         },
 
         async processUpdateForm(formData) {
             try {
-                const appIds = formData.get('app_ids').split(',').filter(id => id);
-                const distrUrl = formData.get('distr_url') === 'custom' ? 
+                const appIds = formData.get('app_ids').split(',').filter(id => id).map(id => parseInt(id));
+                const distrUrl = formData.get('distr_url') === 'custom' ?
                     formData.get('custom_distr_url') : formData.get('distr_url');
-                const restartMode = formData.get('restart_mode');
+                const mode = formData.get('mode');
 
                 if (!distrUrl || distrUrl === 'custom') {
                     showError('Укажите URL дистрибутива');
@@ -1624,29 +1629,23 @@
 
                 showNotification(`Запуск обновления для ${appIds.length} приложений...`);
 
-                const results = [];
-                for (const appId of appIds) {
-                    const app = StateManager.getAppById(appId);
-                    const updateParams = {
+                // Используем новый batch_update endpoint
+                const response = await fetch('/api/applications/batch_update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        app_ids: appIds,
                         distr_url: distrUrl,
-                        restart_mode: restartMode
-                    };
+                        mode: mode
+                    })
+                });
 
-                    if (app?.app_type === 'docker') {
-                        updateParams.image_name = distrUrl;
-                    }
+                const result = await response.json();
 
-                    const result = await ApiService.updateApplication(appId, updateParams);
-                    results.push({ appId, success: result.success, error: result.error });
-                }
-
-                const successCount = results.filter(r => r.success).length;
-                if (successCount === results.length) {
-                    showNotification('Обновление успешно запущено');
-                } else if (successCount > 0) {
-                    showNotification(`Обновление запущено для ${successCount} из ${results.length} приложений`);
+                if (result.success) {
+                    showNotification(`Создано задач: ${result.groups_count} для ${appIds.length} приложений`);
                 } else {
-                    showError('Не удалось запустить обновление');
+                    showError(`Ошибка: ${result.error}`);
                 }
 
                 await EventHandlers.loadApplications();
@@ -1668,13 +1667,13 @@
                     const app = StateManager.getAppById(update.appId);
                     const updateParams = {
                         distr_url: update.distr_url,
-                        restart_mode: update.restart_mode
+                        mode: update.mode
                     };
-                    
+
                     if (app?.app_type === 'docker') {
                         updateParams.image_name = update.distr_url;
                     }
-                    
+
                     const result = await ApiService.updateApplication(update.appId, updateParams);
                     
                     if (result.success) {

@@ -603,32 +603,62 @@ class TaskQueue:
             from app.services.ssh_ansible_service import SSHAnsibleService
             from app import db
 
-            # Получаем информацию о приложении и сервере
-            app = Application.query.get(task.application_id)
-            if not app:
-                raise ValueError(f"Приложение с id {task.application_id} не найдено")
+            # Проверяем, является ли задача групповой (по наличию app_ids в params)
+            app_ids = task.params.get("app_ids")
+            is_batch_task = app_ids is not None and isinstance(app_ids, list) and len(app_ids) > 1
 
-            server = Server.query.get(app.server_id)
-            if not server:
-                raise ValueError(f"Сервер для приложения {app.name} не найден")
+            if is_batch_task:
+                # Групповая задача - загружаем все приложения по ID
+                apps = Application.query.filter(Application.id.in_(app_ids)).all()
 
-            # Получаем параметры из задачи
+                if not apps:
+                    raise ValueError(f"Приложения с ID {app_ids} не найдены")
+
+                if len(apps) != len(app_ids):
+                    found_ids = [app.id for app in apps]
+                    missing_ids = set(app_ids) - set(found_ids)
+                    logger.warning(f"Некоторые приложения не найдены: {missing_ids}")
+
+                # Формируем список имен через запятую
+                app_name = ','.join([app.name for app in apps])
+
+                # Берем данные из первого приложения
+                first_app = apps[0]
+                server = Server.query.get(first_app.server_id)
+                if not server:
+                    raise ValueError(f"Сервер для приложения {first_app.name} не найден")
+
+                server_id = server.id
+                server_name = server.name
+                app_type = first_app.app_type
+                app_id = first_app.id  # Для логирования используем первый ID
+
+            else:
+                # Одиночная задача - используем application_id
+                app = Application.query.get(task.application_id)
+                if not app:
+                    raise ValueError(f"Приложение с id {task.application_id} не найдено")
+
+                server = Server.query.get(app.server_id)
+                if not server:
+                    raise ValueError(f"Сервер для приложения {app.name} не найден")
+
+                app_id = app.id
+                app_name = app.name
+                app_type = app.app_type
+                server_id = server.id
+                server_name = server.name
+
+            # Общие параметры для обеих типов задач
             distr_url = task.params.get("distr_url")
             if not distr_url:
                 raise ValueError("URL дистрибутива не указан")
 
-            restart_mode = task.params.get("restart_mode", "restart")
+            mode = task.params.get("mode", task.params.get("restart_mode", "immediate"))
             playbook_path = task.params.get("playbook_path")
 
             if not playbook_path:
                 raise ValueError("Путь к playbook не указан в параметрах задачи")
-
-            # Сохраняем необходимые данные для использования вне контекста приложения
-            app_id = app.id
-            app_name = app.name
-            app_type = app.app_type
-            server_id = server.id
-            server_name = server.name
 
         # Создаем event loop внутри метода
         loop = asyncio.new_event_loop()
@@ -647,13 +677,14 @@ class TaskQueue:
                         app_name=app_name,
                         app_id=app_id,
                         distr_url=distr_url,
-                        restart_mode=restart_mode,
+                        mode=mode,
                         playbook_path=playbook_path
                     )
                 )
 
                 # Обновляем информацию о приложении при успешном обновлении
-                if success:
+                # Только для одиночных задач (не для групповых)
+                if success and not is_batch_task:
                     app = Application.query.get(app_id)
                     if app:
                         app.distr_path = distr_url
