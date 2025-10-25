@@ -432,7 +432,7 @@ def update_application(app_id):
             }), 400
         
         # Получаем параметры обновления
-        restart_mode = data.get('restart_mode', 'restart')
+        mode = data.get('mode', data.get('restart_mode', 'immediate'))  # Поддержка старого параметра restart_mode
         
         # Определяем URL/имя дистрибутива в зависимости от типа приложения
         if app.app_type == 'docker':
@@ -523,7 +523,7 @@ def update_application(app_id):
                 'app_type': app.app_type,
                 'server_name': server.name,
                 'distr_url': distr_url,
-                'restart_mode': restart_mode,
+                'mode': mode,
                 'playbook_path': playbook_path
             },
             server_id=server.id,
@@ -567,6 +567,143 @@ def update_application(app_id):
         
         db.session.commit()
         
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/applications/batch_update', methods=['POST'])
+def batch_update_applications():
+    """
+    Групповое обновление приложений с группировкой по (server, playbook, app_group)
+
+    Принимает:
+        app_ids: список ID приложений
+        distr_url: URL дистрибутива
+        mode: режим обновления (deliver, immediate, night-restart)
+
+    Создает отдельные задачи для каждой комбинации (server_id, playbook_path, group_id)
+    """
+    try:
+        data = request.json
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': "Отсутствуют данные для обновления"
+            }), 400
+
+        app_ids = data.get('app_ids', [])
+        distr_url = data.get('distr_url')
+        mode = data.get('mode', 'immediate')
+
+        if not app_ids or len(app_ids) == 0:
+            return jsonify({
+                'success': False,
+                'error': "Не указаны приложения для обновления"
+            }), 400
+
+        if not distr_url:
+            return jsonify({
+                'success': False,
+                'error': "Не указан URL дистрибутива"
+            }), 400
+
+        # Загружаем все приложения и их instances
+        applications = Application.query.filter(Application.id.in_(app_ids)).all()
+
+        if len(applications) != len(app_ids):
+            return jsonify({
+                'success': False,
+                'error': "Некоторые приложения не найдены"
+            }), 404
+
+        # Группируем приложения по (server_id, playbook_path, group_id)
+        groups = {}
+
+        for app in applications:
+            # Получаем экземпляр приложения
+            instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
+
+            # Определяем playbook_path и group_id
+            playbook_path = None
+            group_id = None
+
+            if instance:
+                playbook_path = instance.get_effective_playbook_path()
+                group_id = instance.group_id
+            else:
+                # Если нет instance, используем настройки Application
+                if app.update_playbook_path:
+                    playbook_path = app.update_playbook_path
+                else:
+                    from app.config import Config
+                    if app.app_type == 'docker':
+                        playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+                    else:
+                        playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+
+            # Ключ группировки: (server_id, playbook_path, group_id)
+            group_key = (app.server_id, playbook_path, group_id)
+
+            logger.info(f"Группировка для {app.name}: server_id={app.server_id}, playbook={playbook_path}, group_id={group_id}")
+
+            if group_key not in groups:
+                groups[group_key] = []
+
+            groups[group_key].append(app)
+
+        # Создаем задачи для каждой группы
+        logger.info(f"Создано {len(groups)} групп для {len(applications)} приложений")
+        created_tasks = []
+
+        for (server_id, playbook_path, group_id), apps_in_group in groups.items():
+            # Собираем ID приложений
+            app_ids = [app.id for app in apps_in_group]
+
+            # Создаем задачу для группы
+            task = Task(
+                task_type='update',
+                params={
+                    'app_ids': app_ids,  # Храним список ID вместо строки с именами
+                    'distr_url': distr_url,
+                    'mode': mode,
+                    'playbook_path': playbook_path
+                },
+                server_id=server_id,
+                application_id=app_ids[0]  # Первое приложение как reference
+            )
+
+            # Добавляем задачу в очередь
+            task_queue.add_task(task)
+            created_tasks.append(task.id)
+
+            # Логируем события для каждого приложения в группе
+            app_names_for_log = ','.join([app.name for app in apps_in_group])
+            for app in apps_in_group:
+                event = Event(
+                    event_type='update',
+                    description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url} (группа: {app_names_for_log})",
+                    status='pending',
+                    server_id=server_id,
+                    application_id=app.id
+                )
+                db.session.add(event)
+
+            logger.info(f"Создана задача для группы приложений (IDs: {app_ids}, names: {app_names_for_log}, server_id: {server_id}, playbook: {playbook_path}, group_id: {group_id}, task_id: {task.id})")
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f"Создано задач: {len(created_tasks)} для {len(applications)} приложений",
+            'task_ids': created_tasks,
+            'groups_count': len(groups)
+        })
+
+    except Exception as e:
+        logger.error(f"Ошибка при групповом обновлении приложений: {str(e)}")
+        db.session.rollback()
         return jsonify({
             'success': False,
             'error': str(e)
@@ -786,7 +923,17 @@ def get_tasks():
             task_data = task.to_dict()
             
             # Добавляем имена приложения и сервера вместо ID
-            if task.application_id:
+            # Проверяем, является ли задача групповой (по наличию app_ids в params)
+            app_ids = task.params.get('app_ids')
+            if app_ids and isinstance(app_ids, list) and len(app_ids) > 1:
+                # Групповая задача - загружаем приложения и формируем строку
+                apps = Application.query.filter(Application.id.in_(app_ids)).all()
+                if apps:
+                    task_data['application_name'] = ','.join([app.name for app in apps])
+                else:
+                    task_data['application_name'] = f"Apps: {','.join(map(str, app_ids))}"
+            elif task.application_id:
+                # Одиночная задача
                 app = Application.query.get(task.application_id)
                 task_data['application_name'] = app.name if app else None
             else:
@@ -826,12 +973,22 @@ def get_task(task_id):
         task_data = task.to_dict()
         
         # Добавляем имена приложения и сервера вместо ID
-        if task.application_id:
+        # Проверяем, является ли задача групповой (по наличию app_ids в params)
+        app_ids = task.params.get('app_ids')
+        if app_ids and isinstance(app_ids, list) and len(app_ids) > 1:
+            # Групповая задача - загружаем приложения и формируем строку
+            apps = Application.query.filter(Application.id.in_(app_ids)).all()
+            if apps:
+                task_data['application_name'] = ','.join([app.name for app in apps])
+            else:
+                task_data['application_name'] = f"Apps: {','.join(map(str, app_ids))}"
+        elif task.application_id:
+            # Одиночная задача
             app = Application.query.get(task.application_id)
             task_data['application_name'] = app.name if app else None
         else:
             task_data['application_name'] = None
-            
+
         if task.server_id:
             server = Server.query.get(task.server_id)
             task_data['server_name'] = server.name if server else None
@@ -2104,7 +2261,9 @@ def validate_playbook_config():
                     example_vars[param.name] = 'myapp'
                 elif param.name == 'distr_url':
                     example_vars[param.name] = 'http://nexus/app.jar'
-                elif param.name == 'restart_mode':
+                elif param.name == 'mode':
+                    example_vars[param.name] = 'immediate'
+                elif param.name == 'restart_mode':  # Старое название для совместимости
                     example_vars[param.name] = 'now'
                 elif param.name == 'image_url':
                     example_vars[param.name] = 'docker.io/myapp:latest'
@@ -2166,7 +2325,7 @@ def test_playbook_execution(app_id):
         "playbook_path": "/playbook.yml {server} {app} {distr_url} {onlydeliver=true}",
         "action": "update",
         "distr_url": "http://nexus/app.jar",
-        "restart_mode": "now"
+        "mode": "immediate"
     }
     """
     try:
@@ -2233,7 +2392,7 @@ def test_playbook_execution(app_id):
             app_id=app.id,
             server_id=server.id,
             distr_url=data.get('distr_url'),
-            restart_mode=data.get('restart_mode'),
+            mode=data.get('mode', data.get('restart_mode')),  # Поддержка старого параметра
             image_url=image_url
         )
         

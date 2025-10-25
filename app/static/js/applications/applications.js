@@ -489,14 +489,7 @@
             const paginatedGroups = this.paginateData(groups);
 
             paginatedGroups.forEach(group => {
-                if (group.apps.length === 1) {
-                    const row = this.createApplicationRow(group.apps[0], false);
-                    if (row && this.elements.applicationsTableBody) {
-                        this.elements.applicationsTableBody.appendChild(row);
-                    }
-                } else {
-                    this.renderApplicationGroup(group);
-                }
+                this.renderApplicationGroup(group);
             });
 
             this.updatePagination(groups.length);
@@ -1069,10 +1062,13 @@
                         <label>Режим обновления:</label>
                         <div class="radio-group">
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="restart" checked> В рестарт
+                                <input type="radio" name="mode" value="deliver" checked> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="immediate"> Сейчас
+                                <input type="radio" name="mode" value="immediate"> Сейчас
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="night-restart"> В рестарт
                             </label>
                         </div>
                     </div>
@@ -1236,9 +1232,9 @@
                     }
                     
                     // Восстанавливаем режим обновления
-                    const restartModeRadio = document.querySelector(`input[name="restart_mode"][value="${state.restartMode}"]`);
-                    if (restartModeRadio) {
-                        restartModeRadio.checked = true;
+                    const modeRadio = document.querySelector(`input[name="mode"][value="${state.restartMode}"]`);
+                    if (modeRadio) {
+                        modeRadio.checked = true;
                     }
                     
                     // Восстанавливаем обработчики
@@ -1338,10 +1334,13 @@
                         <label>Режим обновления:</label>
                         <div class="radio-group">
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="restart" ${state.restartMode === 'restart' ? 'checked' : ''}> В рестарт
+                                <input type="radio" name="mode" value="deliver" ${state.restartMode === 'deliver' ? 'checked' : ''}> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="restart_mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}> Сейчас
+                                <input type="radio" name="mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}> Сейчас
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="night-restart" ${state.restartMode === 'night-restart' ? 'checked' : ''}> В рестарт
                             </label>
                         </div>
                     </div>
@@ -1405,37 +1404,65 @@
             // Обработчик отправки формы
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                
+
                 // Сохраняем текущее состояние
                 const activeTab = tabsContainer.querySelector('.modal-tab.active');
                 if (activeTab) {
                     this.saveGroupState(activeTab.dataset.group, groupStates);
                 }
-                
-                // Собираем все обновления (исключая удаленные группы)
-                const updates = [];
-                for (const groupName of Object.keys(groupStates)) {
-                    if (excludedGroups.has(groupName)) continue; // Пропускаем исключенные группы
-                    
-                    const state = groupStates[groupName];
-                    if (state.distrUrl && state.distrUrl.trim() && state.distrUrl !== 'custom') {
-                        state.appIds.forEach(appId => {
-                            const app = StateManager.getAppById(appId);
-                            updates.push({
-                                appId,
-                                appName: app?.name,
-                                groupName,
+
+                // Отправляем batch запрос для каждой вкладки отдельно
+                try {
+                    let totalGroups = 0;
+                    let totalApps = 0;
+                    let hasErrors = false;
+
+                    for (const groupName of Object.keys(groupStates)) {
+                        if (excludedGroups.has(groupName)) continue; // Пропускаем исключенные группы
+
+                        const state = groupStates[groupName];
+                        if (!state.distrUrl || state.distrUrl.trim() === '' || state.distrUrl === 'custom') {
+                            continue; // Пропускаем вкладки без URL
+                        }
+
+                        // Отправляем batch запрос для этой вкладки
+                        const response = await fetch('/api/applications/batch_update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                app_ids: state.appIds,
                                 distr_url: state.distrUrl,
-                                restart_mode: state.restartMode
-                            });
+                                mode: state.restartMode
+                            })
                         });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            totalGroups += result.groups_count;
+                            totalApps += state.appIds.length;
+                        } else {
+                            hasErrors = true;
+                            console.error(`Ошибка обновления группы ${groupName}:`, result.error);
+                        }
                     }
-                }
-                
-                if (updates.length > 0) {
-                    await this.processMultipleUpdates(updates);
-                } else {
-                    showError('Укажите URL дистрибутива хотя бы для одной группы');
+
+                    if (totalApps === 0) {
+                        showError('Укажите URL дистрибутива хотя бы для одной группы');
+                        return;
+                    }
+
+                    if (!hasErrors) {
+                        showNotification(`✅ Создано задач: ${totalGroups} для ${totalApps} приложений`);
+                    } else {
+                        showNotification(`⚠️ Обновление запущено с ошибками. Проверьте логи.`);
+                    }
+
+                    await EventHandlers.loadApplications();
+                    closeModal();
+                } catch (error) {
+                    console.error('Ошибка при обновлении:', error);
+                    showError('Произошла ошибка при обновлении');
                 }
             });
             
@@ -1581,11 +1608,10 @@
         // функция сохранения состояния группы
         saveGroupState(groupName, groupStates) {
             if (!groupStates[groupName]) return;
-            
+
             const distrUrlElement = document.getElementById('distr-url');
             const customUrlElement = document.getElementById('custom-distr-url');
-            const restartModeElement = document.querySelector('input[name="restart_mode"]:checked');
-            
+
             let distrUrl = '';
             let isCustom = false;
             let customUrl = '';
@@ -1605,17 +1631,17 @@
             }
             
             groupStates[groupName].distrUrl = distrUrl;
-            groupStates[groupName].restartMode = restartModeElement?.value || 'restart';
+            groupStates[groupName].restartMode = document.querySelector('input[name="mode"]:checked')?.value || 'deliver';
             groupStates[groupName].customUrl = customUrl;
             groupStates[groupName].isCustom = isCustom;
         },
 
         async processUpdateForm(formData) {
             try {
-                const appIds = formData.get('app_ids').split(',').filter(id => id);
-                const distrUrl = formData.get('distr_url') === 'custom' ? 
+                const appIds = formData.get('app_ids').split(',').filter(id => id).map(id => parseInt(id));
+                const distrUrl = formData.get('distr_url') === 'custom' ?
                     formData.get('custom_distr_url') : formData.get('distr_url');
-                const restartMode = formData.get('restart_mode');
+                const mode = formData.get('mode');
 
                 if (!distrUrl || distrUrl === 'custom') {
                     showError('Укажите URL дистрибутива');
@@ -1624,29 +1650,23 @@
 
                 showNotification(`Запуск обновления для ${appIds.length} приложений...`);
 
-                const results = [];
-                for (const appId of appIds) {
-                    const app = StateManager.getAppById(appId);
-                    const updateParams = {
+                // Используем новый batch_update endpoint
+                const response = await fetch('/api/applications/batch_update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        app_ids: appIds,
                         distr_url: distrUrl,
-                        restart_mode: restartMode
-                    };
+                        mode: mode
+                    })
+                });
 
-                    if (app?.app_type === 'docker') {
-                        updateParams.image_name = distrUrl;
-                    }
+                const result = await response.json();
 
-                    const result = await ApiService.updateApplication(appId, updateParams);
-                    results.push({ appId, success: result.success, error: result.error });
-                }
-
-                const successCount = results.filter(r => r.success).length;
-                if (successCount === results.length) {
-                    showNotification('Обновление успешно запущено');
-                } else if (successCount > 0) {
-                    showNotification(`Обновление запущено для ${successCount} из ${results.length} приложений`);
+                if (result.success) {
+                    showNotification(`Создано задач: ${result.groups_count} для ${appIds.length} приложений`);
                 } else {
-                    showError('Не удалось запустить обновление');
+                    showError(`Ошибка: ${result.error}`);
                 }
 
                 await EventHandlers.loadApplications();
@@ -1660,45 +1680,48 @@
         async processMultipleUpdates(updates) {
             try {
                 showNotification(`Запуск обновления ${updates.length} приложений...`);
-                
-                const results = [];
-                const errors = [];
-                
-                for (const update of updates) {
-                    const app = StateManager.getAppById(update.appId);
-                    const updateParams = {
-                        distr_url: update.distr_url,
-                        restart_mode: update.restart_mode
-                    };
-                    
-                    if (app?.app_type === 'docker') {
-                        updateParams.image_name = update.distr_url;
+
+                // Группируем приложения по (distr_url, mode) для batch запросов
+                const batches = {};
+                updates.forEach(update => {
+                    const key = `${update.distr_url}|${update.mode}`;
+                    if (!batches[key]) {
+                        batches[key] = {
+                            app_ids: [],
+                            distr_url: update.distr_url,
+                            mode: update.mode
+                        };
                     }
-                    
-                    const result = await ApiService.updateApplication(update.appId, updateParams);
-                    
+                    batches[key].app_ids.push(update.appId);
+                });
+
+                // Отправляем batch запросы
+                let totalGroups = 0;
+                let hasErrors = false;
+
+                for (const batch of Object.values(batches)) {
+                    const response = await fetch('/api/applications/batch_update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(batch)
+                    });
+
+                    const result = await response.json();
+
                     if (result.success) {
-                        results.push(update);
+                        totalGroups += result.groups_count;
                     } else {
-                        errors.push({ ...update, error: result.error });
+                        hasErrors = true;
+                        console.error('Ошибка batch update:', result.error);
                     }
                 }
-                
-                const successCount = results.length;
-                const errorCount = errors.length;
-                
-                if (errorCount === 0) {
-                    showNotification(`✅ Успешно запущено обновление для всех ${successCount} приложений`);
-                } else if (successCount === 0) {
-                    showError(`❌ Не удалось запустить обновление ни для одного приложения`);
+
+                if (!hasErrors) {
+                    showNotification(`✅ Создано задач: ${totalGroups} для ${updates.length} приложений`);
                 } else {
-                    showNotification(`⚠️ Обновление запущено для ${successCount} из ${updates.length} приложений`);
+                    showNotification(`⚠️ Обновление запущено, но возникли ошибки. Проверьте логи.`);
                 }
-                
-                if (errors.length > 0) {
-                    console.error('Ошибки обновления:', errors);
-                }
-                
+
                 await EventHandlers.loadApplications();
                 closeModal();
             } catch (error) {

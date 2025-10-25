@@ -15,38 +15,38 @@ class AnsibleService:
     """
     
     @staticmethod
-    async def update_application(server_name, app_name, app_id, distr_url, restart_mode, playbook_path=None):
+    async def update_application(server_name, app_name, app_id, distr_url, mode, playbook_path=None):
         """
         Запуск Ansible плейбука для обновления приложения
-        
+
         Args:
             server_name: Имя сервера
             app_name: Имя приложения
             app_id: ID приложения в БД
             distr_url: URL дистрибутива
-            restart_mode: Режим рестарта ('restart' или 'immediate')
+            mode: Режим обновления (deliver, immediate, night-restart)
             playbook_path: Путь к плейбуку Ansible (опционально)
-        
+
         Returns:
             tuple: (успех операции (bool), информация о результате (str))
         """
         # Проверяем, нужно ли использовать SSH
         if getattr(Config, 'USE_SSH_ANSIBLE', False):
             logger.info(f"Использование SSH для выполнения Ansible playbook: {app_name}")
-            
+
             # Импортируем SSH-сервис
             from app.services.ssh_ansible_service import get_ssh_ansible_service
             ssh_service = get_ssh_ansible_service()
-            
+
             return await ssh_service.update_application(
-                server_name, app_name, app_id, distr_url, restart_mode, playbook_path
+                server_name, app_name, app_id, distr_url, mode, playbook_path
             )
         else:
             logger.info(f"Использование локального выполнения Ansible playbook: {app_name}")
-            
+
             # Используем старый подход с локальным выполнением
             return await AnsibleService._local_update_application(
-                server_name, app_name, app_id, distr_url, restart_mode, playbook_path
+                server_name, app_name, app_id, distr_url, mode, playbook_path
             )
     
     @staticmethod
@@ -83,7 +83,7 @@ class AnsibleService:
             )
     
     @staticmethod
-    async def _local_update_application(server_name, app_name, app_id, distr_url, restart_mode, playbook_path=None):
+    async def _local_update_application(server_name, app_name, app_id, distr_url, mode, playbook_path=None):
         """
         Локальное выполнение Ansible плейбука для обновления приложения
         """
@@ -142,7 +142,7 @@ class AnsibleService:
                 '-e', f"server={server_name}",
                 '-e', f"app_name={app_name}",
                 '-e', f"distr_url={distr_url}",
-                '-e', f"restart_mode={restart_mode}"
+                '-e', f"mode={mode}"
             ]
             
             logger.info(f"Запуск Ansible: {' '.join(cmd)}")
