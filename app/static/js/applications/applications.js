@@ -1853,16 +1853,17 @@
             UIRenderer.renderServers(servers);
             
             // Обработчик клика по dropdown серверов
-            const serverDropdown = document.getElementById('server-dropdown');
+            const serverDropdown = document.querySelector('.server-dropdown');
+            const serverButton = document.getElementById('server-selected');
             const serverList = document.getElementById('server-list');
-            
-            if (serverDropdown) {
-                serverDropdown.addEventListener('click', (e) => {
+
+            if (serverButton && serverDropdown) {
+                serverButton.addEventListener('click', (e) => {
                     e.stopPropagation();
                     serverDropdown.classList.toggle('open');
                 });
             }
-            
+
             // Обработчик выбора сервера
             if (serverList) {
                 serverList.addEventListener('click', (e) => {
@@ -1876,7 +1877,7 @@
                     }
                 });
             }
-            
+
             // Закрытие dropdown при клике вне его
             document.addEventListener('click', () => {
                 serverDropdown?.classList.remove('open');
@@ -1885,9 +1886,9 @@
 
         selectServer(serverId, serverName) {
             StateManager.state.selectedServerId = serverId;
-            const dropdown = document.getElementById('server-dropdown');
-            if (dropdown) {
-                dropdown.innerHTML = `${serverName} <span>▾</span>`;
+            const button = document.getElementById('server-selected');
+            if (button) {
+                button.innerHTML = `${serverName} <span>▾</span>`;
             }
             StateManager.state.currentPage = 1;
             this.loadApplications();

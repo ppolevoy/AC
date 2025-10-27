@@ -61,7 +61,7 @@ class SSHAnsibleService:
         'server': 'Имя сервера',
         'app': 'Имя приложения',
         'app_name': 'Имя приложения (алиас для app)',
-        'image_url': 'URL до docker image (для docker-приложений)',
+        'image_url': 'URL до docker image (для docker-приложений, алиас для distr_url если не указан явно)',
         'distr_url': 'URL артефакта/дистрибутива',
         'mode': 'Режим обновления (deliver, immediate, night-restart)',
         'app_id': 'ID приложения в БД',
@@ -253,8 +253,13 @@ class SSHAnsibleService:
         if mode:
             context_vars['mode'] = mode
 
+        # Для Docker-приложений image_url может быть алиасом для distr_url
         if image_url:
             context_vars['image_url'] = image_url
+        elif distr_url:
+            # Если image_url не задан явно, используем distr_url как алиас
+            context_vars['image_url'] = distr_url
+            logger.info(f"image_url установлен как алиас для distr_url: {distr_url}")
 
         return context_vars
     

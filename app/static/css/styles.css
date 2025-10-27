@@ -245,7 +245,7 @@ body.light-theme .dropdown-content li:hover {
     background-color: #ebe4da;
 }
 
-.server-dropdown:hover .dropdown-content {
+.server-dropdown.open .dropdown-content {
     display: block;
 }
 
