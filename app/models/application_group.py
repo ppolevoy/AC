@@ -5,16 +5,25 @@ from app import db
 from datetime import datetime
 from sqlalchemy import event
 
+# Стратегии группировки для batch операций
+BATCH_GROUPING_STRATEGIES = {
+    'by_group': 'Группировать по (server, playbook, group_id) - разные группы в разных задачах',
+    'by_server': 'Группировать по (server, playbook) - игнорировать group_id',
+    'by_instance_name': 'Группировать по (server, playbook, original_name) - по имени экземпляра',
+    'no_grouping': 'Не группировать - каждый экземпляр в отдельной задаче'
+}
+
 class ApplicationGroup(db.Model):
     """Группа приложений с настройками артефактов"""
     __tablename__ = 'application_groups'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), unique=True, nullable=False, index=True)
     description = db.Column(db.Text, nullable=True)
     artifact_list_url = db.Column(db.String(512), nullable=True)
     artifact_extension = db.Column(db.String(32), nullable=True)
     update_playbook_path = db.Column(db.String(256), nullable=True)
+    batch_grouping_strategy = db.Column(db.String(32), default='by_group', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -41,7 +50,20 @@ class ApplicationGroup(db.Model):
                 ApplicationInstance.custom_playbook_path.isnot(None)
             )
         ).count()
-    
+
+    def get_batch_grouping_strategy(self):
+        """Получить стратегию группировки (с fallback на 'by_group')"""
+        strategy = self.batch_grouping_strategy or 'by_group'
+        if strategy not in BATCH_GROUPING_STRATEGIES:
+            return 'by_group'
+        return strategy
+
+    def set_batch_grouping_strategy(self, strategy):
+        """Установить стратегию группировки с валидацией"""
+        if strategy not in BATCH_GROUPING_STRATEGIES:
+            raise ValueError(f"Недопустимая стратегия группировки: {strategy}. Допустимые значения: {', '.join(BATCH_GROUPING_STRATEGIES.keys())}")
+        self.batch_grouping_strategy = strategy
+
     def __repr__(self):
         return f'<ApplicationGroup {self.name}>'
 

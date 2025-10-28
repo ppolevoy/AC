@@ -7,3 +7,7 @@ app/services/__pycache__
 app/models/__pycache__
 app/templates/__pycache__
 app/tasks/__pycache__
+app/api/__pycache__/routes.cpython-39.pyc
+app/models/__pycache__/application_group.cpython-39.pyc
+app/services/__pycache__/ansible_service.cpython-39.pyc
+app/tasks/__pycache__/queue.cpython-39.pyc

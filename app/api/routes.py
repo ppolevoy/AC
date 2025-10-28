@@ -576,14 +576,18 @@ def update_application(app_id):
 @bp.route('/applications/batch_update', methods=['POST'])
 def batch_update_applications():
     """
-    Групповое обновление приложений с группировкой по (server, playbook, app_group)
+    Групповое обновление приложений с настраиваемой группировкой
 
     Принимает:
         app_ids: список ID приложений
         distr_url: URL дистрибутива
         mode: режим обновления (deliver, immediate, night-restart)
 
-    Создает отдельные задачи для каждой комбинации (server_id, playbook_path, group_id)
+    Группирует приложения согласно стратегии группы (batch_grouping_strategy):
+        - by_group: по (server, playbook, group_id) - разные группы отдельно [по умолчанию]
+        - by_server: по (server, playbook) - игнорировать group_id
+        - by_instance_name: по (server, playbook, original_name)
+        - no_grouping: каждое приложение в отдельной задаче
     """
     try:
         data = request.json
@@ -618,22 +622,20 @@ def batch_update_applications():
                 'error': "Некоторые приложения не найдены"
             }), 404
 
-        # Группируем приложения по (server_id, playbook_path, group_id)
-        groups = {}
+        # Группируем приложения согласно стратегии группы
+        from collections import defaultdict
+        groups = defaultdict(list)
 
         for app in applications:
             # Получаем экземпляр приложения
             instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
 
-            # Определяем playbook_path и group_id
+            # Определяем playbook_path
             playbook_path = None
-            group_id = None
-
             if instance:
                 playbook_path = instance.get_effective_playbook_path()
-                group_id = instance.group_id
             else:
-                # Если нет instance, используем настройки Application
+                # Fallback если нет instance
                 if app.update_playbook_path:
                     playbook_path = app.update_playbook_path
                 else:
@@ -643,35 +645,63 @@ def batch_update_applications():
                     else:
                         playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
 
-            # Ключ группировки: (server_id, playbook_path, group_id)
-            group_key = (app.server_id, playbook_path, group_id)
+            # Определяем ключ группировки на основе стратегии
+            group = instance.group if instance else None
+            strategy = group.get_batch_grouping_strategy() if group else 'by_group'
 
-            logger.info(f"Группировка для {app.name}: server_id={app.server_id}, playbook={playbook_path}, group_id={group_id}")
+            if strategy == 'by_group':
+                # Группировка по (server, playbook, group_id) - default
+                group_key = (app.server_id, playbook_path, group.id if group else None)
+            elif strategy == 'by_server':
+                # Группировка только по (server, playbook)
+                group_key = (app.server_id, playbook_path)
+            elif strategy == 'by_instance_name':
+                # Группировка по (server, playbook, original_name)
+                group_key = (app.server_id, playbook_path, instance.original_name if instance else app.name)
+            elif strategy == 'no_grouping':
+                # Каждое приложение в отдельной задаче
+                group_key = (app.id,)
+            else:
+                # Fallback на by_group
+                group_key = (app.server_id, playbook_path, group.id if group else None)
 
-            if group_key not in groups:
-                groups[group_key] = []
-
+            logger.info(f"Группировка {app.name}: strategy={strategy}, key={group_key}")
             groups[group_key].append(app)
 
         # Создаем задачи для каждой группы
-        logger.info(f"Создано {len(groups)} групп для {len(applications)} приложений")
+        logger.info(f"Создано {len(groups)} групп для {len(applications)} приложений (стратегии применены)")
         created_tasks = []
 
-        for (server_id, playbook_path, group_id), apps_in_group in groups.items():
+        for group_key, apps_in_group in groups.items():
             # Собираем ID приложений
-            app_ids = [app.id for app in apps_in_group]
+            grouped_app_ids = [app.id for app in apps_in_group]
+
+            # Получаем playbook_path и server_id из первого приложения группы
+            first_app = apps_in_group[0]
+            first_instance = ApplicationInstance.query.filter_by(application_id=first_app.id).first()
+            playbook_path = first_instance.get_effective_playbook_path() if first_instance else None
+
+            if not playbook_path:
+                if first_app.update_playbook_path:
+                    playbook_path = first_app.update_playbook_path
+                else:
+                    from app.config import Config
+                    if first_app.app_type == 'docker':
+                        playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
+                    else:
+                        playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
 
             # Создаем задачу для группы
             task = Task(
                 task_type='update',
                 params={
-                    'app_ids': app_ids,  # Храним список ID вместо строки с именами
+                    'app_ids': grouped_app_ids,
                     'distr_url': distr_url,
                     'mode': mode,
                     'playbook_path': playbook_path
                 },
-                server_id=server_id,
-                application_id=app_ids[0]  # Первое приложение как reference
+                server_id=first_app.server_id,
+                application_id=grouped_app_ids[0]
             )
 
             # Добавляем задачу в очередь
@@ -685,12 +715,12 @@ def batch_update_applications():
                     event_type='update',
                     description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url} (группа: {app_names_for_log})",
                     status='pending',
-                    server_id=server_id,
+                    server_id=first_app.server_id,
                     application_id=app.id
                 )
                 db.session.add(event)
 
-            logger.info(f"Создана задача для группы приложений (IDs: {app_ids}, names: {app_names_for_log}, server_id: {server_id}, playbook: {playbook_path}, group_id: {group_id}, task_id: {task.id})")
+            logger.info(f"Создана задача для группы (IDs: {grouped_app_ids}, names: {app_names_for_log}, task_id: {task.id})")
 
         db.session.commit()
 
