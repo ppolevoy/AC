@@ -57,6 +57,11 @@ class Config:
     # Настройки Ansible
     ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
     DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
+
+    # Настройки для Orchestrator Playbooks
+    # Используется тот же ANSIBLE_PATH что и для обычных playbook-ов
+    ORCHESTRATOR_SCAN_PATTERN = os.environ.get('ORCHESTRATOR_SCAN_PATTERN') or '*orchestrator*.yml'
+
     # Включение SSH-режима для Ansible
     USE_SSH_ANSIBLE = os.environ.get('USE_SSH_ANSIBLE', 'true').lower() == 'true' 
     # Настройки SSH для Ansible

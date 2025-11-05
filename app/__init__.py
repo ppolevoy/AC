@@ -33,6 +33,7 @@ def create_app(config_name=None):
         from app.models.application import Application
         from app.models.application_group import ApplicationGroup
         from app.models.event import Event
+        from app.models.orchestrator_playbook import OrchestratorPlaybook
     
     # Регистрация маршрутов API
     from app.api import bp as api_bp
@@ -57,7 +58,19 @@ def create_app(config_name=None):
     with app.app_context():
         from app.tasks import init_tasks
         init_tasks(app)
-    
+
+        # Сканирование orchestrator playbooks при старте приложения
+        try:
+            from app.services.orchestrator_scanner import scan_orchestrators
+            logger = logging.getLogger(__name__)
+            logger.info("Scanning orchestrator playbooks on startup...")
+            results = scan_orchestrators(force=True)
+            logger.info(f"Orchestrator scan completed: {results['new']} new, "
+                       f"{results['updated']} updated, {len(results['errors'])} errors")
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to scan orchestrator playbooks on startup: {e}")
+
     return app
 
 def setup_logging(app):
