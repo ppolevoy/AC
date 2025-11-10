@@ -11,3 +11,13 @@ app/api/__pycache__/routes.cpython-39.pyc
 app/models/__pycache__/application_group.cpython-39.pyc
 app/services/__pycache__/ansible_service.cpython-39.pyc
 app/tasks/__pycache__/queue.cpython-39.pyc
+orchestrator_variant1_compact.html
+ORCHESTRATOR_README.md
+orchestrator_variant2_detailed.html
+migrations/apply_orchestrator_migration.py
+migrations/add_orchestrator_playbooks.sql
+app/models/__pycache__/__init__.cpython-39.pyc
+app/api/__pycache__/__init__.cpython-39.pyc
+app/__pycache__/config.cpython-39.pyc
+app/__pycache__/__init__.cpython-39.pyc
+app/services/__pycache__/ssh_ansible_service.cpython-39.pyc

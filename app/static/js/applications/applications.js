@@ -324,6 +324,19 @@
                 showError('Не удалось получить информацию о приложении');
                 return null;
             }
+        },
+
+        async loadOrchestrators(activeOnly = true) {
+            try {
+                const url = `/api/orchestrators${activeOnly ? '?active_only=true' : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.success ? data.orchestrators : [];
+            } catch (error) {
+                console.error('Ошибка загрузки оркестраторов:', error);
+                showError('Не удалось загрузить список оркестраторов');
+                return [];
+            }
         }
     };
 
@@ -1027,16 +1040,28 @@
         async showSimpleUpdateModal(apps, title) {
             const appIds = apps.map(app => app.id);
             const firstApp = apps[0];
-            
+
             // Создаем содержимое модального окна с анимированным загрузчиком
             const modalContent = document.createElement('div');
             modalContent.className = 'update-modal-content';
+
+            // Загружаем оркестраторы
+            const orchestrators = await ApiService.loadOrchestrators(true);
+            console.log('Загружено оркестраторов:', orchestrators.length, orchestrators);
+
+            // Функция для извлечения имени плейбука - всегда используем имя файла
+            const getPlaybookDisplayName = (orch) => {
+                // Извлекаем имя файла из пути
+                const fileName = orch.file_path.split('/').pop();
+                // Убираем расширение (.yml, .yaml)
+                return fileName.replace(/\.(yml|yaml)$/i, '');
+            };
 
             modalContent.innerHTML = `
                 <form id="update-form" class="modal-form">
                     <input type="hidden" name="app_ids" value="${appIds.join(',')}">
                     <input type="hidden" id="current-app-id" value="${firstApp.id}">
-                    
+
                     <div class="artifact-loading-container">
                         <label>Версия дистрибутива:</label>
                         <div class="artifact-loader">
@@ -1052,12 +1077,12 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="form-group" id="custom-url-group" style="display: none;">
                         <label for="custom-distr-url">URL дистрибутива:</label>
                         <input type="text" id="custom-distr-url" name="custom_distr_url" class="form-control">
                     </div>
-                    
+
                     <div class="form-group">
                         <label>Режим обновления:</label>
                         <div class="radio-group">
@@ -1072,7 +1097,39 @@
                             </label>
                         </div>
                     </div>
-                    
+
+                    <div id="immediate-mode-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="orchestrator-playbook">Orchestrator playbook:</label>
+                            <select id="orchestrator-playbook" name="orchestrator_playbook" class="form-control">
+                                <option value="none" ${orchestrators.length === 0 ? 'selected' : ''}>Без оркестрации</option>
+                                ${orchestrators.length > 0 ?
+                                    orchestrators.map((orch, index) => {
+                                        const displayName = getPlaybookDisplayName(orch);
+                                        const selected = index === 0 ? 'selected' : '';
+                                        return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
+                                    }).join('') :
+                                    ''
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="drain-wait-time">Время ожидания после drain:</label>
+                            <div class="drain-wait-container">
+                                <input type="number" id="drain-wait-time" name="drain_wait_time"
+                                       class="form-control" min="0" max="60" value="5">
+                                <span class="unit-label">минут</span>
+                            </div>
+                            <div class="quick-select-buttons">
+                                <a href="#" class="quick-time-link" data-time="10">10</a>
+                                <a href="#" class="quick-time-link" data-time="20">20</a>
+                                <a href="#" class="quick-time-link" data-time="30">30</a>
+                            </div>
+                            <small class="form-help-text">Время ожидания после вывода инстанса из балансировки (0-60 минут)</small>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
                         <button type="submit" class="submit-btn">Обновить</button>
@@ -1083,17 +1140,45 @@
             // Показываем модальное окно
             window.showModal(title, modalContent);
 
+            // Обработчики для режимов обновления
+            const modeRadios = document.querySelectorAll('input[name="mode"]');
+            const immediateModeFields = document.getElementById('immediate-mode-fields');
+
+            modeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'immediate') {
+                        immediateModeFields.style.display = 'block';
+                        immediateModeFields.classList.add('animated-slide-down');
+                    } else {
+                        immediateModeFields.style.display = 'none';
+                    }
+                });
+            });
+
+            // Обработчики для ссылок быстрого выбора времени
+            document.querySelectorAll('.quick-time-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const time = this.dataset.time;
+                    document.getElementById('drain-wait-time').value = time;
+
+                    // Визуальная обратная связь
+                    document.querySelectorAll('.quick-time-link').forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
             // Загружаем артефакты с анимацией
             setTimeout(async () => {
                 const startTime = Date.now();
                 const artifacts = await ArtifactsManager.loadWithCache(firstApp.id, true);
-                
+
                 // Минимальное время показа загрузчика
                 const elapsedTime = Date.now() - startTime;
                 if (elapsedTime < 800) {
                     await new Promise(resolve => setTimeout(resolve, 800 - elapsedTime));
                 }
-                
+
                 this.updateVersionSelector(artifacts, firstApp.distr_path, firstApp.id);
             }, 100);
 
@@ -1107,27 +1192,30 @@
 
         async showTabsUpdateModal(appGroups, title) {
             const modalContent = document.createElement('div');
-            
+
+            // Загружаем оркестраторы заранее
+            const orchestrators = await ApiService.loadOrchestrators(true);
+
             // Создаем вкладки
             const tabsContainer = document.createElement('div');
             tabsContainer.className = 'modal-tabs';
-            
+
             const form = document.createElement('form');
             form.id = 'update-form';
             form.className = 'modal-form';
-            
+
             const dynamicContent = document.createElement('div');
             dynamicContent.id = 'dynamic-group-content';
-            
+
             // Состояния групп
             const groupStates = {};
             const groupArtifacts = {};
             const excludedGroups = new Set(); // Исключенные группы
-            
+
             // Очищаем кэши при открытии нового модального окна
             this.groupContentCache = {};
             this.groupContentLoaded = {};
-            
+
             // Функция создания вкладки
             const createTab = (groupName, index, isActive) => {
                 const tab = document.createElement('div');
@@ -1187,10 +1275,12 @@
                 groupStates[groupName] = {
                     appIds: apps.map(app => app.id),
                     distrUrl: firstApp?.distr_path || '',
-                    restartMode: 'restart',
+                    restartMode: 'deliver',
                     artifactsLoaded: false,
                     customUrl: '',
-                    isCustom: false
+                    isCustom: false,
+                    orchestratorPlaybook: orchestrators.length > 0 ? orchestrators[0].file_path : '',
+                    drainWaitTime: 5
                 };
                 
                 this.groupContentLoaded[groupName] = false;
@@ -1236,9 +1326,27 @@
                     if (modeRadio) {
                         modeRadio.checked = true;
                     }
-                    
+
+                    // Восстанавливаем поля для режима "Сейчас"
+                    const immediateModeFields = document.getElementById('immediate-mode-fields');
+                    if (immediateModeFields) {
+                        if (state.restartMode === 'immediate') {
+                            immediateModeFields.style.display = 'block';
+                        }
+
+                        const orchestratorSelect = document.getElementById('orchestrator-playbook');
+                        const drainWaitInput = document.getElementById('drain-wait-time');
+
+                        if (orchestratorSelect) {
+                            orchestratorSelect.value = state.orchestratorPlaybook || '';
+                        }
+                        if (drainWaitInput) {
+                            drainWaitInput.value = state.drainWaitTime || 5;
+                        }
+                    }
+
                     // Восстанавливаем обработчики
-                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent);
+                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators);
                     return;
                 }
                 
@@ -1344,7 +1452,43 @@
                             </label>
                         </div>
                     </div>
-                    
+
+                    <div id="immediate-mode-fields" style="display: ${state.restartMode === 'immediate' ? 'block' : 'none'}; animation-delay: 0.35s" class="animated-fade-in">
+                        <div class="form-group">
+                            <label for="orchestrator-playbook">Orchestrator playbook:</label>
+                            <select id="orchestrator-playbook" name="orchestrator_playbook" class="form-control">
+                                <option value="none" ${(!state.orchestratorPlaybook || state.orchestratorPlaybook === 'none') && orchestrators.length === 0 ? 'selected' : ''}>Без оркестрации</option>
+                                ${orchestrators.length > 0 ?
+                                    orchestrators.map((orch, index) => {
+                                        // Всегда используем имя файла без расширения
+                                        const displayName = orch.file_path.split('/').pop().replace(/\.(yml|yaml)$/i, '');
+                                        // Selected если: 1) явно выбран в state, 2) ИЛИ это первый и state не задан/none
+                                        const selected = (orch.file_path === state.orchestratorPlaybook) ||
+                                                        (index === 0 && (!state.orchestratorPlaybook || state.orchestratorPlaybook === 'none'))
+                                                        ? 'selected' : '';
+                                        return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
+                                    }).join('') :
+                                    ''
+                                }
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="drain-wait-time">Время ожидания после drain:</label>
+                            <div class="drain-wait-container">
+                                <input type="number" id="drain-wait-time" name="drain_wait_time"
+                                       class="form-control" min="0" max="60" value="${state.drainWaitTime || 5}">
+                                <span class="unit-label">минут</span>
+                            </div>
+                            <div class="quick-select-buttons">
+                                <a href="#" class="quick-time-link" data-time="10">10</a>
+                                <a href="#" class="quick-time-link" data-time="20">20</a>
+                                <a href="#" class="quick-time-link" data-time="30">30</a>
+                            </div>
+                            <small class="form-help-text">Время ожидания после вывода инстанса из балансировки (0-60 минут)</small>
+                        </div>
+                    </div>
+
                     <div class="group-apps-info animated-fade-in" style="animation-delay: 0.4s">
                         <label>Приложения в группе:</label>
                         <div class="apps-list">
@@ -1362,9 +1506,9 @@
                 setTimeout(() => {
                     dynamicContent.innerHTML = formHTML;
                     dynamicContent.style.opacity = '1';
-                    
+
                     // Обработчики событий
-                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent);
+                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators);
                 }, 200);
             };
             
@@ -1425,15 +1569,28 @@
                             continue; // Пропускаем вкладки без URL
                         }
 
+                        // Формируем тело запроса
+                        const requestBody = {
+                            app_ids: state.appIds,
+                            distr_url: state.distrUrl,
+                            mode: state.restartMode
+                        };
+
+                        // Добавляем параметры для режима "Сейчас"
+                        if (state.restartMode === 'immediate') {
+                            if (state.orchestratorPlaybook) {
+                                requestBody.orchestrator_playbook = state.orchestratorPlaybook;
+                            }
+                            if (state.drainWaitTime !== undefined) {
+                                requestBody.drain_wait_time = state.drainWaitTime;
+                            }
+                        }
+
                         // Отправляем batch запрос для этой вкладки
                         const response = await fetch('/api/applications/batch_update', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                app_ids: state.appIds,
-                                distr_url: state.distrUrl,
-                                mode: state.restartMode
-                            })
+                            body: JSON.stringify(requestBody)
                         });
 
                         const result = await response.json();
@@ -1559,11 +1716,11 @@
             }
         },
 
-        attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent) {
+        attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators) {
             // Обработчик селектора версий
             const select = document.getElementById('distr-url');
             const customGroup = document.getElementById('custom-url-group');
-            
+
             if (select && select.tagName === 'SELECT') {
                 select.addEventListener('change', function() {
                     if (this.value === 'custom') {
@@ -1576,29 +1733,60 @@
                     }
                 });
             }
-            
+
+            // Обработчики для режимов обновления
+            const modeRadios = document.querySelectorAll('input[name="mode"]');
+            const immediateModeFields = document.getElementById('immediate-mode-fields');
+
+            modeRadios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'immediate') {
+                        immediateModeFields.style.display = 'block';
+                        immediateModeFields.classList.add('animated-slide-down');
+                    } else {
+                        immediateModeFields.style.display = 'none';
+                    }
+                });
+            });
+
+            // Обработчики для ссылок быстрого выбора времени
+            document.querySelectorAll('.quick-time-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const time = this.dataset.time;
+                    const drainWaitInput = document.getElementById('drain-wait-time');
+                    if (drainWaitInput) {
+                        drainWaitInput.value = time;
+                    }
+
+                    // Визуальная обратная связь
+                    document.querySelectorAll('.quick-time-link').forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
             // Обработчик кнопки обновления артефактов
             const refreshBtn = document.querySelector('.refresh-artifacts-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', async function() {
                     this.classList.add('rotating');
                     this.disabled = true;
-                    
+
                     const group = this.dataset.group;
-                    const apps = StateManager.state.allApplications.filter(app => 
+                    const apps = StateManager.state.allApplications.filter(app =>
                         (app.group_name || app.name) === group
                     );
-                    
+
                     if (apps.length > 0) {
                         StateManager.clearArtifactsCache(apps[0].id);
                         delete groupArtifacts[group];
                         delete ModalManager.groupContentCache[group];
                         ModalManager.groupContentLoaded[group] = false;
-                        
+
                         // Перезагружаем содержимое с force=true
                         await updateFormContent(group, true);
                     }
-                    
+
                     this.classList.remove('rotating');
                     this.disabled = false;
                 });
@@ -1615,7 +1803,7 @@
             let distrUrl = '';
             let isCustom = false;
             let customUrl = '';
-            
+
             if (distrUrlElement) {
                 if (distrUrlElement.tagName === 'SELECT') {
                     if (distrUrlElement.value === 'custom') {
@@ -1629,11 +1817,23 @@
                     distrUrl = distrUrlElement.value;
                 }
             }
-            
+
             groupStates[groupName].distrUrl = distrUrl;
             groupStates[groupName].restartMode = document.querySelector('input[name="mode"]:checked')?.value || 'deliver';
             groupStates[groupName].customUrl = customUrl;
             groupStates[groupName].isCustom = isCustom;
+
+            // Сохраняем поля для режима "Сейчас"
+            const orchestratorSelect = document.getElementById('orchestrator-playbook');
+            const drainWaitInput = document.getElementById('drain-wait-time');
+
+            if (orchestratorSelect) {
+                groupStates[groupName].orchestratorPlaybook = orchestratorSelect.value || '';
+            }
+
+            if (drainWaitInput) {
+                groupStates[groupName].drainWaitTime = parseInt(drainWaitInput.value, 10) || 5;
+            }
         },
 
         async processUpdateForm(formData) {
@@ -1648,17 +1848,34 @@
                     return;
                 }
 
+                // Формируем тело запроса
+                const requestBody = {
+                    app_ids: appIds,
+                    distr_url: distrUrl,
+                    mode: mode
+                };
+
+                // Добавляем параметры для режима "Сейчас"
+                if (mode === 'immediate') {
+                    const orchestratorPlaybook = formData.get('orchestrator_playbook');
+                    const drainWaitTime = formData.get('drain_wait_time');
+
+                    if (orchestratorPlaybook) {
+                        requestBody.orchestrator_playbook = orchestratorPlaybook;
+                    }
+
+                    if (drainWaitTime) {
+                        requestBody.drain_wait_time = parseInt(drainWaitTime, 10);
+                    }
+                }
+
                 showNotification(`Запуск обновления для ${appIds.length} приложений...`);
 
                 // Используем новый batch_update endpoint
                 const response = await fetch('/api/applications/batch_update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        app_ids: appIds,
-                        distr_url: distrUrl,
-                        mode: mode
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const result = await response.json();
@@ -2491,6 +2708,89 @@
                     padding: 40px;
                     color: #999;
                     font-size: 16px;
+                }
+
+                /* Стили для полей режима "Сейчас" */
+                #immediate-mode-fields {
+                    margin-top: 15px;
+                    padding: 15px;
+                    background-color: rgba(52, 152, 219, 0.05);
+                    border-left: 3px solid #3498db;
+                    border-radius: 4px;
+                }
+
+                /* Стиль для select оркестратора - темный фон */
+                #immediate-mode-fields select#orchestrator-playbook {
+                    background-color: #2c3e50;
+                    color: #ecf0f1;
+                    border: 1px solid #34495e;
+                }
+
+                #immediate-mode-fields select#orchestrator-playbook option {
+                    background-color: #2c3e50;
+                    color: #ecf0f1;
+                }
+
+                .drain-wait-container {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+
+                .drain-wait-container input[type="number"] {
+                    flex: 0 0 120px;
+                    text-align: center;
+                }
+
+                /* Убираем стрелки spinner у input[type="number"] */
+                #immediate-mode-fields input[type="number"]::-webkit-inner-spin-button,
+                #immediate-mode-fields input[type="number"]::-webkit-outer-spin-button {
+                    -webkit-appearance: none;
+                    margin: 0;
+                }
+
+                #immediate-mode-fields input[type="number"] {
+                    -moz-appearance: textfield;
+                }
+
+                .unit-label {
+                    color: #666;
+                    font-size: 14px;
+                }
+
+                .quick-select-buttons {
+                    display: flex;
+                    gap: 12px;
+                    margin-top: 10px;
+                    align-items: center;
+                }
+
+                .quick-time-link {
+                    color: #3498db;
+                    text-decoration: none;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: color 0.2s;
+                    padding: 2px 4px;
+                }
+
+                .quick-time-link:hover {
+                    color: #2980b9;
+                    text-decoration: underline;
+                }
+
+                .quick-time-link.active {
+                    color: #27ae60;
+                    font-weight: 600;
+                }
+
+                .form-help-text {
+                    display: block;
+                    margin-top: 8px;
+                    font-size: 12px;
+                    color: #7f8c8d;
+                    font-style: italic;
                 }
             `;
             document.head.appendChild(style);

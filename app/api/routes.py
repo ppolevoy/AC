@@ -600,6 +600,8 @@ def batch_update_applications():
         app_ids = data.get('app_ids', [])
         distr_url = data.get('distr_url')
         mode = data.get('mode', 'immediate')
+        orchestrator_playbook = data.get('orchestrator_playbook')
+        drain_wait_time = data.get('drain_wait_time')
 
         if not app_ids or len(app_ids) == 0:
             return jsonify({
@@ -649,23 +651,42 @@ def batch_update_applications():
             group = instance.group if instance else None
             strategy = group.get_batch_grouping_strategy() if group else 'by_group'
 
+            # Проверяем, используется ли оркестратор
+            # Если да - убираем server_id из ключа, т.к. оркестратор сам управляет серверами
+            use_orchestrator = orchestrator_playbook and orchestrator_playbook != 'none'
+
             if strategy == 'by_group':
                 # Группировка по (server, playbook, group_id) - default
-                group_key = (app.server_id, playbook_path, group.id if group else None)
+                # Если оркестратор, то без server_id
+                if use_orchestrator:
+                    group_key = (playbook_path, group.id if group else None)
+                else:
+                    group_key = (app.server_id, playbook_path, group.id if group else None)
             elif strategy == 'by_server':
                 # Группировка только по (server, playbook)
-                group_key = (app.server_id, playbook_path)
+                # Если оркестратор, то только по playbook
+                if use_orchestrator:
+                    group_key = (playbook_path,)
+                else:
+                    group_key = (app.server_id, playbook_path)
             elif strategy == 'by_instance_name':
                 # Группировка по (server, playbook, original_name)
-                group_key = (app.server_id, playbook_path, instance.original_name if instance else app.name)
+                # Если оркестратор, то без server_id
+                if use_orchestrator:
+                    group_key = (playbook_path, instance.original_name if instance else app.name)
+                else:
+                    group_key = (app.server_id, playbook_path, instance.original_name if instance else app.name)
             elif strategy == 'no_grouping':
                 # Каждое приложение в отдельной задаче
                 group_key = (app.id,)
             else:
                 # Fallback на by_group
-                group_key = (app.server_id, playbook_path, group.id if group else None)
+                if use_orchestrator:
+                    group_key = (playbook_path, group.id if group else None)
+                else:
+                    group_key = (app.server_id, playbook_path, group.id if group else None)
 
-            logger.info(f"Группировка {app.name}: strategy={strategy}, key={group_key}")
+            logger.info(f"Группировка {app.name}: strategy={strategy}, orchestrator={use_orchestrator}, key={group_key}")
             groups[group_key].append(app)
 
         # Создаем задачи для каждой группы
@@ -698,7 +719,9 @@ def batch_update_applications():
                     'app_ids': grouped_app_ids,
                     'distr_url': distr_url,
                     'mode': mode,
-                    'playbook_path': playbook_path
+                    'playbook_path': playbook_path,
+                    'orchestrator_playbook': orchestrator_playbook,
+                    'drain_wait_time': drain_wait_time
                 },
                 server_id=first_app.server_id,
                 application_id=grouped_app_ids[0]

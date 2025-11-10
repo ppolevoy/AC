@@ -605,7 +605,7 @@ class TaskQueue:
 
             # Проверяем, является ли задача групповой (по наличию app_ids в params)
             app_ids = task.params.get("app_ids")
-            is_batch_task = app_ids is not None and isinstance(app_ids, list) and len(app_ids) > 1
+            is_batch_task = app_ids is not None and isinstance(app_ids, list) and len(app_ids) >= 1
 
             if is_batch_task:
                 # Групповая задача - загружаем все приложения по ID
@@ -660,6 +660,147 @@ class TaskQueue:
             if not playbook_path:
                 raise ValueError("Путь к playbook не указан в параметрах задачи")
 
+            # Получаем параметры для orchestrator playbook
+            orchestrator_playbook = task.params.get("orchestrator_playbook")
+            drain_wait_time = task.params.get("drain_wait_time")
+
+            # Подготовка параметров для orchestrator (если режим immediate и orchestrator указан)
+            # Игнорируем специальное значение "none" (Без оркестрации)
+            extra_params = {}
+            if mode == 'immediate' and orchestrator_playbook and orchestrator_playbook != 'none' and is_batch_task:
+                logger.info(f"Режим orchestrator активирован: {orchestrator_playbook}")
+
+                # Загружаем метаданные orchestrator playbook из БД
+                from app.models.orchestrator_playbook import OrchestratorPlaybook
+                orchestrator = OrchestratorPlaybook.query.filter_by(
+                    file_path=orchestrator_playbook,
+                    is_active=True
+                ).first()
+
+                if not orchestrator:
+                    raise ValueError(f"Orchestrator playbook не найден в БД: {orchestrator_playbook}")
+
+                logger.info(f"Загружен orchestrator: {orchestrator.name} v{orchestrator.version}")
+
+                # Сохраняем оригинальный playbook для передачи в orchestrator
+                original_playbook_path = playbook_path
+
+                # Формируем составные имена server::app для передачи в orchestrator
+                # Используем разделитель :: для связывания сервера и приложения
+                composite_names = []
+                servers_apps_map = {}  # для логирования
+
+                for app in apps:
+                    srv = Server.query.get(app.server_id)
+                    if srv:
+                        # Извлекаем короткое имя из FQDN (до первой точки)
+                        short_name = srv.name.split('.')[0] if '.' in srv.name else srv.name
+                        # Формируем составное имя с разделителем ::
+                        composite_name = f"{short_name}::{app.name}"
+                        composite_names.append(composite_name)
+
+                        # Сохраняем mapping для логирования
+                        if short_name not in servers_apps_map:
+                            servers_apps_map[short_name] = []
+                        servers_apps_map[short_name].append(app.name)
+
+                logger.info(f"Сформированы составные имена для orchestrator:")
+                for comp in composite_names:
+                    logger.info(f"  {comp}")
+
+                logger.info(f"Mapping серверов и приложений:")
+                for server, app_list in sorted(servers_apps_map.items()):
+                    logger.info(f"  {server}: {', '.join(app_list)}")
+
+                # Формируем строку для передачи в orchestrator
+                app_instances_list = ','.join(composite_names)
+
+                # Конвертируем drain_wait_time из минут в секунды
+                drain_delay_seconds = int(drain_wait_time * 60) if drain_wait_time else 300
+
+                # Извлекаем только имя файла из оригинального playbook
+                # Убираем параметры в фигурных скобках если они есть
+                import re
+                playbook_filename = original_playbook_path.split('/')[-1]
+                update_playbook_name = re.sub(r'\s*\{[^}]+\}', '', playbook_filename).strip()
+
+                # Формируем словарь значений параметров
+                param_values = {
+                    'app_instances': app_instances_list,  # Новый параметр вместо app_name и target_servers
+                    'drain_delay': drain_delay_seconds,
+                    'update_playbook': update_playbook_name,
+                    'distr_url': distr_url
+                }
+
+                # Формируем список параметров для playbook на основе required_params из БД
+                # Структура в БД:
+                # required_params: {"param_name": "description"}
+                # optional_params: {"param_name": {"description": "...", "default": "..."}}
+                required_params = orchestrator.required_params or {}
+                optional_params = orchestrator.optional_params or {}
+
+                # Извлекаем только имена параметров (ключи), игнорируя описания
+                required_param_names = list(required_params.keys())
+                optional_param_names = list(optional_params.keys())
+
+                # Объединяем required и optional параметры (используем dict.fromkeys для сохранения порядка и уникальности)
+                all_params = list(dict.fromkeys(required_param_names + optional_param_names))
+
+                logger.info(f"Параметры orchestrator из БД:")
+                logger.info(f"  Required: {required_param_names}")
+                logger.info(f"  Optional: {optional_param_names}")
+
+                # Формируем строку с параметрами в фигурных скобках
+                params_string = ' '.join([f'{{{param}}}' for param in all_params])
+                playbook_path = f"{orchestrator_playbook} {params_string}"
+
+                logger.info(f"Сформирован playbook_path с параметрами: {playbook_path}")
+
+                # Формируем extra_params только для тех параметров, для которых есть значения
+                # ВАЖНО: передаем только значения, без описаний
+                extra_params = {}
+                missing_params = []
+
+                for param in all_params:
+                    if param in param_values:
+                        # Берем только значение, игнорируя описания из БД
+                        extra_params[param] = param_values[param]
+                    else:
+                        # Параметр есть в БД, но нет значения
+                        missing_params.append(param)
+                        # Для optional параметров можно попробовать взять default из БД
+                        if param in optional_params:
+                            param_info = optional_params[param]
+                            if isinstance(param_info, dict) and 'default' in param_info:
+                                default_value = param_info['default']
+
+                                # Для wait_after_update пытаемся извлечь число секунд из строки типа "300 сек = 30 мин"
+                                if param == 'wait_after_update' and isinstance(default_value, str):
+                                    # Ищем первое число в строке
+                                    import re
+                                    match = re.search(r'(\d+)', default_value)
+                                    if match:
+                                        parsed_value = int(match.group(1))
+                                        logger.info(f"Используется default для '{param}': извлечено {parsed_value} из '{default_value}'")
+                                        extra_params[param] = parsed_value
+                                    else:
+                                        logger.warning(f"Не удалось извлечь число из default для '{param}': {default_value}")
+                                        extra_params[param] = default_value
+                                else:
+                                    logger.info(f"Используется default значение для '{param}': {default_value}")
+                                    extra_params[param] = default_value
+                            else:
+                                logger.warning(f"Optional параметр '{param}' не имеет значения и default")
+                        else:
+                            logger.warning(f"Required параметр '{param}' не имеет значения!")
+
+                if missing_params:
+                    logger.warning(f"Параметры без значений: {missing_params}")
+
+                logger.info(f"Финальные значения extra_params (только значения, без описаний):")
+                for key, value in extra_params.items():
+                    logger.info(f"  {key} = {value} (type: {type(value).__name__})")
+
         # Создаем event loop внутри метода
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -678,7 +819,8 @@ class TaskQueue:
                         app_id=app_id,
                         distr_url=distr_url,
                         mode=mode,
-                        playbook_path=playbook_path
+                        playbook_path=playbook_path,
+                        extra_params=extra_params if extra_params else None
                     )
                 )
 
