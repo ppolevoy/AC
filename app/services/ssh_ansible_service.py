@@ -65,7 +65,11 @@ class SSHAnsibleService:
         'distr_url': 'URL артефакта/дистрибутива',
         'mode': 'Режим обновления (deliver, immediate, night-restart)',
         'app_id': 'ID приложения в БД',
-        'server_id': 'ID сервера в БД'
+        'server_id': 'ID сервера в БД',
+        'app_instances': 'Список составных имен server::app для orchestrator (через запятую)',
+        'drain_delay': 'Время ожидания после drain в секундах (для orchestrator)',
+        'update_playbook': 'Имя playbook для обновления (для orchestrator)',
+        'wait_after_update': 'Время ожидания после обновления в секундах (для orchestrator)'
     }
     
     # Регулярные выражения для безопасной валидации кастомных параметров
@@ -222,7 +226,10 @@ class SSHAnsibleService:
                           server_id: int,
                           distr_url: Optional[str] = None,
                           mode: Optional[str] = None,
-                          image_url: Optional[str] = None) -> Dict[str, str]:
+                          image_url: Optional[str] = None,
+                          orchestrator_app_instances: Optional[str] = None,
+                          orchestrator_drain_delay: Optional[int] = None,
+                          orchestrator_update_playbook: Optional[str] = None) -> Dict[str, str]:
         """
         Формирует контекстные переменные для подстановки в playbook
 
@@ -234,6 +241,9 @@ class SSHAnsibleService:
             distr_url: URL дистрибутива (опционально)
             mode: Режим обновления (deliver, immediate, night-restart) (опционально)
             image_url: URL docker образа (опционально)
+            orchestrator_app_instances: Список составных имен server::app для orchestrator (опционально)
+            orchestrator_drain_delay: Время ожидания после drain в секундах (опционально)
+            orchestrator_update_playbook: Имя playbook для обновления (опционально)
 
         Returns:
             Dict[str, str]: Словарь с переменными контекста
@@ -260,6 +270,19 @@ class SSHAnsibleService:
             # Если image_url не задан явно, используем distr_url как алиас
             context_vars['image_url'] = distr_url
             logger.info(f"image_url установлен как алиас для distr_url: {distr_url}")
+
+        # Добавляем параметры для orchestrator playbook
+        if orchestrator_app_instances:
+            context_vars['app_instances'] = orchestrator_app_instances
+            logger.info(f"Orchestrator app_instances: {orchestrator_app_instances}")
+
+        if orchestrator_drain_delay is not None:
+            context_vars['drain_delay'] = str(orchestrator_drain_delay)
+            logger.info(f"Orchestrator drain_delay: {orchestrator_drain_delay}s")
+
+        if orchestrator_update_playbook:
+            context_vars['update_playbook'] = orchestrator_update_playbook
+            logger.info(f"Orchestrator update_playbook: {orchestrator_update_playbook}")
 
         return context_vars
     
@@ -356,7 +379,8 @@ class SSHAnsibleService:
                                app_id: int,
                                distr_url: str,
                                mode: str,
-                               playbook_path: Optional[str] = None) -> Tuple[bool, str]:
+                               playbook_path: Optional[str] = None,
+                               extra_params: Optional[Dict] = None) -> Tuple[bool, str]:
         """
         Запуск Ansible playbook для обновления приложения через SSH
 
@@ -367,10 +391,22 @@ class SSHAnsibleService:
             distr_url: URL дистрибутива
             mode: Режим обновления (deliver, immediate, night-restart)
             playbook_path: Путь к playbook с параметрами (опционально)
+            extra_params: Дополнительные параметры для orchestrator (опционально)
 
         Returns:
             Tuple[bool, str]: (успех операции, информация о результате)
         """
+        # Извлекаем дополнительные параметры для orchestrator если они есть
+        orchestrator_app_instances = None
+        orchestrator_drain_delay = None
+        orchestrator_update_playbook = None
+
+        if extra_params:
+            orchestrator_app_instances = extra_params.get('app_instances')
+            orchestrator_drain_delay = extra_params.get('drain_delay')
+            orchestrator_update_playbook = extra_params.get('update_playbook')
+            logger.info(f"Получены extra_params для orchestrator: {extra_params}")
+
         # Если путь к playbook не указан, используем playbook по умолчанию
         if not playbook_path:
             playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
@@ -455,7 +491,10 @@ class SSHAnsibleService:
                 server_id=server.id,
                 distr_url=distr_url,
                 mode=mode,
-                image_url=image_url
+                image_url=image_url,
+                orchestrator_app_instances=orchestrator_app_instances,
+                orchestrator_drain_delay=orchestrator_drain_delay,
+                orchestrator_update_playbook=orchestrator_update_playbook
             )
             
             # Формируем extra_vars на основе конфигурации и контекста

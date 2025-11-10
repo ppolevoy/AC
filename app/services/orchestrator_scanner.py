@@ -254,12 +254,10 @@ class OrchestratorScanner:
                         })
                         continue
 
-                    # Формируем полный путь для хранения в БД
-                    file_path = os.path.join(self.ansible_path, filename)
-
-                    # Поиск существующей записи по пути
+                    # Используем только имя файла (без полного пути) для хранения в БД
+                    # Поиск существующей записи по имени файла
                     existing = OrchestratorPlaybook.query.filter_by(
-                        file_path=file_path
+                        file_path=filename
                     ).first()
 
                     if existing:
@@ -269,7 +267,7 @@ class OrchestratorScanner:
                         logger.info(f"Updated orchestrator playbook: {metadata['name']} ({filename})")
                     else:
                         # Создать новую запись
-                        create_orchestrator_playbook(file_path, metadata)
+                        create_orchestrator_playbook(filename, metadata)
                         results['new'] += 1
                         logger.info(f"Created new orchestrator playbook: {metadata['name']} ({filename})")
 
