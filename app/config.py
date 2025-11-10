@@ -35,7 +35,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = get_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Настройки интервалов опроса серверов
+    # Настройки интервалов опроса серверов 
     POLLING_INTERVAL = int(os.environ.get('POLLING_INTERVAL') or 60)  # в секундах
     CONNECTION_TIMEOUT = int(os.environ.get('CONNECTION_TIMEOUT') or 5)  # в секундах
     
