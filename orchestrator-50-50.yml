@@ -1,0 +1,527 @@
+---
+# Playbook для автоматизированного обновления приложений с использованием HAProxy API
+# Поддерживает стратегию rolling update 50/50 (разбивка по индексам)
+#
+# Использование:
+#   ansible-playbook orchestrator-50-50.yml -e "app_instances=node-1::business_2,node-1::business_3,node-2::business_2 distr_url=http://example.com/app.tar.gz drain_delay=300"
+#
+# required_params:
+#   app_instances  - Список составных имен server::app (например: node-1::business_2,node-2::business_3)
+#   distr_url      - URL дистрибутива для установки
+#   drain_delay    - Время ожидания после drain (в секундах)
+#   update_playbook - Имя playbook для обновления (например: update_multiple_instances_v1_9-latest.yaml)
+#
+# optional_params:
+#   wait_after_update - Время ожидания после обновления (по умолчанию 1800 сек = 30 мин)
+#
+# Требования:
+#   - Указанный playbook для обновления должен находиться в той же директории
+#   - app_instances использует разделитель :: между сервером и приложением
+#
+# Версия 2.0 - с поддержкой составных имен
+
+- name: Rolling Update Applications with HAProxy Integration (Composite Names)
+  hosts: localhost
+  gather_facts: no
+  vars:
+    log_dir: "/site/ansible/log"
+    log_file: "{{ log_dir }}/update-apps-{{ ansible_date_time.iso8601_basic_short }}.log"
+    wait_after_update: "{{ wait_after_update | default(1800) }}"
+    update_playbook_name: "{{ update_playbook | default('update_multiple_instances_v1_9-latest.yaml') }}"
+    haproxy_command_timeout: 10
+
+  tasks:
+    # ============================================
+    # БЛОК 1: Инициализация и валидация
+    # ============================================
+
+    - name: Create log directory
+      file:
+        path: "{{ log_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Initialize log file
+      copy:
+        content: |
+          ==========================================
+          Application Update Started (v2.0)
+          ==========================================
+          Date: {{ ansible_date_time.iso8601 }}
+          App instances: {{ app_instances }}
+          Distribution URL: {{ distr_url }}
+          Drain delay: {{ drain_delay }}s
+          Wait after update: {{ wait_after_update }}s
+          Update playbook: {{ update_playbook_name }}
+          ==========================================
+
+        dest: "{{ log_file }}"
+      delegate_to: localhost
+
+    - name: Validate required parameters
+      fail:
+        msg: "Missing required parameter: {{ item }}"
+      when: vars[item] is not defined or vars[item] == ''
+      loop:
+        - app_instances
+        - distr_url
+        - drain_delay
+        - update_playbook
+      delegate_to: localhost
+
+    - name: Load application mapping
+      include_vars:
+        file: app_mapping.yml
+        name: app_mapping
+      delegate_to: localhost
+
+    # ============================================
+    # БЛОК 2: Парсинг составных имен
+    # ============================================
+
+    - name: Parse composite names into list
+      set_fact:
+        instances_list: "{{ app_instances.split(',') | map('trim') | list }}"
+      delegate_to: localhost
+
+    - name: Log parsed instances
+      shell: |
+        echo "Parsed {{ instances_list | length }} instances:" >> {{ log_file }}
+        {% for inst in instances_list %}
+        echo "  [{{ loop.index0 }}] {{ inst }}" >> {{ log_file }}
+        {% endfor %}
+        echo "" >> {{ log_file }}
+      delegate_to: localhost
+
+    # ============================================
+    # БЛОК 3: Группировка по четным/нечетным индексам
+    # ============================================
+
+    - name: Initialize batch lists
+      set_fact:
+        even_batch: []
+        odd_batch: []
+      delegate_to: localhost
+
+    - name: Split to even indices (0, 2, 4, ...)
+      set_fact:
+        even_batch: "{{ even_batch + [item.1] }}"
+      loop: "{{ instances_list | enumerate }}"
+      when: item.0 % 2 == 0
+      loop_control:
+        label: "[{{ item.0 }}] {{ item.1 }}"
+      delegate_to: localhost
+
+    - name: Split to odd indices (1, 3, 5, ...)
+      set_fact:
+        odd_batch: "{{ odd_batch + [item.1] }}"
+      loop: "{{ instances_list | enumerate }}"
+      when: item.0 % 2 == 1
+      loop_control:
+        label: "[{{ item.0 }}] {{ item.1 }}"
+      delegate_to: localhost
+
+    - name: Determine update order (larger batch first)
+      set_fact:
+        first_batch: "{{ even_batch if (even_batch | length) >= (odd_batch | length) else odd_batch }}"
+        second_batch: "{{ odd_batch if (even_batch | length) >= (odd_batch | length) else even_batch }}"
+        first_batch_name: "{{ 'EVEN' if (even_batch | length) >= (odd_batch | length) else 'ODD' }}"
+        second_batch_name: "{{ 'ODD' if (even_batch | length) >= (odd_batch | length) else 'EVEN' }}"
+      delegate_to: localhost
+
+    - name: Log grouping strategy
+      shell: |
+        echo "===========================================" >> {{ log_file }}
+        echo "GROUPING STRATEGY (50/50 by index)" >> {{ log_file }}
+        echo "===========================================" >> {{ log_file }}
+        echo "Batch 1 ({{ first_batch_name }}): {{ first_batch | length }} instances" >> {{ log_file }}
+        {% for inst in first_batch %}
+        echo "  - {{ inst }}" >> {{ log_file }}
+        {% endfor %}
+        echo "" >> {{ log_file }}
+        echo "Batch 2 ({{ second_batch_name }}): {{ second_batch | length }} instances" >> {{ log_file }}
+        {% for inst in second_batch %}
+        echo "  - {{ inst }}" >> {{ log_file }}
+        {% endfor %}
+        echo "" >> {{ log_file }}
+      delegate_to: localhost
+
+    # ============================================
+    # БЛОК 4: Обновление первого батча
+    # ============================================
+
+    - name: "=== UPDATE BATCH 1 ({{ first_batch_name }}) ==="
+      block:
+        - name: Log start of Batch 1 update
+          shell: |
+            echo "===========================================" >> {{ log_file }}
+            echo "STARTING BATCH 1 UPDATE ({{ first_batch_name }})" >> {{ log_file }}
+            echo "Time: $(date '+%Y-%m-%d %H:%M:%S')" >> {{ log_file }}
+            echo "===========================================" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Извлекаем base_app_name для HAProxy backend
+        - name: Extract base application name from first instance
+          set_fact:
+            first_composite: "{{ first_batch[0] }}"
+          delegate_to: localhost
+
+        - name: Parse first instance to get app name
+          set_fact:
+            sample_app_name: "{{ first_composite.split('::')[1] }}"
+          delegate_to: localhost
+
+        - name: Get base app name (remove instance suffix)
+          set_fact:
+            base_app_name: "{{ sample_app_name | regex_replace('_\\d+$', '') }}"
+          delegate_to: localhost
+
+        - name: Verify application exists in mapping
+          fail:
+            msg: "Application '{{ base_app_name }}' not found in app_mapping.yml"
+          when: base_app_name not in app_mapping.applications
+          delegate_to: localhost
+
+        - name: Get backend name for application
+          set_fact:
+            backend_name: "{{ app_mapping.applications[base_app_name].backend }}"
+            haproxy_api_url: "{{ app_mapping.haproxy_api.base_url }}"
+          delegate_to: localhost
+
+        # Шаг 1: Drain всех экземпляров батча 1
+        - name: "Batch 1: Parse composite names for DRAIN"
+          set_fact:
+            drain_batch1_targets: []
+          delegate_to: localhost
+
+        - name: "Batch 1: Build drain targets"
+          set_fact:
+            drain_batch1_targets: "{{ drain_batch1_targets + [{'server': item.split('::')[0], 'app': item.split('::')[1]}] }}"
+          loop: "{{ first_batch }}"
+          loop_control:
+            label: "{{ item }}"
+          delegate_to: localhost
+
+        - name: "Batch 1: Set instances to DRAIN via HAProxy API"
+          uri:
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/drain"
+            method: GET
+            timeout: "{{ haproxy_command_timeout }}"
+            status_code: [200, 201]
+          loop: "{{ drain_batch1_targets }}"
+          register: drain_batch1_result
+          failed_when: false
+          loop_control:
+            label: "{{ item.server }}_{{ item.app }}"
+          delegate_to: localhost
+
+        - name: Check for DRAIN failures in Batch 1
+          fail:
+            msg: "HAProxy API error during DRAIN for Batch 1"
+          when: drain_batch1_result.results | selectattr('status', 'undefined') | list | length > 0 or
+                drain_batch1_result.results | rejectattr('status', 'in', [200, 201]) | list | length > 0
+          delegate_to: localhost
+
+        - name: Log Batch 1 DRAIN results
+          shell: |
+            echo "Batch 1 - DRAIN commands executed:" >> {{ log_file }}
+            {% for result in drain_batch1_result.results %}
+            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 2: Ожидание drain_delay
+        - name: "Batch 1: Wait for drain_delay ({{ drain_delay }}s)"
+          pause:
+            seconds: "{{ drain_delay }}"
+          delegate_to: localhost
+
+        - name: Log drain delay completion
+          shell: |
+            echo "Batch 1 - Drain delay completed ({{ drain_delay }}s)" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 3: Группировка по серверам для обновления
+        - name: "Batch 1: Initialize server grouping"
+          set_fact:
+            batch1_server_apps: {}
+          delegate_to: localhost
+
+        - name: "Batch 1: Group apps by server"
+          vars:
+            srv: "{{ item.split('::')[0] }}"
+            app: "{{ item.split('::')[1] }}"
+          set_fact:
+            batch1_server_apps: "{{ batch1_server_apps | combine({srv: (batch1_server_apps[srv] | default([])) + [app]}) }}"
+          loop: "{{ first_batch }}"
+          loop_control:
+            label: "{{ item }}"
+          delegate_to: localhost
+
+        - name: "Batch 1: Log server grouping"
+          shell: |
+            echo "Batch 1 - Server grouping for update:" >> {{ log_file }}
+            {% for srv, apps in batch1_server_apps.items() %}
+            echo "  {{ srv }}: {{ apps | join(', ') }}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 4: Обновление приложений на каждом сервере
+        - name: "Batch 1: Update applications on each server"
+          include_tasks: update_server_batch.yml
+          loop: "{{ batch1_server_apps | dict2items }}"
+          loop_control:
+            loop_var: server_item
+            label: "{{ server_item.key }}"
+          vars:
+            current_server: "{{ server_item.key }}"
+            apps_to_update: "{{ server_item.value }}"
+            batch_name: "Batch 1"
+
+        # Шаг 5: Ожидание восстановления
+        - name: "Batch 1: Wait for applications to start ({{ wait_after_update }}s)"
+          pause:
+            seconds: "{{ wait_after_update }}"
+          delegate_to: localhost
+
+        - name: Log wait completion
+          shell: |
+            echo "Batch 1 - Wait after update completed ({{ wait_after_update }}s)" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 6: Возврат в READY
+        - name: "Batch 1: Set instances to READY via HAProxy API"
+          uri:
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/ready"
+            method: GET
+            timeout: "{{ haproxy_command_timeout }}"
+            status_code: [200, 201]
+          loop: "{{ drain_batch1_targets }}"
+          register: ready_batch1_result
+          failed_when: false
+          loop_control:
+            label: "{{ item.server }}_{{ item.app }}"
+          delegate_to: localhost
+
+        - name: Check for READY failures in Batch 1
+          fail:
+            msg: "HAProxy API error during READY for Batch 1"
+          when: ready_batch1_result.results | selectattr('status', 'undefined') | list | length > 0 or
+                ready_batch1_result.results | rejectattr('status', 'in', [200, 201]) | list | length > 0
+          delegate_to: localhost
+
+        - name: Log Batch 1 READY results
+          shell: |
+            echo "Batch 1 - READY commands executed:" >> {{ log_file }}
+            {% for result in ready_batch1_result.results %}
+            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        - name: Log Batch 1 completion
+          shell: |
+            echo "===========================================" >> {{ log_file }}
+            echo "BATCH 1 UPDATE COMPLETED" >> {{ log_file }}
+            echo "Time: $(date '+%Y-%m-%d %H:%M:%S')" >> {{ log_file }}
+            echo "===========================================" >> {{ log_file }}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+    # ============================================
+    # БЛОК 5: Обновление второго батча
+    # ============================================
+
+    - name: "=== UPDATE BATCH 2 ({{ second_batch_name }}) ==="
+      block:
+        - name: Log start of Batch 2 update
+          shell: |
+            echo "===========================================" >> {{ log_file }}
+            echo "STARTING BATCH 2 UPDATE ({{ second_batch_name }})" >> {{ log_file }}
+            echo "Time: $(date '+%Y-%m-%d %H:%M:%S')" >> {{ log_file }}
+            echo "===========================================" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 1: Drain всех экземпляров батча 2
+        - name: "Batch 2: Parse composite names for DRAIN"
+          set_fact:
+            drain_batch2_targets: []
+          delegate_to: localhost
+
+        - name: "Batch 2: Build drain targets"
+          set_fact:
+            drain_batch2_targets: "{{ drain_batch2_targets + [{'server': item.split('::')[0], 'app': item.split('::')[1]}] }}"
+          loop: "{{ second_batch }}"
+          loop_control:
+            label: "{{ item }}"
+          delegate_to: localhost
+
+        - name: "Batch 2: Set instances to DRAIN via HAProxy API"
+          uri:
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/drain"
+            method: GET
+            timeout: "{{ haproxy_command_timeout }}"
+            status_code: [200, 201]
+          loop: "{{ drain_batch2_targets }}"
+          register: drain_batch2_result
+          failed_when: false
+          loop_control:
+            label: "{{ item.server }}_{{ item.app }}"
+          delegate_to: localhost
+
+        - name: Check for DRAIN failures in Batch 2
+          fail:
+            msg: "HAProxy API error during DRAIN for Batch 2"
+          when: drain_batch2_result.results | selectattr('status', 'undefined') | list | length > 0 or
+                drain_batch2_result.results | rejectattr('status', 'in', [200, 201]) | list | length > 0
+          delegate_to: localhost
+
+        - name: Log Batch 2 DRAIN results
+          shell: |
+            echo "Batch 2 - DRAIN commands executed:" >> {{ log_file }}
+            {% for result in drain_batch2_result.results %}
+            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 2: Ожидание drain_delay
+        - name: "Batch 2: Wait for drain_delay ({{ drain_delay }}s)"
+          pause:
+            seconds: "{{ drain_delay }}"
+          delegate_to: localhost
+
+        - name: Log drain delay completion
+          shell: |
+            echo "Batch 2 - Drain delay completed ({{ drain_delay }}s)" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 3: Группировка по серверам для обновления
+        - name: "Batch 2: Initialize server grouping"
+          set_fact:
+            batch2_server_apps: {}
+          delegate_to: localhost
+
+        - name: "Batch 2: Group apps by server"
+          vars:
+            srv: "{{ item.split('::')[0] }}"
+            app: "{{ item.split('::')[1] }}"
+          set_fact:
+            batch2_server_apps: "{{ batch2_server_apps | combine({srv: (batch2_server_apps[srv] | default([])) + [app]}) }}"
+          loop: "{{ second_batch }}"
+          loop_control:
+            label: "{{ item }}"
+          delegate_to: localhost
+
+        - name: "Batch 2: Log server grouping"
+          shell: |
+            echo "Batch 2 - Server grouping for update:" >> {{ log_file }}
+            {% for srv, apps in batch2_server_apps.items() %}
+            echo "  {{ srv }}: {{ apps | join(', ') }}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 4: Обновление приложений на каждом сервере
+        - name: "Batch 2: Update applications on each server"
+          include_tasks: update_server_batch.yml
+          loop: "{{ batch2_server_apps | dict2items }}"
+          loop_control:
+            loop_var: server_item
+            label: "{{ server_item.key }}"
+          vars:
+            current_server: "{{ server_item.key }}"
+            apps_to_update: "{{ server_item.value }}"
+            batch_name: "Batch 2"
+
+        # Шаг 5: Ожидание восстановления
+        - name: "Batch 2: Wait for applications to start ({{ wait_after_update }}s)"
+          pause:
+            seconds: "{{ wait_after_update }}"
+          delegate_to: localhost
+
+        - name: Log wait completion
+          shell: |
+            echo "Batch 2 - Wait after update completed ({{ wait_after_update }}s)" >> {{ log_file }}
+          delegate_to: localhost
+
+        # Шаг 6: Возврат в READY
+        - name: "Batch 2: Set instances to READY via HAProxy API"
+          uri:
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/ready"
+            method: GET
+            timeout: "{{ haproxy_command_timeout }}"
+            status_code: [200, 201]
+          loop: "{{ drain_batch2_targets }}"
+          register: ready_batch2_result
+          failed_when: false
+          loop_control:
+            label: "{{ item.server }}_{{ item.app }}"
+          delegate_to: localhost
+
+        - name: Check for READY failures in Batch 2
+          fail:
+            msg: "HAProxy API error during READY for Batch 2"
+          when: ready_batch2_result.results | selectattr('status', 'undefined') | list | length > 0 or
+                ready_batch2_result.results | rejectattr('status', 'in', [200, 201]) | list | length > 0
+          delegate_to: localhost
+
+        - name: Log Batch 2 READY results
+          shell: |
+            echo "Batch 2 - READY commands executed:" >> {{ log_file }}
+            {% for result in ready_batch2_result.results %}
+            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
+        - name: Log Batch 2 completion
+          shell: |
+            echo "===========================================" >> {{ log_file }}
+            echo "BATCH 2 UPDATE COMPLETED" >> {{ log_file }}
+            echo "Time: $(date '+%Y-%m-%d %H:%M:%S')" >> {{ log_file }}
+            echo "===========================================" >> {{ log_file }}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+      when: second_batch | length > 0
+
+    # ============================================
+    # БЛОК 6: Финальный Summary
+    # ============================================
+
+    - name: Generate final summary
+      shell: |
+        echo "===========================================" >> {{ log_file }}
+        echo "UPDATE SUMMARY" >> {{ log_file }}
+        echo "===========================================" >> {{ log_file }}
+        echo "Completion time: $(date '+%Y-%m-%d %H:%M:%S')" >> {{ log_file }}
+        echo "" >> {{ log_file }}
+        echo "Application: {{ base_app_name }}" >> {{ log_file }}
+        echo "Backend: {{ backend_name }}" >> {{ log_file }}
+        echo "Total instances: {{ instances_list | length }}" >> {{ log_file }}
+        echo "" >> {{ log_file }}
+        echo "Batch 1 ({{ first_batch_name }}): {{ first_batch | length }} instances" >> {{ log_file }}
+        echo "Batch 2 ({{ second_batch_name }}): {{ second_batch | length }} instances" >> {{ log_file }}
+        echo "" >> {{ log_file }}
+        echo "STATUS: SUCCESS" >> {{ log_file }}
+        echo "===========================================" >> {{ log_file }}
+      delegate_to: localhost
+
+    - name: Display summary
+      debug:
+        msg: |
+          ==========================================
+          UPDATE COMPLETED SUCCESSFULLY
+          ==========================================
+          Application: {{ base_app_name }}
+          Backend: {{ backend_name }}
+          Total instances: {{ instances_list | length }}
+
+          Batch 1 ({{ first_batch_name }}): {{ first_batch | length }} instances
+          Batch 2 ({{ second_batch_name }}): {{ second_batch | length }} instances
+
+          Log file: {{ log_file }}
+          ==========================================

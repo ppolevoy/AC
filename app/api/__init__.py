@@ -2,14 +2,16 @@ from flask import Blueprint
 
 bp = Blueprint('api', __name__)
 
-# Импортируем существующие маршруты
-from app.api import routes
+# Импортируем все модули с маршрутами
+# Разделенные модули routes.py:
+from app.api import servers_routes
+from app.api import applications_routes
+from app.api import tasks_routes
+from app.api import ssh_routes
+from app.api import artifacts_routes
+from app.api import ansible_routes
+from app.api import app_groups_routes
+
+# Дополнительные маршруты:
 from app.api import nexus_routes
 from app.api import orchestrator_routes
-
-# Импортируем новые маршруты для Docker
-#try:
-#    from app.api import docker_routes
-#except ImportError:
-#    import logging
-    #logging.warning("Docker routes not found, skipping import")
