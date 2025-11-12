@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - HAProxy{% endblock %}
+
+{% block page_title %}HAProxy Мониторинг{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/haproxy.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="haproxy-container">
+    <!-- Панель управления и фильтры -->
+    <div class="controls-panel">
+        <div class="filters-section">
+            <div class="filter-group">
+                <label>Инстанс HAProxy:</label>
+                <div class="select-container">
+                    <select id="instance-filter" class="filter-select">
+                        <option value="">Все инстансы</option>
+                        <!-- Динамически загружается через JS -->
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Статус:</label>
+                <div class="select-container">
+                    <select id="status-filter" class="filter-select">
+                        <option value="">Все статусы</option>
+                        <option value="UP">UP</option>
+                        <option value="DOWN">DOWN</option>
+                        <option value="MAINT">MAINT</option>
+                        <option value="DRAIN">DRAIN</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+
+            <div class="search-group">
+                <input type="text" id="search-input" class="search-input" placeholder="Поиск сервера...">
+                <span class="search-icon">🔍</span>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="refresh-btn" class="action-btn primary-btn" title="Обновить">
+                <span class="refresh-icon">↻</span> Обновить
+            </button>
+            <button id="expand-all-btn" class="action-btn secondary-btn">
+                Развернуть все
+            </button>
+            <button id="collapse-all-btn" class="action-btn secondary-btn">
+                Свернуть все
+            </button>
+        </div>
+    </div>
+
+    <!-- Глобальная статистика -->
+    <div class="global-stats">
+        <div class="stat-card">
+            <div class="summary-label">Всего бэкендов</div>
+            <div class="summary-value" id="total-backends">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="summary-label">Всего серверов</div>
+            <div class="summary-value" id="total-servers">0</div>
+        </div>
+        <div class="stat-card success">
+            <div class="summary-label">
+                <span class="status-dot status-up"></span> UP
+            </div>
+            <div class="summary-value" id="up-count">0</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="summary-label">
+                <span class="status-dot status-drain"></span> DRAIN
+            </div>
+            <div class="summary-value" id="drain-count">0</div>
+        </div>
+        <div class="stat-card alert">
+            <div class="summary-label">
+                <span class="status-dot status-maint"></span> MAINT
+            </div>
+            <div class="summary-value" id="maint-count">0</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="summary-label">
+                <span class="status-dot status-down"></span> DOWN
+            </div>
+            <div class="summary-value" id="down-count">0</div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Panel (скрыта, если ничего не выбрано) -->
+    <div class="quick-actions-panel" id="quick-actions" style="display: none;">
+        <div class="quick-actions-header">
+            <span>Выбрано серверов: <strong id="selected-count">0</strong></span>
+            <button id="clear-selection-btn" class="text-btn">Сбросить выбор</button>
+        </div>
+        <div class="quick-actions-buttons">
+            <!-- ВАЖНО: Кнопки отключены в Фазе 1 (только мониторинг) -->
+            <button class="quick-action-btn ready-btn" data-action="ready" disabled title="Будет доступно в Фазе 2">
+                <span class="icon">✓</span> Ready
+            </button>
+            <button class="quick-action-btn drain-btn" data-action="drain" disabled title="Будет доступно в Фазе 2">
+                <span class="icon">⏸</span> Drain
+            </button>
+            <button class="quick-action-btn maint-btn" data-action="maint" disabled title="Будет доступно в Фазе 2">
+                <span class="icon">🔧</span> Maint
+            </button>
+        </div>
+    </div>
+
+    <!-- Аккордеоны с бэкендами -->
+    <div class="backends-accordion" id="backends-container">
+        <div class="loading-message">
+            <span class="loading-spinner">⟳</span>
+            Загрузка данных HAProxy...
+        </div>
+    </div>
+
+    <!-- Сообщение об отсутствии данных -->
+    <div class="empty-message" id="empty-message" style="display: none;">
+        <div class="empty-icon">📊</div>
+        <h3>Нет данных для отображения</h3>
+        <p>Нажмите "Обновить" для загрузки данных HAProxy или проверьте настройки синхронизации.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипты для HAProxy -->
+<script src="{{ url_for('static', filename='js/haproxy/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/haproxy/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/haproxy/filters.js') }}"></script>
+<script src="{{ url_for('static', filename='js/haproxy/manager.js') }}"></script>
+{% endblock %}

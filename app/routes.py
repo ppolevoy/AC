@@ -30,6 +30,11 @@ def settings():
     """Страница настроек"""
     return render_template('settings.html')
 
+@bp.route('/haproxy')
+def haproxy():
+    """Страница управления HAProxy"""
+    return render_template('haproxy.html')
+
 @bp.route('/server/<int:server_id>')
 def server_details(server_id):
     """Страница с детальной информацией о сервере"""

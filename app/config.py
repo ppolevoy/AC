@@ -85,8 +85,17 @@ class Config:
     # Настройки для отображения версий
     MAX_DOCKER_IMAGES_DISPLAY = int(os.environ.get('MAX_DOCKER_IMAGES_DISPLAY', '30'))
     INCLUDE_DEV_IMAGES = os.environ.get('INCLUDE_DEV_IMAGES', 'false').lower() == 'true'
-    INCLUDE_SNAPSHOT_IMAGES = os.environ.get('INCLUDE_SNAPSHOT_IMAGES', 'false').lower() == 'true'    
-    
+    INCLUDE_SNAPSHOT_IMAGES = os.environ.get('INCLUDE_SNAPSHOT_IMAGES', 'false').lower() == 'true'
+
+    # Настройки HAProxy интеграции (Фаза 1: Мониторинг)
+    HAPROXY_ENABLED = os.environ.get('HAPROXY_ENABLED', 'true').lower() == 'true'
+    HAPROXY_POLLING_INTERVAL = int(os.environ.get('HAPROXY_POLLING_INTERVAL', '60'))  # секунды
+    HAPROXY_CACHE_TTL = int(os.environ.get('HAPROXY_CACHE_TTL', '30'))  # секунды
+    HAPROXY_HISTORY_RETENTION_DAYS = int(os.environ.get('HAPROXY_HISTORY_RETENTION_DAYS', '30'))  # дней
+    HAPROXY_DEFAULT_INSTANCE_NAME = os.environ.get('HAPROXY_DEFAULT_INSTANCE_NAME', 'default')
+    HAPROXY_REQUEST_TIMEOUT = int(os.environ.get('HAPROXY_REQUEST_TIMEOUT', '10'))  # секунды
+    HAPROXY_MAX_RETRIES = int(os.environ.get('HAPROXY_MAX_RETRIES', '3'))  # количество попыток
+
     @staticmethod
     def init_app(app):
         # Создание директории для логов, если её нет

@@ -152,30 +152,32 @@ body.light-theme .header-icon {
 
 /* Theme Toggle Button */
 .theme-toggle {
-    background-color: #4f5a5bbf;
-    color: #ebe4da;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 12px;
-    margin-left: 15px;
+    padding: 8px;
+    width: 36px;
+    height: 36px;
+    background-color: #1f1f1f;
+    color: white;
+    border: 1px solid #374151;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: bold;
+    transition: background-color 0.3s;
 }
 
 .theme-toggle:hover {
-    background-color: #4f5a5b;
+    background-color: #2a2a2a;
 }
 
 body.light-theme .theme-toggle {
-    background-color: #e0e0e0;
-    color: #333;
+    background-color: #f9f9f9;
+    color: #1a1a1a;
+    border: 1px solid #e0e0e0;
 }
 
 body.light-theme .theme-toggle:hover {
-    background-color: #d0d0d0;
+    background-color: #f0f0f0;
 }
 
 /* Server Dropdown */
@@ -1253,29 +1255,58 @@ body.light-theme .app-list li {
     border-bottom: none;
 }
 
-/* Notification */
-.notification {
+/* Notification Container */
+.notification-container {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    padding: 15px 20px;
-    border-radius: 4px;
-    color: white;
     z-index: 1000;
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
-    transition: opacity 0.5s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+/* Notification */
+.notification {
+    padding: 10px 16px;
+    border-radius: 8px;
+    color: white;
+    font-size: 13px;
+    pointer-events: auto;
+    max-width: 350px;
+    word-wrap: break-word;
+    opacity: 0;
+    transform: translateX(100px);
+    transition: all 0.3s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateX(0);
 }
 
 .notification.success {
-    background-color: #08d419;
+    background-color: #10b981;
 }
 
 .notification.error {
-    background-color: #e74c3c;
+    background-color: #ef4444;
 }
 
 .notification.fade-out {
     opacity: 0;
+    transform: translateX(100px);
+}
+
+/* Light theme notifications */
+body.light-theme .notification.success {
+    background-color: #059669;
+}
+
+body.light-theme .notification.error {
+    background-color: #dc2626;
 }
 
 /* Server Page Styles */

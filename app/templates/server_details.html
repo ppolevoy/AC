@@ -2,33 +2,79 @@
 
 {% block title %}Faktura Apps - Информация о сервере{% endblock %}
 
-{% block page_title %}Сервер: <span id="server-name-display">Загрузка...</span>{% endblock %}
-
-{% block subheader %}
-<div class="subheader">
-    <div class="server-status-display" id="server-status">
-        <!-- Здесь будет отображаться статус сервера -->
-    </div>
-</div>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/server-details.css') }}">
+<style>
+    /* Скрываем стандартный header из base.html */
+    .main-content > .header {
+        display: none;
+    }
+    /* Убираем padding из main-content для нашего custom layout */
+    .main-content {
+        padding: 0;
+    }
+</style>
 {% endblock %}
 
+{% block page_title %}{% endblock %}
+
+{% block subheader %}{% endblock %}
+
 {% block content %}
-<div class="server-details-container">
-    <div class="server-info-panel">
-        <h3 class="panel-title">Информация о сервере</h3>
-        <div id="server-info-content" class="panel-content">
-            <div class="info-loading">Загрузка информации о сервере...</div>
+<!-- Header Section with Server Info -->
+<div class="header-section">
+    <div class="header-container">
+        <div class="header-top">
+            <div class="title-box">
+                <div class="icon-container">
+                    <svg class="server-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="8" rx="2"></rect>
+                        <rect x="2" y="14" width="20" height="8" rx="2"></rect>
+                    </svg>
+                </div>
+                <h1 class="server-name" id="server-name-display">Загрузка...</h1>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="btn-settings" id="theme-toggle-btn" title="Переключить тему">
+                    <svg id="theme-icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+                <button class="btn-settings" id="haproxy-settings-btn">
+                    <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 7h-9"></path>
+                        <path d="M14 17H5"></path>
+                        <circle cx="17" cy="17" r="3"></circle>
+                        <circle cx="7" cy="7" r="3"></circle>
+                    </svg>
+                    Настройка HAProxy
+                </button>
+            </div>
+        </div>
+
+        <div class="info-grid" id="server-info-grid">
+            <div class="info-loading">Загрузка информации...</div>
         </div>
     </div>
-    
-    <div class="apps-panel">
-        <h3 class="panel-title">Приложения на сервере</h3>
-        <div class="search-filter">
-            <input type="text" id="app-search" placeholder="Поиск приложения" class="search-input">
-        </div>
-        <div id="server-apps-content" class="panel-content">
-            <div class="info-loading">Загрузка списка приложений...</div>
-        </div>
+</div>
+
+<!-- Main Section with Applications -->
+<div class="main-section">
+    <div class="section-header">
+        <h2 class="section-title">Приложения</h2>
+        <p class="section-subtitle" id="apps-subtitle">Группировка по имени</p>
+    </div>
+
+    <div class="apps-container" id="apps-container">
+        <div class="info-loading">Загрузка списка приложений...</div>
     </div>
 </div>
 {% endblock %}

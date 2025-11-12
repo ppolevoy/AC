@@ -11,7 +11,10 @@ class Server(db.Model):
     port = db.Column(db.Integer, nullable=False)
     last_check = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='offline')
-    
+
+    # HAProxy integration
+    is_haproxy_node = db.Column(db.Boolean, default=False, nullable=False)
+
     applications = db.relationship('Application', backref='server', lazy='dynamic', cascade="all, delete-orphan")
     events = db.relationship('Event', backref='server', lazy='dynamic', cascade="all, delete-orphan")
     

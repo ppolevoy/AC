@@ -78,7 +78,16 @@ class MonitoringTasks:
                         task_queue.clear_completed_tasks()
                     except Exception as e:
                         logger.error(f"Ошибка при очистке старых задач: {str(e)}")
-                
+
+                # Запускаем задачу синхронизации HAProxy (если включена)
+                with self.app.app_context():
+                    try:
+                        from app.config import Config
+                        if Config.HAPROXY_ENABLED:
+                            self.loop.run_until_complete(self._sync_haproxy_instances())
+                    except Exception as e:
+                        logger.error(f"Ошибка при синхронизации HAProxy: {str(e)}")
+
                 # Ждем до следующего цикла опроса
                 from app.config import Config
                 logger.info(f"Следующий опрос через {Config.POLLING_INTERVAL} секунд")
@@ -135,7 +144,51 @@ class MonitoringTasks:
             logger.error(f"Ошибка при опросе серверов: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-    
+
+    async def _sync_haproxy_instances(self):
+        """Синхронизация всех активных HAProxy инстансов"""
+        try:
+            from app.models.haproxy import HAProxyInstance
+            from app.services.haproxy_service import HAProxyService
+            from app.services.haproxy_mapper import HAProxyMapper
+
+            # Получаем все активные HAProxy инстансы
+            instances = HAProxyInstance.query.filter_by(is_active=True).all()
+
+            if not instances:
+                logger.debug("Нет активных HAProxy инстансов для синхронизации")
+                return
+
+            logger.info(f"Начинаем синхронизацию {len(instances)} HAProxy инстансов")
+
+            # Создаем список задач для асинхронного выполнения
+            tasks = []
+            for instance in instances:
+                task = HAProxyService.sync_haproxy_instance(instance)
+                tasks.append(task)
+
+            # Запускаем все задачи асинхронно
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Обрабатываем результаты
+            success_count = sum(1 for r in results if r is True)
+            error_count = sum(1 for r in results if isinstance(r, Exception) or r is False)
+
+            logger.info(f"Синхронизация HAProxy завершена: {success_count} успешно, {error_count} с ошибками")
+
+            # Выполняем маппинг серверов на приложения после синхронизации
+            try:
+                mapped, total = HAProxyMapper.remap_all_servers()
+                if total > 0:
+                    logger.info(f"Маппинг HAProxy серверов: {mapped}/{total} сопоставлено")
+            except Exception as e:
+                logger.error(f"Ошибка при маппинге серверов: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при синхронизации HAProxy инстансов: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
     def _clean_old_events(self):
         """Очистка старых событий"""
         try:

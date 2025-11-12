@@ -149,10 +149,8 @@
         clearArtifactsCache(appId = null) {
             if (appId) {
                 delete this.artifactsCache[`app_${appId}`];
-                console.log(`Кэш артефактов очищен для приложения ${appId}`);
             } else {
                 this.artifactsCache = {};
-                console.log('Весь кэш артефактов очищен');
             }
         },
 
@@ -172,7 +170,6 @@
                     this.state.expandedGroups.push(groupName);
                 }
             });
-            console.log('Сохранено состояние групп:', this.state.expandedGroups);
         }
     };
 
@@ -273,8 +270,7 @@
                         
                         return 0;
                     });
-                    
-                    console.log(`Загружено ${sortedVersions.length} версий для приложения ${appId}`);
+
                     return sortedVersions.slice(0, limit);
                 }
                 
@@ -351,7 +347,6 @@
 
             // Проверяем кэш
             if (cache && (now - cache.timestamp) < CONFIG.CACHE_LIFETIME) {
-                console.log(`Используем кэш артефактов для приложения ${appId} (возраст: ${Math.round((now - cache.timestamp)/1000)}с)`);
                 return cache.data;
             }
 
@@ -1047,7 +1042,6 @@
 
             // Загружаем оркестраторы
             const orchestrators = await ApiService.loadOrchestrators(true);
-            console.log('Загружено оркестраторов:', orchestrators.length, orchestrators);
 
             // Функция для извлечения имени плейбука - всегда используем имя файла
             const getPlaybookDisplayName = (orch) => {
@@ -1297,7 +1291,6 @@
                 
                 // Проверяем кэш и восстанавливаем состояние
                 if (!force && this.groupContentLoaded[groupName] && this.groupContentCache[groupName]) {
-                    console.log(`✨ Используем кэшированное содержимое для группы "${groupName}"`);
                     dynamicContent.innerHTML = this.groupContentCache[groupName];
                     
                     // Восстанавливаем значения из сохраненного состояния
@@ -1369,7 +1362,6 @@
                     if (artifacts) {
                         groupArtifacts[groupName] = artifacts;
                         state.artifactsLoaded = true;
-                        console.log(`✅ Загружено ${artifacts.length} версий для группы "${groupName}"`);
                     } else {
                         loadingError = true;
                         console.error(`❌ Не удалось загрузить версии для группы "${groupName}"`);
@@ -2340,49 +2332,43 @@
                     // Берем актуальное состояние из StateManager
                     if (!prevButton.disabled && StateManager.state.currentPage > 1) {
                         StateManager.state.currentPage--;
-                        console.log('← Prev: страница', StateManager.state.currentPage);
                         this.filterAndDisplayApplications();
                     }
                 });
-                console.log('✓ Обработчик prev-page установлен');
             }
-            
+
             // Обработчик для кнопки "Следующая"
             const nextButton = document.querySelector('.next-page');
             if (nextButton) {
                 nextButton.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    
+
                     if (!nextButton.disabled) {
                         // Вычисляем актуальное количество страниц
                         const filtered = this.getFilteredApplications();
                         const totalPages = Math.ceil(filtered.length / StateManager.state.pageSize);
-                        
+
                         if (StateManager.state.currentPage < totalPages) {
                             StateManager.state.currentPage++;
-                            console.log('→ Next: страница', StateManager.state.currentPage, 'из', totalPages);
                             this.filterAndDisplayApplications();
                         }
                     }
                 });
-                console.log('✓ Обработчик next-page установлен');
             }
-            
+
             // Обработчик изменения размера страницы
             const pageSizeSelect = document.getElementById('page-size-select');
             if (pageSizeSelect) {
                 pageSizeSelect.addEventListener('change', (e) => {
                     const newSize = parseInt(e.target.value);
-                    
+
                     if (!isNaN(newSize) && newSize > 0) {
-                        console.log('📏 Размер страницы:', newSize);
                         StateManager.state.pageSize = newSize;
                         StateManager.state.currentPage = 1; // Сброс на первую страницу
                         this.filterAndDisplayApplications();
                     }
                 });
-                console.log('✓ Обработчик page-size установлен');
             }
         },
 
@@ -2588,9 +2574,7 @@
             if (filtered.length === 0) {
                 StateManager.state.currentPage = 1;
             }
-            
-            console.log(`Отображение: страница ${StateManager.state.currentPage}/${totalPages}, элементов: ${filtered.length}`);
-            
+
             // Вызываем рендеринг
             UIRenderer.renderApplications(filtered);
             
@@ -2803,13 +2787,13 @@
         getCache: () => StateManager.artifactsCache,
         clearCache: () => StateManager.clearArtifactsCache(),
         debugArtifactsCache: () => {
-            console.log('=== Artifacts Cache Debug ===');
+            const result = {};
             Object.keys(StateManager.artifactsCache).forEach(key => {
                 const cache = StateManager.artifactsCache[key];
                 const age = Math.round((Date.now() - cache.timestamp) / 1000);
-                console.log(`${key}: ${cache.data.length} versions, age: ${age}s`);
+                result[key] = { versions: cache.data.length, age: `${age}s` };
             });
-            console.log('===========================');
+            return result;
         }
     };
     

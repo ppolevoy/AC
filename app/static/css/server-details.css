@@ -1,0 +1,912 @@
+/* Server Details Page - Modern Design */
+
+/* Reset и переопределение базовых стилей */
+body {
+    background-color: #1a1a1a !important;
+    color: #e5e7eb !important;
+    margin: 0;
+    padding: 0;
+}
+
+body.light-theme {
+    background-color: #f5f5f5 !important;
+    color: #1a1a1a !important;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* ==================== Header Section ==================== */
+
+.header-section {
+    background-color: #252525;
+    border-bottom: 1px solid #374151;
+}
+
+body.light-theme .header-section {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.header-container {
+    padding: 20px 32px;
+}
+
+.header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.title-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.icon-container {
+    width: 40px;
+    height: 40px;
+    background-color: #2563eb;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.server-icon {
+    width: 24px;
+    height: 24px;
+    color: white;
+}
+
+.server-name {
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+    margin: 0;
+}
+
+body.light-theme .server-name {
+    color: #1a1a1a;
+}
+
+.btn-settings {
+    padding: 8px 16px;
+    background-color: #1f1f1f;
+    color: white;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.btn-settings:hover {
+    background-color: #2a2a2a;
+}
+
+body.light-theme .btn-settings {
+    background-color: #f9f9f9;
+    color: #1a1a1a;
+    border: 1px solid #e0e0e0;
+}
+
+body.light-theme .btn-settings:hover {
+    background-color: #f0f0f0;
+}
+
+/* Кнопка переключения темы - квадратная */
+#theme-toggle-btn {
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    justify-content: center;
+    flex-shrink: 0;
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+#theme-toggle-btn svg {
+    margin: 0 !important;
+    width: 20px !important;
+    height: 20px !important;
+}
+
+/* Info Grid (5 cards in a row) */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
+}
+
+.info-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background-color: #1f1f1f;
+    border-radius: 8px;
+}
+
+body.light-theme .info-card {
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+}
+
+.info-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.icon-blue { color: #60a5fa; }
+.icon-green { color: #22c55e; }
+.icon-yellow { color: #eab308; }
+.icon-purple { color: #a855f7; }
+
+.info-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-label {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+}
+
+body.light-theme .info-value {
+    color: #1a1a1a;
+}
+
+.info-loading {
+    text-align: center;
+    padding: 20px;
+    color: #888;
+    grid-column: 1 / -1;
+}
+
+/* ==================== Main Section (Applications) ==================== */
+
+.main-section {
+    padding: 24px 32px;
+}
+
+.section-header {
+    margin-bottom: 16px;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+}
+
+body.light-theme .section-title {
+    color: #1a1a1a;
+}
+
+.section-subtitle {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 4px 0 0 0;
+}
+
+/* Apps Container */
+.apps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* App Card (Accordion Item) */
+.app-card {
+    background-color: #252525;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+}
+
+.app-card:hover {
+    border-color: #4b5563;
+}
+
+body.light-theme .app-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+}
+
+body.light-theme .app-card:hover {
+    border-color: #d0d0d0;
+}
+
+.app-button {
+    width: 100%;
+    padding: 16px 20px;
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+body.light-theme .app-button {
+    color: #1a1a1a;
+}
+
+.app-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.chevron-box {
+    width: 32px;
+    height: 32px;
+    background-color: #1f1f1f;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+body.light-theme .chevron-box {
+    background-color: #f0f0f0;
+}
+
+.chevron-icon {
+    width: 20px;
+    height: 20px;
+    color: #9ca3af;
+    transition: transform 0.3s;
+}
+
+.app-info {
+    text-align: left;
+}
+
+.app-name {
+    font-size: 16px;
+    font-weight: 500;
+    color: white;
+}
+
+body.light-theme .app-name {
+    color: #1a1a1a;
+}
+
+.app-meta {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.app-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.instances-count {
+    font-size: 14px;
+    color: #9ca3af;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background-color: rgba(34, 197, 94, 0.2);
+    border-radius: 9999px;
+}
+
+.status-badge.offline {
+    background-color: rgba(239, 68, 68, 0.2);
+}
+
+.status-badge.offline .status-dot {
+    background-color: #ef4444;
+}
+
+.status-badge.offline .status-text {
+    color: #ef4444;
+}
+
+.status-badge.unknown {
+    background-color: rgba(234, 179, 8, 0.2);
+}
+
+.status-badge.unknown .status-dot {
+    background-color: #eab308;
+}
+
+.status-badge.unknown .status-text {
+    color: #eab308;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #22c55e;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.status-text {
+    font-size: 12px;
+    color: #22c55e;
+    font-weight: 500;
+}
+
+/* App Details (Collapsed Content) */
+.app-details {
+    display: none;
+    background-color: #1f1f1f;
+    border-top: 1px solid #374151;
+    padding: 12px 20px;
+}
+
+.app-details.show {
+    display: block;
+}
+
+body.light-theme .app-details {
+    background-color: #fafafa;
+    border-top: 1px solid #e0e0e0;
+}
+
+.details-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+    cursor: pointer;
+}
+
+.detail-item:hover {
+    background-color: #252525;
+}
+
+body.light-theme .detail-item:hover {
+    background-color: #f0f0f0;
+}
+
+.detail-name {
+    font-size: 14px;
+    color: #d1d5db;
+}
+
+body.light-theme .detail-name {
+    color: #374151;
+}
+
+.detail-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mini-dot {
+    width: 6px;
+    height: 6px;
+    background-color: #22c55e;
+    border-radius: 50%;
+}
+
+.mini-dot.offline {
+    background-color: #ef4444;
+}
+
+.mini-dot.unknown {
+    background-color: #eab308;
+}
+
+.detail-status-text {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+/* ==================== HAProxy Sidebar ==================== */
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+}
+
+.sidebar-overlay.show {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.overlay-background {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.sidebar-panel {
+    position: relative;
+    width: 400px;
+    background-color: #1f1f1f;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    overflow-y: auto;
+    max-height: 100vh;
+}
+
+body.light-theme .sidebar-panel {
+    background-color: #ffffff;
+}
+
+.sidebar-header {
+    position: sticky;
+    top: 0;
+    background-color: #252525;
+    border-bottom: 1px solid #374151;
+    padding: 24px;
+    z-index: 10;
+}
+
+body.light-theme .sidebar-header {
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.sidebar-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: white;
+}
+
+body.light-theme .sidebar-title {
+    color: #1a1a1a;
+}
+
+.sidebar-desc {
+    font-size: 14px;
+    color: #6b7280;
+    margin-top: 4px;
+}
+
+.sidebar-content {
+    padding: 24px;
+}
+
+.option-box {
+    background-color: #252525;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+body.light-theme .option-box {
+    background-color: #fafafa;
+    border: 1px solid #e0e0e0;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.checkbox-input {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: #2563eb;
+}
+
+.checkbox-label {
+    flex: 1;
+}
+
+.checkbox-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    display: block;
+}
+
+body.light-theme .checkbox-title {
+    color: #1a1a1a;
+}
+
+.checkbox-description {
+    font-size: 12px;
+    color: #6b7280;
+    display: block;
+    margin-top: 4px;
+}
+
+.backends-section {
+    display: none;
+}
+
+.backends-section.show {
+    display: block;
+}
+
+.backends-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #d1d5db;
+    display: block;
+    margin-bottom: 12px;
+}
+
+body.light-theme .backends-label {
+    color: #374151;
+}
+
+.backend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.instance-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background-color: #252525;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    transition: all 0.3s;
+}
+
+body.light-theme .instance-item {
+    background-color: #fafafa;
+    border: 1px solid #e0e0e0;
+}
+
+.instance-item:hover {
+    border-color: #4b5563;
+}
+
+body.light-theme .instance-item:hover {
+    border-color: #d0d0d0;
+}
+
+.instance-info {
+    flex: 1;
+}
+
+.instance-name {
+    font-size: 14px;
+    color: #d1d5db;
+    font-weight: 500;
+}
+
+body.light-theme .instance-name {
+    color: #374151;
+}
+
+.instance-socket {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.instance-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.instance-action-btn {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    padding: 4px;
+}
+
+.instance-action-btn:hover {
+    opacity: 1;
+}
+
+.btn-add-instance {
+    width: 100%;
+    padding: 12px 16px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-add-instance:hover {
+    background-color: #1d4ed8;
+}
+
+.info-message {
+    background-color: rgba(37, 99, 235, 0.1);
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+body.light-theme .info-message {
+    background-color: rgba(37, 99, 235, 0.05);
+}
+
+.info-text-small {
+    font-size: 12px;
+    color: #60a5fa;
+}
+
+.actions-bar {
+    display: flex;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid #374151;
+    margin-top: 24px;
+}
+
+body.light-theme .actions-bar {
+    border-top: 1px solid #e0e0e0;
+}
+
+.btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.btn-primary {
+    background-color: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+.btn-secondary {
+    background-color: #252525;
+    color: white;
+    border: 1px solid #374151;
+}
+
+.btn-secondary:hover {
+    background-color: #2a2a2a;
+}
+
+body.light-theme .btn-secondary {
+    background-color: #f9f9f9;
+    color: #1a1a1a;
+    border: 1px solid #e0e0e0;
+}
+
+body.light-theme .btn-secondary:hover {
+    background-color: #f0f0f0;
+}
+
+/* ==================== Responsive Design ==================== */
+
+@media (max-width: 1280px) {
+    .info-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .info-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        padding: 16px 20px;
+    }
+
+    .header-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .main-section {
+        padding: 16px 20px;
+    }
+
+    .sidebar-panel {
+        width: 100%;
+    }
+
+    .app-right {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+    }
+}
+
+/* ==================== Loading & No Data States ==================== */
+
+.no-data {
+    text-align: center;
+    padding: 40px 20px;
+    color: #888;
+}
+
+.no-data p {
+    margin: 10px 0;
+}
+
+/* ==================== Light Theme Overrides для Inline Стилей ==================== */
+
+/* Кнопка обновления сервера */
+body.light-theme #refresh-server-btn {
+    background: #f0f0f0 !important;
+    border: 1px solid #d0d0d0 !important;
+}
+
+body.light-theme #refresh-server-btn:hover {
+    background: #e0e0e0 !important;
+}
+
+/* Модальное окно - фон */
+body.light-theme .modal-content {
+    background-color: #ffffff !important;
+}
+
+/* Модальное окно - аккордеоны HAProxy */
+body.light-theme .haproxy-accordion-header {
+    background-color: transparent !important;
+}
+
+body.light-theme .haproxy-accordion-header:hover {
+    background-color: #f5f5f5 !important;
+}
+
+body.light-theme [id^="haproxy-instance-details-"] {
+    background: #fafafa !important;
+    border-top: 1px solid #e0e0e0 !important;
+}
+
+body.light-theme [id^="haproxy-backends-"] > div {
+    background: #ffffff !important;
+}
+
+body.light-theme [id^="haproxy-backends-"] > div > div[style*="background: #252525"] {
+    background: #f9f9f9 !important;
+    border: 1px solid #e0e0e0 !important;
+}
+
+body.light-theme [id^="haproxy-backends-"] > div > div > div[style*="background: #252525"] {
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+}
+
+/* Цвет текста в модальном окне */
+body.light-theme .modal-content [style*="color: #fff"],
+body.light-theme .modal-content [style*="color: #ffffff"],
+body.light-theme .modal-content div[style*="font-size: 15px"],
+body.light-theme .modal-content div[style*="font-size: 14px"],
+body.light-theme .modal-content div[style*="font-size: 13px"],
+body.light-theme .modal-content div[style*="font-size: 12px"] {
+    color: #1a1a1a !important;
+}
+
+body.light-theme .modal-content [style*="color: #888"] {
+    color: #666 !important;
+}
+
+body.light-theme .modal-content p[style*="color: #888"] {
+    color: #666 !important;
+}
+
+/* Кнопки в модальном окне */
+body.light-theme .modal-content button[style*="background: #1f1f1f"],
+body.light-theme .modal-content button[style*="background: #2a2a2c"],
+body.light-theme .modal-content button[style*="background-color: #2a2a2c"] {
+    background: #f0f0f0 !important;
+    background-color: #f0f0f0 !important;
+    color: #1a1a1a !important;
+    border: 1px solid #d0d0d0 !important;
+}
+
+body.light-theme .modal-content button[style*="background: #1f1f1f"]:hover,
+body.light-theme .modal-content button[style*="background: #2a2a2c"]:hover,
+body.light-theme .modal-content button[style*="background-color: #2a2a2c"]:hover {
+    background: #e0e0e0 !important;
+    background-color: #e0e0e0 !important;
+}
+
+/* Карточки HAProxy instances */
+body.light-theme .modal-content [style*="background: #252525"],
+body.light-theme .modal-content [style*="background-color: #252525"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+
+body.light-theme .modal-content [style*="border: 1px solid #374151"] {
+    border: 1px solid #e0e0e0 !important;
+}
+
+body.light-theme .modal-content [style*="border-top: 1px solid #374151"] {
+    border-top: 1px solid #e0e0e0 !important;
+}
+
+body.light-theme .modal-content [style*="background: #252525"]:hover {
+    background: #f9f9f9 !important;
+    background-color: #f9f9f9 !important;
+}
+
+/* SVG иконки (chevron) в модальном окне */
+body.light-theme .modal-content svg[style*="color: #888"] {
+    color: #666 !important;
+}
+
+/* Раскрывающаяся часть с backends */
+body.light-theme .modal-content [style*="background: #1f1f1f"] {
+    background: #fafafa !important;
+    background-color: #fafafa !important;
+}
+
+/* Бейджи статусов - оставляем цвета как есть */
+body.light-theme .modal-content span[style*="color: #4CAF50"],
+body.light-theme .modal-content span[style*="color: #f44336"],
+body.light-theme .modal-content span[style*="color: #ff9800"],
+body.light-theme .modal-content span[style*="color: #9e9e9e"] {
+    /* Оставляем цвета статусов */
+}

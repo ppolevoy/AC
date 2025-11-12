@@ -307,7 +307,7 @@ class AgentService:
                         db.session.add(app)
                         db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
-                        logger.info(f"Обновление существующего docker-приложения {container_name} на сервере {server.name}")
+                        logger.debug(f"Обновление существующего docker-приложения {container_name} на сервере {server.name}")
                     
                     # Обновляем данные приложения
                     app.container_id = app_data.get('container_id')
@@ -353,7 +353,7 @@ class AgentService:
                         db.session.add(app)
                         db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
-                        logger.info(f"Обновление существующего site-приложения {name} на сервере {server.name}")
+                        logger.debug(f"Обновление существующего site-приложения {name} на сервере {server.name}")
                     
                     # Обновляем данные приложения
                     app.path = app_data.get('path')
@@ -405,7 +405,7 @@ class AgentService:
                         db.session.add(app)
                         db.session.flush()  # Чтобы получить ID для связи с экземпляром
                     else:
-                        logger.info(f"Обновление существующего service-приложения {name} на сервере {server.name}")
+                        logger.debug(f"Обновление существующего service-приложения {name} на сервере {server.name}")
                     
                     # Обновляем данные приложения
                     app.path = app_data.get('path')
@@ -487,7 +487,7 @@ class AgentService:
                 )
                 db.session.add(app)
             else:
-                logger.info(f"Обновление существующего {app_type}-приложения {app_name} на сервере {server_id}")
+                logger.debug(f"Обновление существующего {app_type}-приложения {app_name} на сервере {server_id}")
             
             # Определяем группу приложения (только если еще не определена)
             if not app.group_id:

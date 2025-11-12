@@ -15,3 +15,4 @@ from app.api import app_groups_routes
 # Дополнительные маршруты:
 from app.api import nexus_routes
 from app.api import orchestrator_routes
+from app.api import haproxy_routes
