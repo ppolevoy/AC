@@ -176,6 +176,12 @@ class HAProxyServer(db.Model):
     # Связь с приложением AC (nullable - может быть не определено)
     application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
 
+    # Поля для ручного маппинга
+    is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)  # Флаг ручного маппинга
+    mapped_by = db.Column(db.String(64), nullable=True)  # Кто установил маппинг
+    mapped_at = db.Column(db.DateTime, nullable=True)  # Когда установлен
+    mapping_notes = db.Column(db.Text, nullable=True)  # Заметки о маппинге
+
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -185,6 +191,7 @@ class HAProxyServer(db.Model):
     backend = db.relationship('HAProxyBackend', back_populates='servers')
     application = db.relationship('Application', backref=db.backref('haproxy_servers', lazy='dynamic'))
     status_history = db.relationship('HAProxyServerStatusHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
+    mapping_history = db.relationship('HAProxyMappingHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
 
     # Индексы
     __table_args__ = (
@@ -229,9 +236,45 @@ class HAProxyServer(db.Model):
         """Восстановление удаленного сервера"""
         self.removed_at = None
 
-    def map_to_application(self, application_id):
-        """Связать с приложением AC"""
+    def map_to_application(self, application_id, is_manual=False, mapped_by=None, notes=None):
+        """
+        Связать с приложением AC.
+
+        Args:
+            application_id: ID приложения для связывания (или None для отвязки)
+            is_manual: Флаг ручного маппинга
+            mapped_by: Кто установил маппинг (для ручного маппинга)
+            notes: Заметки о маппинге (для ручного маппинга)
+        """
+        old_application_id = self.application_id
+
+        # Создаем запись в истории только если маппинг изменился
+        if old_application_id != application_id:
+            history = HAProxyMappingHistory(
+                haproxy_server_id=self.id,
+                old_application_id=old_application_id,
+                new_application_id=application_id,
+                change_reason='manual' if is_manual else 'automatic',
+                mapped_by=mapped_by,
+                notes=notes
+            )
+            db.session.add(history)
+
+        # Обновляем маппинг
         self.application_id = application_id
+        self.is_manual_mapping = is_manual
+
+        if is_manual:
+            self.mapped_by = mapped_by
+            self.mapped_at = datetime.utcnow()
+            self.mapping_notes = notes
+        else:
+            # При автоматическом маппинге очищаем поля ручного маппинга
+            if not self.is_manual_mapping:  # Только если это не был ручной маппинг
+                self.mapped_by = None
+                self.mapped_at = None
+                self.mapping_notes = None
+
         self.updated_at = datetime.utcnow()
 
     def to_dict(self, include_application=True, include_backend=False):
@@ -250,6 +293,10 @@ class HAProxyServer(db.Model):
             'scur': self.scur,
             'smax': self.smax,
             'application_id': self.application_id,
+            'is_manual_mapping': self.is_manual_mapping,
+            'mapped_by': self.mapped_by,
+            'mapped_at': self.mapped_at.isoformat() if self.mapped_at else None,
+            'mapping_notes': self.mapping_notes,
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'removed_at': self.removed_at.isoformat() if self.removed_at else None,
@@ -312,3 +359,64 @@ class HAProxyServerStatusHistory(db.Model):
 
     def __repr__(self):
         return f'<HAProxyServerStatusHistory {self.old_status} -> {self.new_status}>'
+
+
+class HAProxyMappingHistory(db.Model):
+    """
+    История изменений маппинга HAProxy серверов на приложения AC.
+    Записывает все изменения связывания серверов с приложениями.
+    """
+    __tablename__ = 'haproxy_mapping_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    haproxy_server_id = db.Column(db.Integer, db.ForeignKey('haproxy_servers.id', ondelete='CASCADE'), nullable=False)
+    old_application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    new_application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    change_reason = db.Column(db.String(32), nullable=False)  # manual, automatic
+    mapped_by = db.Column(db.String(64), nullable=True)  # Кто выполнил маппинг (для ручного)
+    notes = db.Column(db.Text, nullable=True)  # Заметки о причине изменения
+
+    # Relationships
+    haproxy_server = db.relationship('HAProxyServer', back_populates='mapping_history')
+    old_application = db.relationship('Application', foreign_keys=[old_application_id])
+    new_application = db.relationship('Application', foreign_keys=[new_application_id])
+
+    # Индексы
+    __table_args__ = (
+        db.Index('idx_haproxy_mapping_history_server', 'haproxy_server_id'),
+        db.Index('idx_haproxy_mapping_history_changed_at', 'changed_at'),
+        db.Index('idx_haproxy_mapping_history_reason', 'change_reason'),
+    )
+
+    def to_dict(self):
+        """Преобразование в словарь для API"""
+        result = {
+            'id': self.id,
+            'haproxy_server_id': self.haproxy_server_id,
+            'old_application_id': self.old_application_id,
+            'new_application_id': self.new_application_id,
+            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'change_reason': self.change_reason,
+            'mapped_by': self.mapped_by,
+            'notes': self.notes
+        }
+
+        # Включаем информацию о старом приложении, если оно есть
+        if self.old_application:
+            result['old_application'] = {
+                'id': self.old_application.id,
+                'name': self.old_application.name
+            }
+
+        # Включаем информацию о новом приложении, если оно есть
+        if self.new_application:
+            result['new_application'] = {
+                'id': self.new_application.id,
+                'name': self.new_application.name
+            }
+
+        return result
+
+    def __repr__(self):
+        return f'<HAProxyMappingHistory server_id={self.haproxy_server_id} {self.old_application_id} -> {self.new_application_id}>'

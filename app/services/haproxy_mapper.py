@@ -172,12 +172,22 @@ class HAProxyMapper:
         1. Маппинг по IP:port (если доступен addr)
         2. Маппинг по имени сервера
 
+        ВАЖНО: Не перезаписывает ручной маппинг (is_manual_mapping=True).
+
         Args:
             haproxy_server: Объект HAProxyServer
 
         Returns:
             Application или None
         """
+        # ЗАЩИТА РУЧНОГО МАППИНГА: не перезаписываем ручной маппинг
+        if haproxy_server.is_manual_mapping:
+            logger.debug(f"Пропуск маппинга для {haproxy_server.server_name}: установлен ручной маппинг")
+            # Возвращаем текущее приложение, если оно есть
+            if haproxy_server.application_id:
+                return Application.query.get(haproxy_server.application_id)
+            return None
+
         cache_key = f"{haproxy_server.id}"
 
         # Проверяем кэш
@@ -232,6 +242,8 @@ class HAProxyMapper:
         """
         Повторный маппинг всех HAProxy серверов.
         Полезно после добавления новых приложений.
+
+        ВАЖНО: Пропускает серверы с ручным маппингом (is_manual_mapping=True).
         """
         logger.info("Начало повторного маппинга всех HAProxy серверов")
 
@@ -239,15 +251,21 @@ class HAProxyMapper:
         HAProxyMapper.clear_cache()
 
         # Получаем все HAProxy серверы без привязки к приложению
+        # ИСКЛЮЧАЕМ серверы с ручным маппингом
         unmapped_servers = HAProxyServer.query.filter(
             HAProxyServer.application_id.is_(None),
-            HAProxyServer.removed_at.is_(None)
+            HAProxyServer.removed_at.is_(None),
+            HAProxyServer.is_manual_mapping == False  # Пропускаем ручной маппинг
         ).all()
 
         mapped_count = 0
         total_count = len(unmapped_servers)
+        skipped_manual = HAProxyServer.query.filter(
+            HAProxyServer.removed_at.is_(None),
+            HAProxyServer.is_manual_mapping == True
+        ).count()
 
-        logger.info(f"Найдено {total_count} несопоставленных серверов")
+        logger.info(f"Найдено {total_count} несопоставленных серверов (пропущено {skipped_manual} с ручным маппингом)")
 
         for haproxy_server in unmapped_servers:
             application = HAProxyMapper.map_server_to_application(haproxy_server)
@@ -269,7 +287,7 @@ class HAProxyMapper:
         Получить статистику маппинга.
 
         Returns:
-            dict с информацией о маппинге
+            dict с информацией о маппинге (включая ручной/автоматический)
         """
         total_servers = HAProxyServer.query.filter(
             HAProxyServer.removed_at.is_(None)
@@ -282,9 +300,20 @@ class HAProxyMapper:
 
         unmapped_servers = total_servers - mapped_servers
 
+        # Статистика по ручному маппингу
+        manual_mapped = HAProxyServer.query.filter(
+            HAProxyServer.application_id.isnot(None),
+            HAProxyServer.is_manual_mapping == True,
+            HAProxyServer.removed_at.is_(None)
+        ).count()
+
+        auto_mapped = mapped_servers - manual_mapped
+
         return {
             'total': total_servers,
             'mapped': mapped_servers,
             'unmapped': unmapped_servers,
+            'manual_mapped': manual_mapped,
+            'auto_mapped': auto_mapped,
             'mapping_rate': round(mapped_servers / total_servers * 100, 2) if total_servers > 0 else 0
         }

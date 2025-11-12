@@ -31,8 +31,12 @@ const HAProxyManager = {
         // Загружаем данные
         await this.loadData();
 
-        // Автообновление каждые 30 секунд
-        this.startAutoRefresh(30000);
+        // Автообновление - читаем интервал из select
+        const intervalSelect = document.getElementById('refresh-interval-select');
+        const interval = parseInt(intervalSelect.value, 10);
+        if (interval > 0) {
+            this.startAutoRefresh(interval);
+        }
 
         this.initialized = true;
     },
@@ -69,6 +73,12 @@ const HAProxyManager = {
                     this.handleBulkAction(action);
                 }
             });
+        });
+
+        // Обработчик изменения интервала автообновления
+        document.getElementById('refresh-interval-select').addEventListener('change', (e) => {
+            const interval = parseInt(e.target.value, 10);
+            this.setRefreshInterval(interval);
         });
     },
 
@@ -234,6 +244,23 @@ const HAProxyManager = {
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval);
             this.refreshInterval = null;
+        }
+    },
+
+    /**
+     * Установить интервал автообновления
+     * @param {number} interval - Интервал в миллисекундах (0 = отключено)
+     */
+    setRefreshInterval(interval) {
+        // Останавливаем текущее автообновление
+        this.stopAutoRefresh();
+
+        // Если интервал > 0, запускаем новое автообновление
+        if (interval > 0) {
+            this.startAutoRefresh(interval);
+            console.log(`Auto-refresh enabled: ${interval / 1000}s`);
+        } else {
+            console.log('Auto-refresh disabled');
         }
     },
 

@@ -201,6 +201,154 @@ const HAProxyAPI = {
             console.error('Error clearing cache:', error);
             throw error;
         }
+    },
+
+    // ==================== Manual Mapping Operations ====================
+
+    /**
+     * Установить ручной маппинг HAProxy сервера на приложение
+     * @param {number} serverId - ID HAProxy сервера
+     * @param {number} applicationId - ID приложения
+     * @param {string} notes - Заметки о маппинге
+     * @returns {Promise<Object>}
+     */
+    async mapServer(serverId, applicationId, notes = '') {
+        try {
+            const response = await fetch(`${this.baseUrl}/servers/${serverId}/map`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    application_id: applicationId,
+                    notes: notes
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error(`Error mapping server ${serverId}:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Удалить маппинг HAProxy сервера
+     * @param {number} serverId - ID HAProxy сервера
+     * @param {string} notes - Причина удаления
+     * @returns {Promise<Object>}
+     */
+    async unmapServer(serverId, notes = 'Маппинг удален вручную') {
+        try {
+            const response = await fetch(`${this.baseUrl}/servers/${serverId}/unmap`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    notes: notes
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error(`Error unmapping server ${serverId}:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Получить список несвязанных HAProxy серверов
+     * @param {number} backendId - Фильтр по backend (optional)
+     * @param {number} instanceId - Фильтр по instance (optional)
+     * @returns {Promise<Object>}
+     */
+    async getUnmappedServers(backendId = null, instanceId = null) {
+        try {
+            let url = `${this.baseUrl}/servers/unmapped`;
+            const params = new URLSearchParams();
+
+            if (backendId) params.append('backend_id', backendId);
+            if (instanceId) params.append('instance_id', instanceId);
+
+            if (params.toString()) {
+                url += '?' + params.toString();
+            }
+
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching unmapped servers:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Получить историю изменений маппинга сервера
+     * @param {number} serverId - ID HAProxy сервера
+     * @param {number} limit - Максимальное количество записей
+     * @returns {Promise<Object>}
+     */
+    async getMappingHistory(serverId, limit = 50) {
+        try {
+            const response = await fetch(`${this.baseUrl}/servers/${serverId}/mapping-history?limit=${limit}`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error(`Error fetching mapping history for server ${serverId}:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Поиск приложений для маппинга HAProxy сервера
+     * @param {number} serverId - ID HAProxy сервера
+     * @param {string} query - Поисковый запрос (optional)
+     * @returns {Promise<Object>}
+     */
+    async searchApplications(serverId, query = '') {
+        try {
+            let url = `${this.baseUrl}/applications/search?server_id=${serverId}`;
+            if (query) {
+                url += `&query=${encodeURIComponent(query)}`;
+            }
+
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error(`Error searching applications for server ${serverId}:`, error);
+            throw error;
+        }
     }
 };
 

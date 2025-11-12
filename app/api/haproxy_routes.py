@@ -364,6 +364,321 @@ def clear_cache():
         }), 500
 
 
+# ==================== Manual Mapping Operations ====================
+
+@bp.route('/haproxy/servers/<int:server_id>/map', methods=['POST'])
+def map_server_to_application(server_id):
+    """
+    Установить ручной маппинг HAProxy сервера на приложение.
+
+    Args:
+        server_id: ID HAProxy сервера
+
+    Body:
+        application_id: int - ID приложения для связывания
+        notes: str (optional) - Заметки о маппинге
+    """
+    try:
+        from app.models.application import Application
+
+        data = request.json
+        if not data or 'application_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Отсутствует application_id'
+            }), 400
+
+        # Получаем HAProxy сервер
+        haproxy_server = HAProxyServer.query.get(server_id)
+        if not haproxy_server:
+            return jsonify({
+                'success': False,
+                'error': 'HAProxy сервер не найден'
+            }), 404
+
+        # Получаем приложение
+        application_id = data['application_id']
+        application = Application.query.get(application_id)
+        if not application:
+            return jsonify({
+                'success': False,
+                'error': f'Приложение с ID {application_id} не найдено'
+            }), 404
+
+        # Проверка: приложение должно быть на сервере с тем же IP, что и HAProxy server
+        if haproxy_server.addr:
+            server_ip = haproxy_server.addr.split(':')[0] if ':' in haproxy_server.addr else None
+            if server_ip and application.ip != server_ip:
+                return jsonify({
+                    'success': False,
+                    'error': f'IP приложения ({application.ip}) не совпадает с IP сервера в бэкэнде ({server_ip})'
+                }), 400
+
+        notes = data.get('notes', '')
+
+        # Устанавливаем ручной маппинг
+        haproxy_server.map_to_application(
+            application_id=application_id,
+            is_manual=True,
+            mapped_by='admin',  # Статическое значение согласно требованиям
+            notes=notes
+        )
+
+        db.session.commit()
+
+        logger.info(f"Установлен ручной маппинг: {haproxy_server.server_name} -> {application.name}")
+
+        return jsonify({
+            'success': True,
+            'message': f'Сервер {haproxy_server.server_name} успешно связан с приложением {application.name}',
+            'server': haproxy_server.to_dict(include_application=True)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error mapping server {server_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/servers/<int:server_id>/unmap', methods=['POST'])
+def unmap_server_from_application(server_id):
+    """
+    Удалить маппинг HAProxy сервера (как ручной, так и автоматический).
+
+    Args:
+        server_id: ID HAProxy сервера
+
+    Body:
+        notes: str (optional) - Причина удаления маппинга
+    """
+    try:
+        data = request.json or {}
+
+        # Получаем HAProxy сервер
+        haproxy_server = HAProxyServer.query.get(server_id)
+        if not haproxy_server:
+            return jsonify({
+                'success': False,
+                'error': 'HAProxy сервер не найден'
+            }), 404
+
+        if not haproxy_server.application_id:
+            return jsonify({
+                'success': False,
+                'error': 'Сервер не связан с приложением'
+            }), 400
+
+        old_app_id = haproxy_server.application_id
+        notes = data.get('notes', 'Маппинг удален вручную')
+
+        # Удаляем маппинг (записывается в историю через map_to_application)
+        haproxy_server.map_to_application(
+            application_id=None,
+            is_manual=False,  # Сбрасываем флаг ручного маппинга
+            mapped_by='admin',
+            notes=notes
+        )
+
+        db.session.commit()
+
+        logger.info(f"Удален маппинг для сервера {haproxy_server.server_name} (был привязан к app_id={old_app_id})")
+
+        return jsonify({
+            'success': True,
+            'message': f'Маппинг для сервера {haproxy_server.server_name} удален',
+            'server': haproxy_server.to_dict(include_application=True)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error unmapping server {server_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/servers/unmapped', methods=['GET'])
+def get_unmapped_servers():
+    """
+    Получить список HAProxy серверов без маппинга.
+
+    Query parameters:
+        backend_id: int (optional) - Фильтр по backend
+        instance_id: int (optional) - Фильтр по HAProxy instance
+    """
+    try:
+        backend_id = request.args.get('backend_id', type=int)
+        instance_id = request.args.get('instance_id', type=int)
+
+        # Базовый запрос: серверы без application_id
+        query = HAProxyServer.query.filter(
+            HAProxyServer.application_id.is_(None),
+            HAProxyServer.removed_at.is_(None)
+        )
+
+        # Фильтрация по backend
+        if backend_id:
+            query = query.filter(HAProxyServer.backend_id == backend_id)
+
+        # Фильтрация по instance
+        if instance_id:
+            query = query.join(HAProxyBackend).filter(
+                HAProxyBackend.haproxy_instance_id == instance_id
+            )
+
+        unmapped_servers = query.all()
+
+        result = {
+            'success': True,
+            'count': len(unmapped_servers),
+            'servers': [server.to_dict(include_backend=True) for server in unmapped_servers]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error getting unmapped servers: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/servers/<int:server_id>/mapping-history', methods=['GET'])
+def get_server_mapping_history(server_id):
+    """
+    Получение истории изменений маппинга HAProxy сервера.
+
+    Args:
+        server_id: ID HAProxy сервера
+
+    Query parameters:
+        limit: максимальное количество записей (по умолчанию 50)
+    """
+    try:
+        from app.models.haproxy import HAProxyMappingHistory
+
+        server = HAProxyServer.query.get(server_id)
+        if not server:
+            return jsonify({
+                'success': False,
+                'error': 'HAProxy сервер не найден'
+            }), 404
+
+        limit = request.args.get('limit', 50, type=int)
+
+        history = HAProxyMappingHistory.query.filter_by(
+            haproxy_server_id=server_id
+        ).order_by(HAProxyMappingHistory.changed_at.desc()).limit(limit).all()
+
+        result = {
+            'success': True,
+            'server_id': server_id,
+            'server_name': server.server_name,
+            'count': len(history),
+            'history': [h.to_dict() for h in history]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error getting mapping history for server {server_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/applications/search', methods=['GET'])
+def search_applications_for_mapping():
+    """
+    Поиск приложений для маппинга HAProxy сервера.
+
+    Query parameters:
+        server_id: int (required) - ID HAProxy сервера (для фильтрации по IP)
+        query: str (optional) - Поисковый запрос по имени приложения
+    """
+    try:
+        from app.models.application import Application
+
+        server_id = request.args.get('server_id', type=int)
+        if not server_id:
+            return jsonify({
+                'success': False,
+                'error': 'Параметр server_id обязателен'
+            }), 400
+
+        # Получаем HAProxy сервер
+        haproxy_server = HAProxyServer.query.get(server_id)
+        if not haproxy_server:
+            return jsonify({
+                'success': False,
+                'error': 'HAProxy сервер не найден'
+            }), 404
+
+        # Извлекаем IP из адреса HAProxy сервера
+        server_ip = None
+        if haproxy_server.addr and ':' in haproxy_server.addr:
+            server_ip = haproxy_server.addr.split(':')[0]
+
+        if not server_ip:
+            return jsonify({
+                'success': False,
+                'error': 'Не удалось определить IP адрес HAProxy сервера'
+            }), 400
+
+        # Подзапрос для получения ID приложений, которые уже замаплены на HAProxy серверы
+        mapped_app_ids = db.session.query(HAProxyServer.application_id).filter(
+            HAProxyServer.application_id.isnot(None),
+            HAProxyServer.removed_at.is_(None)
+        ).subquery()
+
+        # Ищем приложения с таким же IP, исключая уже замапленные
+        query_obj = Application.query.filter(
+            Application.ip == server_ip,
+            ~Application.id.in_(mapped_app_ids)  # Исключаем уже замапленные приложения
+        )
+
+        # Дополнительный поиск по имени, если указан
+        search_query = request.args.get('query', '').strip()
+        if search_query:
+            query_obj = query_obj.filter(
+                Application.name.ilike(f'%{search_query}%')
+            )
+
+        applications = query_obj.all()
+
+        result = {
+            'success': True,
+            'server_id': server_id,
+            'server_name': haproxy_server.server_name,
+            'server_ip': server_ip,
+            'count': len(applications),
+            'applications': [{
+                'id': app.id,
+                'name': app.name,
+                'ip': app.ip,
+                'port': app.port,
+                'status': app.status,
+                'server_name': app.server.name if app.server else None,
+                'server_id': app.server_id
+            } for app in applications]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error searching applications: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # ==================== CRUD Operations for HAProxy Instances ====================
 
 @bp.route('/haproxy/instances', methods=['POST'])
@@ -567,6 +882,72 @@ def delete_haproxy_instance(instance_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deleting HAProxy instance {instance_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/mappings/all', methods=['GET'])
+def get_all_mappings():
+    """
+    Получение всех маппингов HAProxy серверов на приложения.
+
+    Возвращает структуру:
+    {
+        "hostname1": [
+            {
+                "app_name": "app1",
+                "server_addr": "10.0.0.1:8080",
+                "app_addr": "10.0.0.1:8080",
+                "backend_name": "backend1",
+                "server_name": "server1"
+            }
+        ],
+        "hostname2": [...]
+    }
+    """
+    try:
+        from app.models.application import Application
+        from collections import defaultdict
+
+        # Получаем все замапленные HAProxy серверы с join к приложениям и бэкендам
+        haproxy_servers = db.session.query(HAProxyServer).join(
+            HAProxyBackend, HAProxyServer.backend_id == HAProxyBackend.id
+        ).join(
+            Application, HAProxyServer.application_id == Application.id
+        ).join(
+            Server, Application.server_id == Server.id
+        ).filter(
+            HAProxyServer.application_id.isnot(None),
+            HAProxyServer.removed_at.is_(None)
+        ).all()
+
+        # Группируем по hostname
+        mappings_by_host = defaultdict(list)
+
+        for haproxy_server in haproxy_servers:
+            app = haproxy_server.application
+            backend = haproxy_server.backend
+            hostname = app.server.name if app.server else "Unknown"
+
+            mapping_info = {
+                'app_name': app.name,
+                'server_addr': haproxy_server.addr or '',
+                'app_addr': f"{app.ip}:{app.port}" if app.ip and app.port else '',
+                'backend_name': backend.backend_name if backend else '',
+                'server_name': haproxy_server.server_name or ''
+            }
+
+            mappings_by_host[hostname].append(mapping_info)
+
+        # Сортируем результаты для консистентности
+        result = dict(sorted(mappings_by_host.items()))
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error getting all mappings: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

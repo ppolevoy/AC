@@ -54,6 +54,20 @@
             <button id="collapse-all-btn" class="action-btn secondary-btn">
                 Свернуть все
             </button>
+
+            <div class="filter-group" style="margin-left: auto;">
+                <label>Автообновление:</label>
+                <div class="select-container">
+                    <select id="refresh-interval-select" class="filter-select">
+                        <option value="0">Откл.</option>
+                        <option value="5000">5 сек</option>
+                        <option value="15000">15 сек</option>
+                        <option value="30000" selected>30 сек</option>
+                        <option value="60000">60 сек</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
         </div>
     </div>
 
