@@ -82,7 +82,7 @@ class HAProxyService:
             HAProxyService._cache.pop(key, None)
             HAProxyService._cache_timestamps.pop(key, None)
         if keys_to_remove:
-            logger.info(f"Очищено {len(keys_to_remove)} записей кэша для server_id={server_id}, instance={instance_name}")
+            logger.debug(f"Очищено {len(keys_to_remove)} записей кэша для server_id={server_id}, instance={instance_name}")
 
     @staticmethod
     def _safe_int(value, default=None):
@@ -109,7 +109,7 @@ class HAProxyService:
             Tuple[success, instances_list]
         """
         url = f"http://{server.ip}:{server.port}/api/v1/haproxy/instances"
-        logger.info(f"Получение списка HAProxy instances с {server.name} - {url}")
+        logger.debug(f"Получение списка HAProxy instances с {server.name}")
 
         retry_count = 0
         last_error = None
@@ -125,10 +125,10 @@ class HAProxyService:
                             # Парсим ответ FAgent
                             if data.get('success') and 'data' in data:
                                 instances = data['data'].get('instances', [])
-                                logger.info(f"Получено {len(instances)} HAProxy instances из {server.name}")
+                                logger.debug(f"Получено {len(instances)} HAProxy instances из {server.name}")
                                 return True, instances
                             else:
-                                logger.warning(f"Некорректный формат ответа от FAgent: {data}")
+                                logger.error(f"Некорректный формат ответа от FAgent: {data}")
                                 return False, []
                         else:
                             error_text = await response.text()
@@ -183,11 +183,11 @@ class HAProxyService:
         cache_key = HAProxyService._get_cache_key(server.id, instance_name, 'backends')
         cached_data = HAProxyService._get_cache(cache_key)
         if cached_data is not None:
-            logger.info(f"Возвращаем {len(cached_data)} backends из кэша для {server.name}:{instance_name}")
+            logger.debug(f"Возвращаем {len(cached_data)} backends из кэша для {server.name}:{instance_name}")
             return True, cached_data
 
         url = HAProxyService._build_url(server, instance_name, 'backends')
-        logger.info(f"Получение backends из HAProxy {server.name}:{instance_name} - {url}")
+        logger.debug(f"Получение backends из HAProxy {server.name}:{instance_name}")
 
         retry_count = 0
         last_error = None
@@ -201,7 +201,7 @@ class HAProxyService:
                             data = await response.json()
                             # FAgent возвращает структуру: {success: true, data: {backends: [...]}}
                             backends = data.get('data', {}).get('backends', [])
-                            logger.info(f"Получено {len(backends)} backends из {server.name}:{instance_name}")
+                            logger.debug(f"Получено {len(backends)} backends из {server.name}:{instance_name}")
 
                             # Сохраняем в кэш
                             HAProxyService._set_cache(cache_key, backends)
@@ -210,7 +210,7 @@ class HAProxyService:
                         else:
                             error_text = await response.text()
                             last_error = f"HTTP {response.status}: {error_text}"
-                            logger.warning(f"Ошибка получения backends: {last_error}")
+                            logger.error(f"Ошибка получения backends: {last_error}")
 
                             if response.status >= 500:
                                 # Серверная ошибка - повторяем
@@ -261,11 +261,11 @@ class HAProxyService:
         cache_key = HAProxyService._get_cache_key(server.id, instance_name, f'backend:{backend_name}')
         cached_data = HAProxyService._get_cache(cache_key)
         if cached_data is not None:
-            logger.info(f"Возвращаем {len(cached_data)} серверов backend {backend_name} из кэша для {server.name}:{instance_name}")
+            logger.debug(f"Возвращаем {len(cached_data)} серверов backend {backend_name} из кэша")
             return True, cached_data
 
         url = HAProxyService._build_url(server, instance_name, f'backends/{backend_name}/servers')
-        logger.info(f"Получение серверов backend {backend_name} из {server.name}:{instance_name}")
+        logger.debug(f"Получение серверов backend {backend_name} из {server.name}:{instance_name}")
 
         retry_count = 0
         last_error = None
@@ -279,7 +279,7 @@ class HAProxyService:
                             data = await response.json()
                             # FAgent возвращает структуру: {success: true, data: {servers: [...]}}
                             servers = data.get('data', {}).get('servers', [])
-                            logger.info(f"Получено {len(servers)} серверов из backend {backend_name}")
+                            logger.debug(f"Получено {len(servers)} серверов из backend {backend_name}")
 
                             # Сохраняем в кэш
                             HAProxyService._set_cache(cache_key, servers)
@@ -288,7 +288,7 @@ class HAProxyService:
                         else:
                             error_text = await response.text()
                             last_error = f"HTTP {response.status}: {error_text}"
-                            logger.warning(f"Ошибка получения серверов backend: {last_error}")
+                            logger.error(f"Ошибка получения серверов backend: {last_error}")
 
                             if response.status >= 500:
                                 retry_count += 1
@@ -333,7 +333,7 @@ class HAProxyService:
         Returns:
             bool: True если синхронизация успешна
         """
-        logger.info(f"Начало синхронизации HAProxy инстанса {haproxy_instance.name} на {haproxy_instance.server.name}")
+        logger.debug(f"Syncing HAProxy instance {haproxy_instance.name} on {haproxy_instance.server.name}")
 
         try:
             server = haproxy_instance.server
@@ -343,7 +343,6 @@ class HAProxyService:
 
             # Получаем список backends
             success, backends_data = await HAProxyService.get_backends(server, haproxy_instance.name)
-            logger.info(f"Результат get_backends для {haproxy_instance.name}: success={success}, count={len(backends_data) if backends_data else 0}")
 
             if not success:
                 error_msg = "Не удалось получить список backends"
@@ -378,7 +377,7 @@ class HAProxyService:
                     # Восстанавливаем если был удален
                     if backend.is_removed():
                         backend.restore()
-                        logger.info(f"Backend {backend_name} восстановлен")
+                        logger.debug(f"Backend {backend_name} восстановлен")
                 else:
                     # Создаем новый backend
                     backend = HAProxyBackend(
@@ -387,7 +386,7 @@ class HAProxyService:
                     )
                     db.session.add(backend)
                     db.session.flush()  # Получить ID
-                    logger.info(f"Создан новый backend: {backend_name}")
+                    logger.debug(f"Создан новый backend: {backend_name}")
 
                 # Получаем серверы в backend
                 success, servers_data = await HAProxyService.get_backend_servers(
@@ -418,7 +417,7 @@ class HAProxyService:
                         # Обновляем существующий сервер
                         if haproxy_server.is_removed():
                             haproxy_server.restore()
-                            logger.info(f"Сервер {server_name} восстановлен")
+                            logger.debug(f"Сервер {server_name} восстановлен")
 
                         # Обновляем статус и метрики
                         new_status = server_data.get('status')
@@ -450,7 +449,7 @@ class HAProxyService:
                             smax=HAProxyService._safe_int(server_data.get('smax'), 0)
                         )
                         db.session.add(haproxy_server)
-                        logger.info(f"Создан новый сервер: {server_name} в backend {backend_name}")
+                        logger.debug(f"Создан новый сервер: {server_name} в backend {backend_name}")
 
                 # Мягко удаляем серверы, которых больше нет
                 missing_servers = HAProxyServer.query.filter(
@@ -461,7 +460,7 @@ class HAProxyService:
 
                 for missing_server in missing_servers:
                     missing_server.soft_delete()
-                    logger.info(f"Сервер {missing_server.server_name} помечен как удаленный (soft delete)")
+                    logger.debug(f"Сервер {missing_server.server_name} помечен как удаленный")
 
             # Мягко удаляем backends, которых больше нет
             missing_backends = HAProxyBackend.query.filter(
@@ -472,7 +471,7 @@ class HAProxyService:
 
             for missing_backend in missing_backends:
                 missing_backend.soft_delete()
-                logger.info(f"Backend {missing_backend.backend_name} помечен как удаленный (soft delete)")
+                logger.debug(f"Backend {missing_backend.backend_name} помечен как удаленный")
 
             # Отмечаем успешную синхронизацию
             haproxy_instance.mark_sync_success()
@@ -493,4 +492,4 @@ class HAProxyService:
         """Очистить весь кэш"""
         HAProxyService._cache.clear()
         HAProxyService._cache_timestamps.clear()
-        logger.info("Кэш HAProxyService очищен")
+        logger.debug("Кэш HAProxyService очищен")

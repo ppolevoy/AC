@@ -7,6 +7,7 @@ API endpoints для управления HAProxy интеграцией.
 from flask import jsonify, request
 import logging
 import asyncio
+from datetime import datetime
 
 from app.api import bp
 from app import db
@@ -386,17 +387,13 @@ def create_haproxy_instance():
             }), 400
 
         # Валидация обязательных полей
-        if 'name' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Поле "name" обязательно'
-            }), 400
-
-        if 'server_id' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Поле "server_id" обязательно'
-            }), 400
+        required_fields = {'name': 'Имя инстанса', 'server_id': 'ID сервера'}
+        for field, description in required_fields.items():
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'{description} обязательно'
+                }), 400
 
         # Проверка существования сервера
         server = Server.query.get(data['server_id'])
