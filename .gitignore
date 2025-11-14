@@ -64,3 +64,12 @@ integrations/mock_eureka_agent/test_mock_api.sh
 migrations/add_connect_disconnect_events.sql
 migrations/add_eureka_endpoint_unique_constraint.sql
 migrations/apply_connect_disconnect_migration.py
+integrations/mock_haproxy_agent/.dockerignore
+integrations/mock_haproxy_agent/docker-compose.yml
+integrations/mock_haproxy_agent/Dockerfile
+integrations/mock_haproxy_agent/mock_haproxy_data.json
+integrations/mock_haproxy_agent/mock_server.py
+integrations/mock_haproxy_agent/QUICKSTART.md
+integrations/mock_haproxy_agent/README.md
+integrations/mock_haproxy_agent/requirements.txt
+integrations/mock_haproxy_agent/test_api.sh
