@@ -34,11 +34,16 @@ def create_app(config_name=None):
         from app.models.application_group import ApplicationGroup
         from app.models.event import Event
         from app.models.orchestrator_playbook import OrchestratorPlaybook
+        from app.models.eureka import EurekaServer, EurekaApplication, EurekaInstance
     
     # Регистрация маршрутов API
     from app.api import bp as api_bp
     app.register_blueprint(api_bp, url_prefix='/api')
-    
+
+    # Регистрация Eureka API
+    from app.api.eureka_routes import eureka_bp
+    app.register_blueprint(eureka_bp)
+
     # Регистрация основных маршрутов для веб-интерфейса
     from app.routes import bp as main_bp
     app.register_blueprint(main_bp)

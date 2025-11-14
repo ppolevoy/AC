@@ -50,6 +50,10 @@
                 <span class="menu-icon">⚖️</span>
                 <span>HAProxy</span>
             </a>
+            <a href="{{ url_for('main.eureka') }}" class="menu-item {% if request.endpoint == 'main.eureka' %}active{% endif %}">
+                <span class="menu-icon">🔍</span>
+                <span>Eureka</span>
+            </a>
             <a href="{{ url_for('main.settings') }}" class="menu-item {% if request.endpoint == 'main.settings' %}active{% endif %}">
                 <span class="menu-icon">⚙️</span>
                 <span>Настройки</span>

@@ -15,6 +15,9 @@ class Server(db.Model):
     # HAProxy integration
     is_haproxy_node = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Eureka integration
+    is_eureka_node = db.Column(db.Boolean, default=False, nullable=False)
+
     applications = db.relationship('Application', backref='server', lazy='dynamic', cascade="all, delete-orphan")
     events = db.relationship('Event', backref='server', lazy='dynamic', cascade="all, delete-orphan")
     

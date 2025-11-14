@@ -96,6 +96,26 @@ class Config:
     HAPROXY_REQUEST_TIMEOUT = int(os.environ.get('HAPROXY_REQUEST_TIMEOUT', '10'))  # секунды
     HAPROXY_MAX_RETRIES = int(os.environ.get('HAPROXY_MAX_RETRIES', '3'))  # количество попыток
 
+    # Настройки Eureka интеграции
+    EUREKA_ENABLED = os.environ.get('EUREKA_ENABLED', 'true').lower() == 'true'
+
+    # Параметры подключения
+    EUREKA_REQUEST_TIMEOUT = int(os.environ.get('EUREKA_REQUEST_TIMEOUT', '10'))  # секунды
+    EUREKA_MAX_RETRIES = int(os.environ.get('EUREKA_MAX_RETRIES', '3'))  # количество попыток
+    EUREKA_RETRY_DELAY = int(os.environ.get('EUREKA_RETRY_DELAY', '1'))  # секунды задержки между попытками
+
+    # Интервалы синхронизации
+    EUREKA_POLLING_INTERVAL = int(os.environ.get('EUREKA_POLLING_INTERVAL', '60'))  # секунды опроса
+    EUREKA_HEALTH_CHECK_INTERVAL = int(os.environ.get('EUREKA_HEALTH_CHECK_INTERVAL', '30'))  # секунды для health check
+
+    # Кэширование
+    EUREKA_CACHE_TTL = int(os.environ.get('EUREKA_CACHE_TTL', '30'))  # секунды
+    EUREKA_CACHE_MAX_SIZE = int(os.environ.get('EUREKA_CACHE_MAX_SIZE', '1000'))  # максимальный размер кэша
+
+    # Хранение истории
+    EUREKA_HISTORY_RETENTION_DAYS = int(os.environ.get('EUREKA_HISTORY_RETENTION_DAYS', '30'))  # дней хранения истории
+    EUREKA_MAX_HISTORY_RECORDS = int(os.environ.get('EUREKA_MAX_HISTORY_RECORDS', '10000'))  # максимальное количество записей
+
     @staticmethod
     def init_app(app):
         # Создание директории для логов, если её нет

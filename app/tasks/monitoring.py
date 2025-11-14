@@ -88,6 +88,15 @@ class MonitoringTasks:
                     except Exception as e:
                         logger.error(f"Ошибка при синхронизации HAProxy: {str(e)}")
 
+                # Запускаем задачу синхронизации Eureka (если включена)
+                with self.app.app_context():
+                    try:
+                        from app.config import Config
+                        if Config.EUREKA_ENABLED:
+                            self.loop.run_until_complete(self._sync_eureka_servers())
+                    except Exception as e:
+                        logger.error(f"Ошибка при синхронизации Eureka: {str(e)}")
+
                 # Ждем до следующего цикла опроса
                 from app.config import Config
                 logger.info(f"Следующий опрос через {Config.POLLING_INTERVAL} секунд")
@@ -189,23 +198,70 @@ class MonitoringTasks:
             import traceback
             logger.error(traceback.format_exc())
 
+    async def _sync_eureka_servers(self):
+        """Синхронизация всех активных Eureka серверов"""
+        try:
+            from app.models.eureka import EurekaServer
+            from app.services.eureka_service import EurekaService
+            from app.services.eureka_mapper import EurekaMapper
+
+            # Получаем все активные Eureka серверы
+            eureka_servers = EurekaServer.query.filter_by(
+                is_active=True,
+                removed_at=None
+            ).all()
+
+            if not eureka_servers:
+                logger.debug("Нет активных Eureka серверов для синхронизации")
+                return
+
+            logger.info(f"Начинаем синхронизацию {len(eureka_servers)} Eureka серверов")
+
+            # Создаем список задач для асинхронного выполнения
+            tasks = []
+            for eureka_server in eureka_servers:
+                task = EurekaService.sync_eureka_server(eureka_server)
+                tasks.append(task)
+
+            # Запускаем все задачи асинхронно
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Обрабатываем результаты
+            success_count = sum(1 for r in results if r is True)
+            error_count = sum(1 for r in results if isinstance(r, Exception) or r is False)
+
+            logger.info(f"Синхронизация Eureka завершена: {success_count} успешно, {error_count} с ошибками")
+
+            # Выполняем маппинг экземпляров на приложения после синхронизации
+            try:
+                mapped_count, total_unmapped = EurekaMapper.map_instances_to_applications()
+                if total_unmapped > 0:
+                    logger.info(f"Маппинг Eureka экземпляров: {mapped_count}/{total_unmapped} сопоставлено")
+            except Exception as e:
+                logger.error(f"Ошибка при маппинге экземпляров: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при синхронизации Eureka серверов: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
     def _clean_old_events(self):
         """Очистка старых событий"""
         try:
             from app import db
             from app.models.event import Event
             from app.config import Config
-            
+
             # Определяем дату, старше которой события нужно удалить
             cutoff_date = datetime.utcnow() - timedelta(days=Config.CLEAN_EVENTS_OLDER_THAN)
-            
+
             # Удаляем старые события
             deleted_count = Event.query.filter(Event.timestamp < cutoff_date).delete()
             db.session.commit()
-            
+
             if deleted_count > 0:
                 logger.info(f"Удалено {deleted_count} старых событий")
-                
+
         except Exception as e:
             from app import db
             db.session.rollback()

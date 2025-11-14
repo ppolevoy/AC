@@ -16,3 +16,4 @@ from app.api import app_groups_routes
 from app.api import nexus_routes
 from app.api import orchestrator_routes
 from app.api import haproxy_routes
+from app.api import eureka_routes

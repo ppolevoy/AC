@@ -22,13 +22,14 @@ def run_async(coro):
         loop.close()
 
 
-def _build_server_response(server, include_haproxy=True):
+def _build_server_response(server, include_haproxy=True, include_eureka=True):
     """
     Вспомогательная функция для формирования server response.
 
     Args:
         server: Объект Server
         include_haproxy: Включать ли информацию о HAProxy instances
+        include_eureka: Включать ли информацию о Eureka server
 
     Returns:
         dict: Server response
@@ -40,6 +41,7 @@ def _build_server_response(server, include_haproxy=True):
         'port': server.port,
         'status': server.status,
         'is_haproxy_node': server.is_haproxy_node,
+        'is_eureka_node': server.is_eureka_node,
         'last_check': server.last_check.isoformat() if server.last_check else None
     }
 
@@ -55,6 +57,20 @@ def _build_server_response(server, include_haproxy=True):
                 'is_active': inst.is_active
             } for inst in instances
         ]
+
+    if include_eureka and server.is_eureka_node:
+        from app.models.eureka import EurekaServer
+        eureka_server = EurekaServer.query.filter_by(server_id=server.id, removed_at=None).first()
+        if eureka_server:
+            response['eureka_server'] = {
+                'id': eureka_server.id,
+                'eureka_host': eureka_server.eureka_host,
+                'eureka_port': eureka_server.eureka_port,
+                'is_active': eureka_server.is_active,
+                'last_sync': eureka_server.last_sync.isoformat() if eureka_server.last_sync else None
+            }
+        else:
+            response['eureka_server'] = None
 
     return response
 
@@ -167,6 +183,8 @@ def get_servers():
                 'ip': server.ip,
                 'port': server.port,
                 'status': server.status,
+                'is_haproxy_node': server.is_haproxy_node,
+                'is_eureka_node': server.is_eureka_node,
                 'last_check': server.last_check.isoformat() if server.last_check else None,
                 'app_count': app_count
             })
@@ -351,6 +369,30 @@ def update_server(server_id):
                 except Exception as e:
                     logger.exception(f"Ошибка при автоматическом обнаружении instances")
                     db.session.rollback()
+
+        # Eureka integration
+        if 'is_eureka_node' in data:
+            is_eureka_node = bool(data['is_eureka_node'])
+            old_value = server.is_eureka_node
+            logger.info(f"Eureka флаг изменяется для {server.name}: {old_value} -> {is_eureka_node}")
+            server.is_eureka_node = is_eureka_node
+
+            # Если Eureka узел выключается, удаляем Eureka server
+            if not is_eureka_node and old_value:
+                from app.models.eureka import EurekaServer
+
+                # Удаляем Eureka server на этом сервере (каскадное удаление очистит все связанные данные)
+                eureka_server = EurekaServer.query.filter_by(server_id=server.id, removed_at=None).first()
+                if eureka_server:
+                    from datetime import datetime
+                    eureka_server.removed_at = datetime.utcnow()
+                    eureka_server.is_active = False
+                    logger.info(f"Деактивирован Eureka server для {server.name}")
+
+            # Если Eureka узел включается, создаем Eureka server запись
+            elif is_eureka_node and not old_value:
+                logger.info(f"Eureka узел активирован для {server.name}")
+                # Создание Eureka server будет выполнено через UI или API
 
         db.session.commit()
 
