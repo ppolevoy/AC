@@ -73,3 +73,4 @@ integrations/mock_haproxy_agent/QUICKSTART.md
 integrations/mock_haproxy_agent/README.md
 integrations/mock_haproxy_agent/requirements.txt
 integrations/mock_haproxy_agent/test_api.sh
+integrations/haproxy-js-architecture-analysis.md
