@@ -52,3 +52,4 @@ migrations/add_haproxy_integration.sql
 migrations/add_is_haproxy_node_column.py
 migrations/apply_haproxy_migration.py
 migrations/apply_haproxy_sql_migration.py
+integrations/EUREKA_CONTROL_API.md
