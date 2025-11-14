@@ -594,6 +594,7 @@ class EurekaService:
                             service_name=service_name or app_name
                         )
                         db.session.add(eureka_instance)
+                        db.session.flush()  # Получить ID перед вызовом update_status
 
                     # Обновляем данные экземпляра
                     new_status = inst_data.get('status', 'UNKNOWN')

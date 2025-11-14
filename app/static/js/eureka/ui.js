@@ -5,16 +5,66 @@
 
 const EurekaUI = {
     /**
+     * Кэш DOM элементов
+     */
+    elements: {},
+
+    /**
+     * Текущий instance ID для модального окна
+     */
+    currentInstanceId: null,
+
+    /**
+     * Инициализация UI модуля
+     */
+    init() {
+        // Кэшируем DOM элементы
+        this.elements.serverFilter = document.getElementById('server-filter');
+        this.elements.appFilter = document.getElementById('app-filter');
+        this.elements.tbody = document.getElementById('instances-tbody');
+        this.elements.emptyMessage = document.getElementById('empty-message');
+        this.elements.tableContainer = document.getElementById('table-container');
+        this.elements.loglevelModal = document.getElementById('loglevel-modal');
+        this.elements.loggerNameInput = document.getElementById('logger-name');
+        this.elements.logLevelSelect = document.getElementById('log-level-select');
+        this.elements.durationInput = document.getElementById('duration');
+
+        // Статистика
+        this.elements.totalApps = document.getElementById('total-apps');
+        this.elements.totalInstances = document.getElementById('total-instances');
+        this.elements.upCount = document.getElementById('up-count');
+        this.elements.pausedCount = document.getElementById('paused-count');
+        this.elements.downCount = document.getElementById('down-count');
+        this.elements.startingCount = document.getElementById('starting-count');
+
+        // Привязать обработчик закрытия модального окна
+        this.attachModalHandlers();
+    },
+
+    /**
+     * Привязать обработчики для модального окна
+     */
+    attachModalHandlers() {
+        if (this.elements.loglevelModal) {
+            this.elements.loglevelModal.addEventListener('click', (e) => {
+                if (e.target === this.elements.loglevelModal || e.target.classList.contains('modal-overlay')) {
+                    this.closeLogLevelModal();
+                }
+            });
+        }
+    },
+
+    /**
      * Отрисовать статистику
      * @param {Object} stats - Статистика
      */
     renderStats(stats) {
-        document.getElementById('total-apps').textContent = stats.total_apps || 0;
-        document.getElementById('total-instances').textContent = stats.total_instances || 0;
-        document.getElementById('up-count').textContent = stats.up_count || 0;
-        document.getElementById('paused-count').textContent = stats.paused_count || 0;
-        document.getElementById('down-count').textContent = stats.down_count || 0;
-        document.getElementById('starting-count').textContent = stats.starting_count || 0;
+        if (this.elements.totalApps) this.elements.totalApps.textContent = stats.total_apps || 0;
+        if (this.elements.totalInstances) this.elements.totalInstances.textContent = stats.total_instances || 0;
+        if (this.elements.upCount) this.elements.upCount.textContent = stats.up_count || 0;
+        if (this.elements.pausedCount) this.elements.pausedCount.textContent = stats.paused_count || 0;
+        if (this.elements.downCount) this.elements.downCount.textContent = stats.down_count || 0;
+        if (this.elements.startingCount) this.elements.startingCount.textContent = stats.starting_count || 0;
     },
 
     /**
@@ -22,9 +72,9 @@ const EurekaUI = {
      * @param {Array} instances - Массив instances
      */
     renderInstancesTable(instances) {
-        const tbody = document.getElementById('instances-tbody');
-        const emptyMessage = document.getElementById('empty-message');
-        const tableContainer = document.getElementById('table-container');
+        const tbody = this.elements.tbody;
+        const emptyMessage = this.elements.emptyMessage;
+        const tableContainer = this.elements.tableContainer;
 
         if (!instances || instances.length === 0) {
             if (tbody) tbody.innerHTML = '';
@@ -37,7 +87,7 @@ const EurekaUI = {
         if (tableContainer) tableContainer.style.display = 'block';
 
         const rows = instances.map(instance => this.createInstanceRow(instance));
-        tbody.innerHTML = rows.join('');
+        if (tbody) tbody.innerHTML = rows.join('');
 
         // Привязать обработчики событий для кнопок действий
         this.attachActionHandlers();
@@ -248,15 +298,11 @@ const EurekaUI = {
      */
     showLoading() {
         // Убираем анимацию загрузки - просто очищаем таблицу
-        const tbody = document.getElementById('instances-tbody');
-        if (tbody) tbody.innerHTML = '';
+        if (this.elements.tbody) this.elements.tbody.innerHTML = '';
 
         // Показываем таблицу (с заголовком), скрываем сообщение
-        const tableContainer = document.getElementById('table-container');
-        if (tableContainer) tableContainer.style.display = 'block';
-
-        const emptyMessage = document.getElementById('empty-message');
-        if (emptyMessage) emptyMessage.style.display = 'none';
+        if (this.elements.tableContainer) this.elements.tableContainer.style.display = 'block';
+        if (this.elements.emptyMessage) this.elements.emptyMessage.style.display = 'none';
     },
 
     /**
@@ -264,14 +310,15 @@ const EurekaUI = {
      * @param {Array} servers - Список серверов
      */
     populateServerFilter(servers) {
-        const select = document.getElementById('server-filter');
-        select.innerHTML = '<option value="">Все серверы</option>';
+        if (!this.elements.serverFilter) return;
+
+        this.elements.serverFilter.innerHTML = '<option value="">Все серверы</option>';
 
         servers.forEach(server => {
             const option = document.createElement('option');
             option.value = server.id;
             option.textContent = `${server.eureka_host}:${server.eureka_port}`;
-            select.appendChild(option);
+            this.elements.serverFilter.appendChild(option);
         });
     },
 
@@ -280,8 +327,9 @@ const EurekaUI = {
      * @param {Array} apps - Список приложений
      */
     populateAppFilter(apps) {
-        const select = document.getElementById('app-filter');
-        select.innerHTML = '<option value="">Все приложения</option>';
+        if (!this.elements.appFilter) return;
+
+        this.elements.appFilter.innerHTML = '<option value="">Все приложения</option>';
 
         // Получаем уникальные имена приложений из instances
         const uniqueApps = new Set();
@@ -293,7 +341,7 @@ const EurekaUI = {
             const option = document.createElement('option');
             option.value = appName;
             option.textContent = appName;
-            select.appendChild(option);
+            this.elements.appFilter.appendChild(option);
         });
     },
 
@@ -415,66 +463,64 @@ const EurekaUI = {
      * @param {number} instanceId - ID instance
      */
     handleLogLevel(instanceId) {
-        // Сохранить instanceId для модального окна
-        window.currentInstanceId = instanceId;
+        // Сохранить instanceId в свойстве модуля
+        this.currentInstanceId = instanceId;
 
         // Показать модальное окно
-        const modal = document.getElementById('loglevel-modal');
-        if (modal) {
-            modal.classList.add('active');
-            modal.style.display = 'flex';
+        if (this.elements.loglevelModal) {
+            this.elements.loglevelModal.classList.add('active');
+            this.elements.loglevelModal.style.display = 'flex';
+        }
+    },
+
+    /**
+     * Закрыть модальное окно log level
+     */
+    closeLogLevelModal() {
+        if (this.elements.loglevelModal) {
+            this.elements.loglevelModal.classList.remove('active');
+            this.elements.loglevelModal.style.display = 'none';
+        }
+
+        // Очистить форму
+        if (this.elements.loggerNameInput) this.elements.loggerNameInput.value = '';
+        if (this.elements.logLevelSelect) this.elements.logLevelSelect.value = 'INFO';
+        if (this.elements.durationInput) this.elements.durationInput.value = '';
+    },
+
+    /**
+     * Применить изменение log level
+     */
+    async applyLogLevel() {
+        const instanceId = this.currentInstanceId;
+        const loggerName = this.elements.loggerNameInput ? this.elements.loggerNameInput.value.trim() : '';
+        const level = this.elements.logLevelSelect ? this.elements.logLevelSelect.value : 'INFO';
+        const duration = this.elements.durationInput ? this.elements.durationInput.value : '';
+
+        if (!loggerName) {
+            this.showError('Укажите имя logger');
+            return;
+        }
+
+        try {
+            const result = await EurekaAPI.setLogLevel(
+                instanceId,
+                loggerName,
+                level,
+                duration ? parseInt(duration) : null
+            );
+
+            if (result.success) {
+                this.showSuccess('Log level успешно изменен');
+                this.closeLogLevelModal();
+            } else {
+                this.showError(result.error || 'Не удалось изменить log level');
+            }
+        } catch (error) {
+            this.showError('Ошибка при изменении log level: ' + error.message);
         }
     }
 };
 
 // Экспортируем EurekaUI в глобальную область
 window.EurekaUI = EurekaUI;
-
-/**
- * Закрыть модальное окно log level
- */
-function closeLoglevelModal() {
-    const modal = document.getElementById('loglevel-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        modal.style.display = 'none';
-    }
-
-    // Очистить форму
-    document.getElementById('logger-name').value = '';
-    document.getElementById('log-level-select').value = 'INFO';
-    document.getElementById('duration').value = '';
-}
-
-/**
- * Применить изменение log level
- */
-async function applyLoglevel() {
-    const instanceId = window.currentInstanceId;
-    const loggerName = document.getElementById('logger-name').value.trim();
-    const level = document.getElementById('log-level-select').value;
-    const duration = document.getElementById('duration').value;
-
-    if (!loggerName) {
-        EurekaUI.showError('Укажите имя logger');
-        return;
-    }
-
-    try {
-        const result = await EurekaAPI.setLogLevel(
-            instanceId,
-            loggerName,
-            level,
-            duration ? parseInt(duration) : null
-        );
-
-        if (result.success) {
-            EurekaUI.showSuccess('Log level успешно изменен');
-            closeLoglevelModal();
-        } else {
-            EurekaUI.showError(result.error || 'Не удалось изменить log level');
-        }
-    } catch (error) {
-        EurekaUI.showError('Ошибка при изменении log level: ' + error.message);
-    }
-}

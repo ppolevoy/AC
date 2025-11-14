@@ -76,8 +76,7 @@ class EurekaMapper:
 
         # Ищем приложение с соответствующим eureka_url
         application = Application.query.filter(
-            Application.eureka_url == ip_port,
-            Application.removed_at.is_(None)
+            Application.eureka_url == ip_port
         ).first()
 
         if application:
@@ -103,8 +102,7 @@ class EurekaMapper:
             db.or_(
                 db.func.lower(db.text("servers.ip")) == instance.ip_address.lower(),
                 db.text("servers.ip") == instance.ip_address
-            ),
-            Application.removed_at.is_(None)
+            )
         ).all()
 
         if not applications:

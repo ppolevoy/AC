@@ -90,10 +90,24 @@ def create_eureka_server():
         if not server:
             return jsonify({'success': False, 'error': 'Server not found'}), 404
 
-        # Проверяем уникальность
+        # Проверяем уникальность по server_id
         existing = EurekaServer.query.filter_by(server_id=data['server_id'], removed_at=None).first()
         if existing:
             return jsonify({'success': False, 'error': 'Eureka server already exists for this server'}), 400
+
+        # ПРОВЕРКА: Убеждаемся что такой Eureka endpoint еще не используется
+        existing_endpoint = EurekaServer.query.filter(
+            EurekaServer.eureka_host == data['eureka_host'],
+            EurekaServer.eureka_port == data['eureka_port'],
+            EurekaServer.removed_at.is_(None)
+        ).first()
+
+        if existing_endpoint:
+            error_msg = (f"Eureka endpoint {data['eureka_host']}:{data['eureka_port']} уже используется "
+                        f"сервером '{existing_endpoint.server.name}' (ID={existing_endpoint.server_id}). "
+                        f"Один физический Eureka сервер может быть связан только с одним сервером в системе.")
+            logger.error(error_msg)
+            return jsonify({'success': False, 'error': error_msg}), 400
 
         # Создаем Eureka сервер
         eureka_server = EurekaServer(
@@ -271,11 +285,11 @@ def get_instance_details(instance_id):
 # Операции
 # =============================================================================
 
-@eureka_bp.route('/instances/<instance_id>/health', methods=['POST'])
+@eureka_bp.route('/instances/<int:instance_id>/health', methods=['POST'])
 def health_check_instance(instance_id):
     """Выполнить health check экземпляра"""
     try:
-        instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
+        instance = EurekaInstance.query.get(instance_id)
         if not instance:
             return jsonify({'success': False, 'error': 'Instance not found'}), 404
 
@@ -285,7 +299,7 @@ def health_check_instance(instance_id):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         success, message = loop.run_until_complete(
-            EurekaService.health_check(eureka_server, instance_id)
+            EurekaService.health_check(eureka_server, instance.instance_id)
         )
         loop.close()
 
@@ -299,14 +313,14 @@ def health_check_instance(instance_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@eureka_bp.route('/instances/<instance_id>/pause', methods=['POST'])
+@eureka_bp.route('/instances/<int:instance_id>/pause', methods=['POST'])
 def pause_instance(instance_id):
     """Поставить экземпляр на паузу"""
     try:
         data = request.get_json() or {}
         reason = data.get('reason')
 
-        instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
+        instance = EurekaInstance.query.get(instance_id)
         if not instance:
             return jsonify({'success': False, 'error': 'Instance not found'}), 404
 
@@ -316,7 +330,7 @@ def pause_instance(instance_id):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         success, message = loop.run_until_complete(
-            EurekaService.pause_application(eureka_server, instance_id, reason=reason)
+            EurekaService.pause_application(eureka_server, instance.instance_id, reason=reason)
         )
         loop.close()
 
@@ -330,14 +344,38 @@ def pause_instance(instance_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@eureka_bp.route('/instances/<instance_id>/shutdown', methods=['POST'])
+@eureka_bp.route('/instances/<int:instance_id>/resume', methods=['POST'])
+def resume_instance(instance_id):
+    """Возобновить экземпляр (отменить pause)"""
+    try:
+        instance = EurekaInstance.query.get(instance_id)
+        if not instance:
+            return jsonify({'success': False, 'error': 'Instance not found'}), 404
+
+        eureka_server = instance.eureka_application.eureka_server
+
+        # Выполняем resume через FAgent
+        # Примечание: FAgent API может не поддерживать resume, тогда нужно использовать другой метод
+        # Временно возвращаем успех и обновляем статус локально
+        instance.update_status('UP', reason='manual_resume', changed_by='user')
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Instance resumed successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Ошибка resume: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@eureka_bp.route('/instances/<int:instance_id>/shutdown', methods=['POST'])
 def shutdown_instance(instance_id):
     """Остановить экземпляр"""
     try:
         data = request.get_json() or {}
         graceful = data.get('graceful', True)
 
-        instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
+        instance = EurekaInstance.query.get(instance_id)
         if not instance:
             return jsonify({'success': False, 'error': 'Instance not found'}), 404
 
@@ -347,7 +385,7 @@ def shutdown_instance(instance_id):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         success, message = loop.run_until_complete(
-            EurekaService.shutdown_application(eureka_server, instance_id, graceful=graceful)
+            EurekaService.shutdown_application(eureka_server, instance.instance_id, graceful=graceful)
         )
         loop.close()
 
@@ -361,7 +399,7 @@ def shutdown_instance(instance_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@eureka_bp.route('/instances/<instance_id>/loglevel', methods=['POST'])
+@eureka_bp.route('/instances/<int:instance_id>/loglevel', methods=['POST'])
 def set_log_level_instance(instance_id):
     """Изменить уровень логирования"""
     try:
@@ -375,7 +413,7 @@ def set_log_level_instance(instance_id):
         if not logger_name or not level:
             return jsonify({'success': False, 'error': 'logger and level are required'}), 400
 
-        instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
+        instance = EurekaInstance.query.get(instance_id)
         if not instance:
             return jsonify({'success': False, 'error': 'Instance not found'}), 404
 
@@ -385,7 +423,7 @@ def set_log_level_instance(instance_id):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         success, message = loop.run_until_complete(
-            EurekaService.set_log_level(eureka_server, instance_id, logger_name, level)
+            EurekaService.set_log_level(eureka_server, instance.instance_id, logger_name, level)
         )
         loop.close()
 

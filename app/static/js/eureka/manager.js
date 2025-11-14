@@ -18,6 +18,9 @@ const EurekaManager = {
      * Инициализация менеджера
      */
     async init() {
+        // Инициализация UI модуля
+        EurekaUI.init();
+
         // Инициализация фильтров
         EurekaFilters.init();
 
@@ -49,16 +52,6 @@ const EurekaManager = {
             refreshIntervalSelect.addEventListener('change', (e) => {
                 this.currentRefreshRate = parseInt(e.target.value);
                 this.restartAutoRefresh();
-            });
-        }
-
-        // Обработчик закрытия модального окна по overlay
-        const modal = document.getElementById('loglevel-modal');
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal || e.target.classList.contains('modal-overlay')) {
-                    closeLoglevelModal();
-                }
             });
         }
     },

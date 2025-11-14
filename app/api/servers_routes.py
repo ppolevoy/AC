@@ -381,18 +381,63 @@ def update_server(server_id):
             if not is_eureka_node and old_value:
                 from app.models.eureka import EurekaServer
 
-                # Удаляем Eureka server на этом сервере (каскадное удаление очистит все связанные данные)
+                # Делаем soft delete Eureka server
                 eureka_server = EurekaServer.query.filter_by(server_id=server.id, removed_at=None).first()
                 if eureka_server:
                     from datetime import datetime
-                    eureka_server.removed_at = datetime.utcnow()
+                    eureka_server.soft_delete()
                     eureka_server.is_active = False
                     logger.info(f"Деактивирован Eureka server для {server.name}")
 
-            # Если Eureka узел включается, создаем Eureka server запись
+            # Если Eureka узел включается, создаем или восстанавливаем Eureka server запись
             elif is_eureka_node and not old_value:
                 logger.info(f"Eureka узел активирован для {server.name}")
-                # Создание Eureka server будет выполнено через UI или API
+
+                from app.models.eureka import EurekaServer
+
+                # Получаем параметры Eureka из запроса или используем значения по умолчанию
+                eureka_host = data.get('eureka_host', server.ip)
+                eureka_port = data.get('eureka_port', 8761)  # Стандартный порт Eureka
+
+                # ПРОВЕРКА: Убеждаемся что такой Eureka endpoint еще не используется другим сервером
+                existing_eureka = EurekaServer.query.filter(
+                    EurekaServer.eureka_host == eureka_host,
+                    EurekaServer.eureka_port == eureka_port,
+                    EurekaServer.server_id != server.id,
+                    EurekaServer.removed_at.is_(None)
+                ).first()
+
+                if existing_eureka:
+                    error_msg = (f"Eureka endpoint {eureka_host}:{eureka_port} уже используется "
+                                f"сервером '{existing_eureka.server.name}' (ID={existing_eureka.server_id}). "
+                                f"Один физический Eureka сервер может быть связан только с одним сервером в системе.")
+                    logger.error(error_msg)
+                    return jsonify({
+                        'success': False,
+                        'error': error_msg
+                    }), 400
+
+                # Проверяем, есть ли уже запись для этого сервера (включая удаленные)
+                eureka_server = EurekaServer.query.filter_by(server_id=server.id).first()
+
+                if eureka_server:
+                    # Восстанавливаем существующую запись
+                    eureka_server.restore()
+                    eureka_server.eureka_host = eureka_host
+                    eureka_server.eureka_port = eureka_port
+                    eureka_server.is_active = True
+                    logger.info(f"Восстановлен EurekaServer ID={eureka_server.id} для {server.name} ({eureka_host}:{eureka_port})")
+                else:
+                    # Создаем новый EurekaServer
+                    eureka_server = EurekaServer(
+                        server_id=server.id,
+                        eureka_host=eureka_host,
+                        eureka_port=eureka_port,
+                        is_active=True
+                    )
+                    db.session.add(eureka_server)
+                    db.session.flush()
+                    logger.info(f"Создан EurekaServer ID={eureka_server.id} для {server.name} ({eureka_host}:{eureka_port})")
 
         db.session.commit()
 

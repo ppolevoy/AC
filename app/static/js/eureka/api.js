@@ -10,25 +10,51 @@ const EurekaAPI = {
     baseUrl: '/api/eureka',
 
     /**
-     * Получить список всех Eureka серверов
-     * @param {boolean} activeOnly - Только активные серверы
+     * Обобщенный метод для выполнения API запросов с обработкой ошибок
+     * @param {string} url - URL для запроса
+     * @param {Object} options - Опции fetch
+     * @param {string} errorContext - Контекст для логирования ошибок
      * @returns {Promise<Object>}
      */
-    async getServers(activeOnly = false) {
+    async _fetchWithErrorHandling(url, options = {}, errorContext = 'API request') {
         try {
-            const url = `${this.baseUrl}/servers${activeOnly ? '?active_only=true' : ''}`;
-            const response = await fetch(url);
+            const response = await fetch(url, options);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error('Error fetching Eureka servers:', error);
+            console.error(`${errorContext}:`, error);
             throw error;
         }
+    },
+
+    /**
+     * Валидация ID
+     * @param {*} id - ID для проверки
+     * @param {string} paramName - Имя параметра для сообщения об ошибке
+     */
+    _validateId(id, paramName = 'id') {
+        if (id == null || (typeof id !== 'number' && typeof id !== 'string')) {
+            throw new Error(`Invalid ${paramName}: must be a number or string`);
+        }
+        const numId = typeof id === 'string' ? parseInt(id) : id;
+        if (isNaN(numId) || numId <= 0) {
+            throw new Error(`Invalid ${paramName}: must be a positive number`);
+        }
+        return numId;
+    },
+
+    /**
+     * Получить список всех Eureka серверов
+     * @param {boolean} activeOnly - Только активные серверы
+     * @returns {Promise<Object>}
+     */
+    async getServers(activeOnly = false) {
+        const url = `${this.baseUrl}/servers${activeOnly ? '?active_only=true' : ''}`;
+        return await this._fetchWithErrorHandling(url, {}, 'Error fetching Eureka servers');
     },
 
     /**
@@ -37,19 +63,12 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getServer(serverId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/servers/${serverId}`);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error fetching Eureka server ${serverId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(serverId, 'serverId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/servers/${id}`,
+            {},
+            `Error fetching Eureka server ${id}`
+        );
     },
 
     /**
@@ -58,22 +77,12 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getApplications(serverId = null) {
-        try {
-            const url = serverId
-                ? `${this.baseUrl}/servers/${serverId}/applications`
-                : `${this.baseUrl}/applications`;
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error('Error fetching Eureka applications:', error);
-            throw error;
+        let url = `${this.baseUrl}/applications`;
+        if (serverId != null) {
+            const id = this._validateId(serverId, 'serverId');
+            url = `${this.baseUrl}/servers/${id}/applications`;
         }
+        return await this._fetchWithErrorHandling(url, {}, 'Error fetching Eureka applications');
     },
 
     /**
@@ -82,25 +91,13 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getInstances(filters = {}) {
-        try {
-            const params = new URLSearchParams();
-            if (filters.serverId) params.append('server_id', filters.serverId);
-            if (filters.appName) params.append('app_name', filters.appName);
-            if (filters.status) params.append('status', filters.status);
+        const params = new URLSearchParams();
+        if (filters.serverId) params.append('server_id', filters.serverId);
+        if (filters.appName) params.append('app_name', filters.appName);
+        if (filters.status) params.append('status', filters.status);
 
-            const url = `${this.baseUrl}/instances${params.toString() ? '?' + params.toString() : ''}`;
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error('Error fetching Eureka instances:', error);
-            throw error;
-        }
+        const url = `${this.baseUrl}/instances${params.toString() ? '?' + params.toString() : ''}`;
+        return await this._fetchWithErrorHandling(url, {}, 'Error fetching Eureka instances');
     },
 
     /**
@@ -109,19 +106,12 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getInstance(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}`);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error fetching Eureka instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}`,
+            {},
+            `Error fetching Eureka instance ${id}`
+        );
     },
 
     /**
@@ -130,19 +120,16 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getHealth(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/health`);
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error fetching health for instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/health`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            },
+            `Error fetching health for instance ${id}`
+        );
     },
 
     /**
@@ -151,21 +138,16 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async pauseInstance(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/pause`, {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error pausing instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/pause`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            },
+            `Error pausing instance ${id}`
+        );
     },
 
     /**
@@ -174,21 +156,16 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async resumeInstance(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/resume`, {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error resuming instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/resume`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            },
+            `Error resuming instance ${id}`
+        );
     },
 
     /**
@@ -197,21 +174,16 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async shutdownInstance(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/shutdown`, {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error shutting down instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/shutdown`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            },
+            `Error shutting down instance ${id}`
+        );
     },
 
     /**
@@ -223,33 +195,38 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async setLogLevel(instanceId, loggerName, level, duration = null) {
-        try {
-            const body = {
-                logger_name: loggerName,
-                level: level
-            };
-            if (duration) {
-                body.duration = duration;
-            }
+        const id = this._validateId(instanceId, 'instanceId');
 
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/loglevel`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error setting log level for instance ${instanceId}:`, error);
-            throw error;
+        if (!loggerName || typeof loggerName !== 'string') {
+            throw new Error('Invalid loggerName: must be a non-empty string');
         }
+
+        const validLevels = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'];
+        if (!validLevels.includes(level)) {
+            throw new Error(`Invalid level: must be one of ${validLevels.join(', ')}`);
+        }
+
+        const body = {
+            logger_name: loggerName,
+            level: level
+        };
+        if (duration != null) {
+            const numDuration = parseInt(duration);
+            if (isNaN(numDuration) || numDuration <= 0) {
+                throw new Error('Invalid duration: must be a positive number');
+            }
+            body.duration = numDuration;
+        }
+
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/loglevel`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            },
+            `Error setting log level for instance ${id}`
+        );
     },
 
     /**
@@ -260,32 +237,23 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async mapInstance(instanceId, applicationId, notes = null) {
-        try {
-            const body = {
-                application_id: applicationId
-            };
-            if (notes) {
-                body.notes = notes;
-            }
+        const instId = this._validateId(instanceId, 'instanceId');
+        const appId = this._validateId(applicationId, 'applicationId');
 
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/map`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error mapping instance ${instanceId}:`, error);
-            throw error;
+        const body = { application_id: appId };
+        if (notes) {
+            body.notes = notes;
         }
+
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${instId}/map`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            },
+            `Error mapping instance ${instId}`
+        );
     },
 
     /**
@@ -294,21 +262,12 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async unmapInstance(instanceId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/${instanceId}/map`, {
-                method: 'DELETE'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error unmapping instance ${instanceId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(instanceId, 'instanceId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/${id}/map`,
+            { method: 'DELETE' },
+            `Error unmapping instance ${id}`
+        );
     },
 
     /**
@@ -317,21 +276,12 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async syncServer(serverId) {
-        try {
-            const response = await fetch(`${this.baseUrl}/servers/${serverId}/sync`, {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error(`Error syncing Eureka server ${serverId}:`, error);
-            throw error;
-        }
+        const id = this._validateId(serverId, 'serverId');
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/servers/${id}/sync`,
+            { method: 'POST' },
+            `Error syncing Eureka server ${id}`
+        );
     },
 
     /**
@@ -339,21 +289,11 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async autoMap() {
-        try {
-            const response = await fetch(`${this.baseUrl}/instances/auto-map`, {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error('Error performing auto-mapping:', error);
-            throw error;
-        }
+        return await this._fetchWithErrorHandling(
+            `${this.baseUrl}/instances/auto-map`,
+            { method: 'POST' },
+            'Error performing auto-mapping'
+        );
     }
 };
 

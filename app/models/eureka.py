@@ -28,9 +28,10 @@ class EurekaServer(db.Model):
     server = db.relationship('Server', backref=db.backref('eureka_server', uselist=False, cascade='all, delete-orphan'))
     applications = db.relationship('EurekaApplication', back_populates='eureka_server', lazy='dynamic', cascade='all, delete-orphan')
 
-    # Индексы
+    # Индексы и ограничения
     __table_args__ = (
         db.UniqueConstraint('server_id', name='uq_eureka_server_per_server'),
+        db.UniqueConstraint('eureka_host', 'eureka_port', name='uq_eureka_endpoint'),
         db.Index('idx_eureka_server_server', 'server_id'),
         db.Index('idx_eureka_server_active', 'is_active'),
         db.Index('idx_eureka_server_removed', 'removed_at'),

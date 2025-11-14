@@ -67,27 +67,39 @@ const EurekaFilters = {
         // Фильтр по серверу
         if (this.currentFilters.serverId) {
             const serverId = parseInt(this.currentFilters.serverId);
-            filtered = filtered.filter(inst => inst.eureka_server_id === serverId);
+            filtered = filtered.filter(inst =>
+                inst != null && inst.eureka_server_id != null && inst.eureka_server_id === serverId
+            );
         }
 
         // Фильтр по приложению
         if (this.currentFilters.appName) {
-            filtered = filtered.filter(inst => inst.service_name === this.currentFilters.appName);
+            filtered = filtered.filter(inst =>
+                inst != null && inst.service_name != null && inst.service_name === this.currentFilters.appName
+            );
         }
 
         // Фильтр по статусу
         if (this.currentFilters.status) {
-            filtered = filtered.filter(inst => inst.status === this.currentFilters.status);
+            filtered = filtered.filter(inst =>
+                inst != null && inst.status != null && inst.status === this.currentFilters.status
+            );
         }
 
         // Фильтр по поисковому запросу
         if (this.currentFilters.searchText) {
             const searchText = this.currentFilters.searchText;
             filtered = filtered.filter(inst => {
+                if (inst == null) return false;
+
+                const instanceId = inst.instance_id ? inst.instance_id.toLowerCase() : '';
+                const serviceName = inst.service_name ? inst.service_name.toLowerCase() : '';
+                const ipAddress = inst.ip_address ? inst.ip_address : '';
+
                 return (
-                    inst.instance_id.toLowerCase().includes(searchText) ||
-                    inst.service_name.toLowerCase().includes(searchText) ||
-                    inst.ip_address.includes(searchText)
+                    instanceId.includes(searchText) ||
+                    serviceName.includes(searchText) ||
+                    ipAddress.includes(searchText)
                 );
             });
         }
@@ -106,16 +118,20 @@ const EurekaFilters = {
      * @param {Array} instances - Отфильтрованные instances
      */
     updateFilteredStats(instances) {
-        // Подсчитать уникальные приложения
-        const uniqueApps = new Set(instances.map(inst => inst.service_name));
+        // Подсчитать уникальные приложения (с проверкой на null)
+        const uniqueApps = new Set(
+            instances
+                .filter(inst => inst != null && inst.service_name != null)
+                .map(inst => inst.service_name)
+        );
 
         const stats = {
             total_apps: uniqueApps.size,
             total_instances: instances.length,
-            up_count: instances.filter(inst => inst.status === 'UP').length,
-            paused_count: instances.filter(inst => inst.status === 'PAUSED').length,
-            down_count: instances.filter(inst => inst.status === 'DOWN').length,
-            starting_count: instances.filter(inst => inst.status === 'STARTING').length
+            up_count: instances.filter(inst => inst != null && inst.status === 'UP').length,
+            paused_count: instances.filter(inst => inst != null && inst.status === 'PAUSED').length,
+            down_count: instances.filter(inst => inst != null && inst.status === 'DOWN').length,
+            starting_count: instances.filter(inst => inst != null && inst.status === 'STARTING').length
         };
 
         if (window.EurekaUI) {
