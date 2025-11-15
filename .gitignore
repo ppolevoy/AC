@@ -74,3 +74,7 @@ integrations/mock_haproxy_agent/README.md
 integrations/mock_haproxy_agent/requirements.txt
 integrations/mock_haproxy_agent/test_api.sh
 integrations/haproxy-js-architecture-analysis.md
+CSS_REFACTORING_FINAL_REPORT.md
+CSS_REFACTORING_PLAN.md
+CSS_REFACTORING_REPORT.md
+integrations/scr-eureka.png
