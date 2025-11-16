@@ -1,96 +1,4 @@
 /* app/static/css/styles.css */
-
-/* ========================================
-   CSS Custom Properties (Variables)
-   ======================================== */
-:root {
-    /* Primary Colors */
-    --color-primary: #5ca5e1;
-    --color-primary-hover: #4b8ec9;
-    --color-primary-light: rgba(92, 165, 225, 0.1);
-
-    /* Status Colors */
-    --color-success: #2ecc71;
-    --color-success-dark: #27ae60;
-    --color-success-light: rgba(46, 204, 113, 0.1);
-    --color-warning: #f39c12;
-    --color-warning-dark: #d35400;
-    --color-warning-light: rgba(243, 156, 18, 0.1);
-    --color-danger: #e74c3c;
-    --color-danger-dark: #c0392b;
-    --color-danger-light: rgba(231, 76, 60, 0.1);
-    --color-info: #3498db;
-    --color-info-dark: #2980b9;
-    --color-info-light: rgba(52, 152, 219, 0.1);
-
-    /* Neutral Colors - Dark Theme */
-    --color-bg-primary: #1e1e1e;
-    --color-bg-secondary: #252528;
-    --color-bg-tertiary: #2a2a2b;
-    --color-bg-quaternary: #333336;
-    --color-text-primary: #ebe4da;
-    --color-text-secondary: #aaa;
-    --color-text-tertiary: #888;
-    --color-text-quaternary: #666;
-    --color-border: #333336;
-    --color-border-light: #454545;
-
-    /* Special Colors */
-    --color-accent: #00d1b2;
-    --color-accent-light: rgba(0, 209, 178, 0.1);
-    --color-online: #08d419;
-    --color-offline: #e74c3c;
-
-    /* Z-Index Scale */
-    --z-base: 1;
-    --z-dropdown: 100;
-    --z-sticky: 500;
-    --z-modal-overlay: 900;
-    --z-modal: 1000;
-    --z-modal-high: 1001;
-    --z-tooltip: 1010;
-    --z-notification: 1100;
-    --z-highest: 10000;
-
-    /* Transitions */
-    --transition-fast: 0.2s ease;
-    --transition-normal: 0.3s ease;
-    --transition-slow: 0.4s ease;
-
-    /* Border Radius */
-    --radius-sm: 3px;
-    --radius-md: 4px;
-    --radius-lg: 6px;
-    --radius-xl: 8px;
-    --radius-round: 10px;
-    --radius-circle: 50%;
-
-    /* Shadows */
-    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.15);
-    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 15px 30px rgba(0, 0, 0, 0.6);
-}
-
-/* Light Theme Overrides */
-body.light-theme {
-    --color-bg-primary: #ffffff;
-    --color-bg-secondary: #f5f5f5;
-    --color-bg-tertiary: #f9f9f9;
-    --color-bg-quaternary: #f0f0f0;
-    --color-text-primary: #333333;
-    --color-text-secondary: #666;
-    --color-text-tertiary: #888;
-    --color-text-quaternary: #999;
-    --color-border: #ddd;
-    --color-border-light: #eee;
-    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 15px 30px rgba(0, 0, 0, 0.2);
-}
-
-/* ========================================
-   Global Reset & Base Styles
-   ======================================== */
 * {
     margin: 0;
     padding: 0;
@@ -122,7 +30,7 @@ body.light-theme {
     left: 0;
     top: 0;
     bottom: 0;
-    z-index: var(--z-dropdown);
+    z-index: 10;
 }
 
 body.light-theme .sidebar {
@@ -304,7 +212,7 @@ body.light-theme .dropdown-button {
     background-color: #2a2a2b;
     min-width: 280px;
     box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.3);
-    z-index: var(--z-base);
+    z-index: 1;
     border-radius: 4px;
     overflow: hidden;
 }
@@ -721,6 +629,7 @@ body.light-theme .action-icon {
 }
 
 .actions-button {
+	cursor: pointer;
     background: none;
     border: none;
     color: #888;
@@ -728,7 +637,7 @@ body.light-theme .action-icon {
     cursor: pointer;
     padding: 5px;
     border-radius: 4px;
-    transition: background-color 0.2s, color 0.2s;
+    transition: background-color 0.2s, color 0.2s;	
 }
 
 /* Стили для активной кнопки (когда меню открыто) */
@@ -739,8 +648,8 @@ body.light-theme .action-icon {
 
 /* Базовые стили для выпадающих меню */
 .actions-dropdown {
-    position: fixed;
-    z-index: var(--z-modal);
+    position: fixed; /* Изменено с absolute на fixed */
+    z-index: 1000; /* Увеличен z-index */
     min-width: 150px;
     display: none; /* По умолчанию скрыто */
     background-color: #2a2a2b;
@@ -808,10 +717,17 @@ body.light-theme .actions-dropdown a:hover {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: var(--z-modal-overlay);
+    z-index: 999;
     background: transparent;
     display: none;
 }
+
+
+/* 
+.actions-menu:hover .actions-dropdown {
+    display: block;
+}
+*/
 
 /* Pagination */
 .pagination {
@@ -819,16 +735,6 @@ body.light-theme .actions-dropdown a:hover {
     justify-content: space-between;
     align-items: center;
     margin-top: 20px;
-    color: #aaa;
-    font-size: 14px;
-}
-
-body.light-theme .pagination {
-    color: #666;
-}
-
-.pagination span {
-    margin: 0 10px;
 }
 
 .page-size {
@@ -843,21 +749,16 @@ body.light-theme .page-size {
 }
 
 .page-select {
-    background-color: #252528;
+    background-color: #333336;
     color: #ebe4da;
-    border: 1px solid #333336;
-    border-radius: 4px;
-    padding: 6px 25px 6px 10px;
+    border: none;
+    padding: 5px 10px;
     margin: 0 5px;
-    width: 60px;
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    cursor: pointer;
+    border-radius: 4px;
 }
 
 body.light-theme .page-select {
-    background-color: #f5f5f5;
+    background-color: #f0f0f0;
     color: #333;
     border: 1px solid #ddd;
 }
@@ -921,7 +822,7 @@ body.light-theme .nav-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: var(--z-modal);
+    z-index: 1000;
 }
 
 .modal-overlay {
@@ -941,7 +842,7 @@ body.light-theme .nav-btn {
     width: 100%;
     max-width: 600px;
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.6);
-    z-index: var(--z-modal-high);
+    z-index: 1001;
     border: 1px solid #333336;
     animation: modalAppear 0.3s ease-out;
 }
@@ -1018,16 +919,6 @@ body.light-theme .modal-header h3 {
 /* Form */
 .form-group {
     margin-bottom: 20px;
-    transition: all 0.3s ease;
-    animation: fadeIn 0.3s ease;
-}
-
-.form-group[style*="display: none"] {
-    opacity: 0;
-    height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
 }
 
 .form-group label {
@@ -1166,32 +1057,11 @@ body.light-theme .radio-label {
     margin-bottom: 20px;
     background-color: #252528;
     border-radius: 10px 10px 0 0;
-    flex-wrap: wrap;
-    max-height: 120px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-}
-
-.modal-tabs::-webkit-scrollbar {
-    height: 6px;
-}
-
-.modal-tabs::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.modal-tabs::-webkit-scrollbar-thumb {
-    background: #454545;
-    border-radius: 3px;
 }
 
 body.light-theme .modal-tabs {
     border-bottom: 1px solid #ddd;
     background-color: #f5f5f5;
-}
-
-body.light-theme .modal-tabs::-webkit-scrollbar-thumb {
-    background: #ccc;
 }
 
 .modal-tab {
@@ -1390,7 +1260,7 @@ body.light-theme .app-list li {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: var(--z-notification);
+    z-index: 1000;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1536,12 +1406,12 @@ body.light-theme .server-info {
     margin-bottom: 8px;
 }
 
-.info-row .info-label {
+.info-label {
     width: 120px;
     color: #888;
 }
 
-body.light-theme .info-row .info-label {
+body.light-theme .info-label {
     color: #666;
 }
 
@@ -1580,7 +1450,7 @@ body.light-theme .info-row .info-label {
     font-size: 12px;
     white-space: nowrap;
     pointer-events: none;
-    z-index: var(--z-dropdown);
+    z-index: 10;
 }
 
 body.light-theme .server-btn:hover::after {
@@ -1757,7 +1627,7 @@ body.light-theme .add-server-btn-alt:hover {
     margin-bottom: 20px;
 }
 
-.error-page-message {
+.error-message {
     font-size: 24px;
     margin-bottom: 30px;
 }
@@ -1864,8 +1734,54 @@ body.light-theme .filter-select {
 body.light-theme .select-arrow {
     color: #666;
 }
+/* Статусы задач */
+.status-badge {
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
 
-/* Статусы задач - See comprehensive definitions at line ~2032 */
+.status-pending {
+    background-color: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+body.light-theme .status-pending {
+    background-color: rgba(243, 156, 18, 0.1);
+    color: #d35400;
+}
+
+.status-processing {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+body.light-theme .status-processing {
+    background-color: rgba(52, 152, 219, 0.1);
+    color: #2980b9;
+}
+
+.status-completed {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+body.light-theme .status-completed {
+    background-color: rgba(46, 204, 113, 0.1);
+    color: #27ae60;
+}
+
+.status-failed {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+body.light-theme .status-failed {
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #c0392b;
+}
 
 /* Таблица данных */
 .data-table-container {
@@ -1984,7 +1900,40 @@ body.light-theme .data-table tbody tr:hover {
     margin-top: 20px;
 }
 
-/* Pagination styles consolidated at line 816 */
+/* Пагинация */
+.pagination {
+    display: flex;
+    align-items: center;
+    color: #aaa;
+    font-size: 14px;
+}
+
+body.light-theme .pagination {
+    color: #666;
+}
+
+.pagination span {
+    margin: 0 10px;
+}
+
+.page-select {
+    width: 60px;
+    padding: 6px 25px 6px 10px;
+    background-color: #252528;
+    color: #ebe4da;
+    border: 1px solid #333336;
+    border-radius: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+}
+
+body.light-theme .page-select {
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+}
 
 /* Кнопки пагинации */
 .pagination-controls {
@@ -2070,13 +2019,16 @@ body.light-theme .task-action-btn {
 
 /* Кнопка обновления */
 .refresh-icon {
-    display: inline-block;
     font-size: 16px;
     font-style: normal;
-    transition: transform 0.3s ease;
 }
 
-/* Rotating animation - @keyframes defined at line 327 */
+/* Анимация вращения */
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .rotating {
     animation: rotate 1s linear infinite;
 }
@@ -2384,6 +2336,23 @@ body.light-theme .child-indent:before {
     background-color: #ccc;
 }
 
+.group-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
+    font-size: 12px;
+    transition: transform 0.2s;
+    color: #888;
+    vertical-align: middle;
+}
+
+.group-row.expanded .group-toggle {
+    transform: rotate(90deg);
+}
+
 /* Стили для переключателя группы */
 .group-toggle {
     display: inline-block;
@@ -2564,7 +2533,8 @@ body.light-theme .dist-details div {
 
 /* Пути к файлам выделены моноширинным шрифтом для лучшей читаемости */
 .dist-details div:nth-child(1),
-.dist-details div:nth-child(2) {
+.dist-details div:nth-child(2),
+.dist-details div:nth-child(3) {
     font-family: monospace;
     font-size: 13px;
     background-color: rgba(0, 0, 0, 0.2);
@@ -2572,7 +2542,8 @@ body.light-theme .dist-details div {
     border-radius: 3px;
 }
 body.light-theme .dist-details div:nth-child(1),
-body.light-theme .dist-details div:nth-child(2) {
+body.light-theme .dist-details div:nth-child(2),
+body.light-theme .dist-details div:nth-child(3) {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
@@ -2629,7 +2600,7 @@ body.light-theme .actions-dropdown a:not(.disabled):hover {
     border-radius: 4px;
     font-size: 12px;
     white-space: nowrap;
-    z-index: var(--z-tooltip);
+    z-index: 1010;
     top: -30px;
     left: 50%;
     transform: translateX(-50%);
@@ -2703,7 +2674,18 @@ body.light-theme .confirm-extra-message {
     margin-top: 4px;
 }
 
-/* Form group styles consolidated at line 1019 */
+/* Анимация для показа/скрытия поля ручного ввода */
+.form-group {
+    transition: all 0.3s ease;
+}
+
+.form-group[style*="display: none"] {
+    opacity: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
 
 /* Индикатор загрузки версий */
 .loading-versions {
@@ -2792,7 +2774,12 @@ body.light-theme .confirm-extra-message {
     cursor: not-allowed;
 }
 
-/* Refresh icon styles consolidated at line 2072 */
+/* Иконка обновления */
+.refresh-icon {
+    display: inline-block;
+    font-size: 16px;
+    transition: transform 0.3s ease;
+}
 
 /* Контейнер для поля URL дистрибутива */
 .distr-url-wrapper {
@@ -2833,7 +2820,53 @@ body.light-theme #distr-url option[value="custom"] {
     border-top: 1px solid #ddd;
 }
 
-/* Modal tabs styles consolidated at line 1046 */
+/* Стили для модальных вкладок с группами */
+.modal-tabs {
+    display: flex;
+    border-bottom: 1px solid #333336;
+    margin-bottom: 20px;
+    background-color: #252528;
+    border-radius: 10px 10px 0 0;
+    flex-wrap: wrap; /* Для множества групп */
+}
+
+body.light-theme .modal-tabs {
+    border-bottom: 1px solid #ddd;
+    background-color: #f5f5f5;
+}
+
+.modal-tab {
+    padding: 15px 20px;
+    cursor: pointer;
+    color: #aaa;
+    font-size: 15px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.modal-tab.active {
+    color: #5ca5e1;
+    border-bottom: 2px solid #5ca5e1;
+    background-color: rgba(92, 165, 225, 0.05);
+}
+
+.modal-tab:hover {
+    background-color: #333336;
+}
+
+body.light-theme .modal-tab:hover {
+    background-color: #e9e9e9;
+}
+
+body.light-theme .modal-tab {
+    color: #666;
+}
+
+body.light-theme .modal-tab.active {
+    background-color: rgba(92, 165, 225, 0.1);
+    color: #5ca5e1;
+}
 
 /* Индикатор количества приложений в группе */
 .modal-tab .app-count {
@@ -3026,26 +3059,12 @@ body.light-theme .artifact-select option.version-release {
     font-size: 13px;
     color: #ebe4da;
     border: 1px solid #454545;
-    position: relative;
-    animation: fadeInScale 0.3s ease forwards;
-    opacity: 0;
 }
 
 body.light-theme .app-badge {
     background-color: #f0f0f0;
     color: #333;
     border: 1px solid #ddd;
-}
-
-@keyframes fadeInScale {
-    from {
-        opacity: 0;
-        transform: scale(0.9);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
 }
 
 /* Счетчик приложений в табах */
@@ -3106,7 +3125,7 @@ body.light-theme .app-badge {
     border-radius: 4px;
     font-size: 12px;
     white-space: nowrap;
-    z-index: var(--z-modal);
+    z-index: 1000;
     pointer-events: none;
 }
 
@@ -3120,7 +3139,29 @@ body.light-theme .app-badge {
     opacity: 0.5;
 }
 
-/* Modal tabs styles consolidated at line 1046 */
+/* Улучшенные стили для модальных вкладок при множестве групп */
+.modal-tabs {
+    max-height: 120px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.modal-tabs::-webkit-scrollbar {
+    height: 6px;
+}
+
+.modal-tabs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-tabs::-webkit-scrollbar-thumb {
+    background: #454545;
+    border-radius: 3px;
+}
+
+body.light-theme .modal-tabs::-webkit-scrollbar-thumb {
+    background: #ccc;
+}
 
 /* Индикатор кэшированных данных */
 .cache-indicator {
@@ -3151,7 +3192,9 @@ body.light-theme .app-badge {
     }
 }
 
-/* Form group animation defined at line 1019 */
+.form-group {
+    animation: fadeIn 0.3s ease;
+}
 
 /* Специальные стили для опции "Указать URL вручную" */
 .artifact-select option[value="custom"] {
@@ -3180,7 +3223,7 @@ body.light-theme .artifact-select option[value="custom"] {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    z-index: var(--z-highest);
+    z-index: 10000;
     transform: translateX(120%);
     transition: transform 0.3s ease;
     border-left: 4px solid #5ca5e1;
@@ -3405,7 +3448,11 @@ body.light-theme .notification-close:hover {
     animation: spin 1s linear infinite;
 }
 
-/* Spin animation defined at line 2710 */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
 
 /* Прогресс-бар загрузки */
 .loading-progress {
@@ -3476,10 +3523,10 @@ body.light-theme .loading-progress {
 
 /* Анимации появления контента */
 .animated-fade-in {
-    animation: fadeInSmooth 0.4s ease;
+    animation: fadeIn 0.4s ease;
 }
 
-@keyframes fadeInSmooth {
+@keyframes fadeIn {
     from {
         opacity: 0;
         transform: translateY(5px);
@@ -3539,7 +3586,7 @@ body.light-theme .error-message {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: var(--z-dropdown);
+    z-index: 100;
     border-radius: 6px;
 }
 
@@ -3563,7 +3610,26 @@ body.light-theme .error-message {
     color: #aaa;
 }
 
-/* Loading dots animation defined at line 3700 */
+/* Анимация мигания точек */
+.loading-dots::after {
+    content: '.';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% {
+        content: '.';
+    }
+    40% {
+        content: '..';
+    }
+    60% {
+        content: '...';
+    }
+    80%, 100% {
+        content: '';
+    }
+}
 
 /* Мини-загрузчик для inline использования */
 .inline-loader {
@@ -3754,7 +3820,23 @@ body.light-theme .error-message {
     gap: 4px;
 }
 
-/* App badge styles consolidated at line 3024 */
+/* Индикатор статуса в badge */
+.app-badge {
+    position: relative;
+    animation: fadeInScale 0.3s ease forwards;
+    opacity: 0;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
 
 .status-indicator {
     font-size: 8px;

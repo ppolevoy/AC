@@ -20,7 +20,10 @@ const HAProxyFilters = {
         // Фильтр по инстансу
         document.getElementById('instance-filter').addEventListener('change', (e) => {
             this.activeFilters.instance = e.target.value;
-            this.applyFilters();
+            // Фильтр по инстансу требует перезагрузки данных, а не просто скрытия элементов
+            if (window.HAProxyManager) {
+                window.HAProxyManager.loadBackends();
+            }
         });
 
         // Фильтр по статусу

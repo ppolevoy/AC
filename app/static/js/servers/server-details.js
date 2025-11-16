@@ -164,18 +164,8 @@ function renderServerInfo(server) {
                 <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
             </svg>
             <div class="info-text">
-                <span class="info-label">IP-адрес</span>
-                <span class="info-value">${server.ip}</span>
-            </div>
-        </div>
-        <div class="info-card">
-            <svg class="info-icon icon-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="4" y1="9" x2="20" y2="9"></line>
-                <line x1="4" y1="15" x2="20" y2="15"></line>
-            </svg>
-            <div class="info-text">
-                <span class="info-label">Порт</span>
-                <span class="info-value">${server.port}</span>
+                <span class="info-label">Адрес</span>
+                <span class="info-value">${server.ip}:${server.port}</span>
             </div>
         </div>
         <div class="info-card">
@@ -207,6 +197,16 @@ function renderServerInfo(server) {
                 </div>
             </label>
         </div>
+        <div class="info-card eureka-checkbox-card">
+            <label class="eureka-checkbox-wrapper" style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;">
+                <input type="checkbox" id="is-eureka-node-checkbox" ${server.is_eureka_node ? 'checked' : ''}
+                       style="width: 18px; height: 18px; cursor: pointer; accent-color: #10b981;">
+                <div class="info-text">
+                    <span class="info-label">Eureka узел</span>
+                    <span class="info-value">${server.is_eureka_node ? 'Активен' : 'Неактивен'}</span>
+                </div>
+            </label>
+        </div>
     `;
 
     // Добавляем обработчик на checkbox HAProxy узел
@@ -215,6 +215,15 @@ function renderServerInfo(server) {
         haproxyCheckbox.addEventListener('change', function(e) {
             e.stopPropagation();
             toggleHAProxyNode(server.id, this.checked);
+        });
+    }
+
+    // Добавляем обработчик на checkbox Eureka узел
+    const eurekaCheckbox = document.getElementById('is-eureka-node-checkbox');
+    if (eurekaCheckbox) {
+        eurekaCheckbox.addEventListener('change', function(e) {
+            e.stopPropagation();
+            toggleEurekaNode(server.id, this.checked);
         });
     }
 
@@ -314,6 +323,65 @@ async function toggleHAProxyNode(serverId, isEnabled) {
 
         // Обновляем текст обратно
         const infoValue = document.querySelector('.haproxy-checkbox-card .info-value');
+        if (infoValue) {
+            infoValue.textContent = !isEnabled ? 'Активен' : 'Неактивен';
+        }
+    }
+}
+
+/**
+ * Переключение статуса Eureka узла
+ */
+async function toggleEurekaNode(serverId, isEnabled) {
+    try {
+        const response = await fetch(`/api/servers/${serverId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ is_eureka_node: isEnabled })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            if (isEnabled) {
+                showNotification('✓ Eureka узел активирован');
+            } else {
+                showNotification('Статус Eureka узла снят');
+            }
+
+            currentServerData.is_eureka_node = isEnabled;
+
+            // Обновляем текст в info card
+            const infoValue = document.querySelector('.eureka-checkbox-card .info-value');
+            if (infoValue) {
+                infoValue.textContent = isEnabled ? 'Активен' : 'Неактивен';
+            }
+
+            // Перезагружаем информацию о сервере
+            loadServerDetails(serverId);
+        } else {
+            showError(data.error || 'Не удалось обновить настройки');
+
+            // Возвращаем checkbox в предыдущее состояние
+            document.getElementById('is-eureka-node-checkbox').checked = !isEnabled;
+
+            // Обновляем текст обратно
+            const infoValue = document.querySelector('.eureka-checkbox-card .info-value');
+            if (infoValue) {
+                infoValue.textContent = !isEnabled ? 'Активен' : 'Неактивен';
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при сохранении настроек:', error);
+        showError('Ошибка соединения с сервером');
+
+        // Возвращаем checkbox в предыдущее состояние
+        document.getElementById('is-eureka-node-checkbox').checked = !isEnabled;
+
+        // Обновляем текст обратно
+        const infoValue = document.querySelector('.eureka-checkbox-card .info-value');
         if (infoValue) {
             infoValue.textContent = !isEnabled ? 'Активен' : 'Неактивен';
         }

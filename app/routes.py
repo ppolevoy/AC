@@ -35,6 +35,11 @@ def haproxy():
     """Страница управления HAProxy"""
     return render_template('haproxy.html')
 
+@bp.route('/eureka')
+def eureka():
+    """Страница управления Eureka"""
+    return render_template('eureka.html')
+
 @bp.route('/server/<int:server_id>')
 def server_details(server_id):
     """Страница с детальной информацией о сервере"""

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Faktura Apps - Eureka{% endblock %}
+
+{% block page_title %}Eureka Мониторинг{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/eureka.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="eureka-container">
+    <!-- Панель управления и фильтры -->
+    <div class="controls-panel">
+        <div class="filters-section">
+            <div class="filter-group">
+                <label>Сервер Eureka:</label>
+                <div class="select-container">
+                    <select id="server-filter" class="filter-select">
+                        <option value="">Все серверы</option>
+                        <!-- Динамически загружается через JS -->
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Приложение:</label>
+                <div class="select-container">
+                    <select id="app-filter" class="filter-select">
+                        <option value="">Все приложения</option>
+                        <!-- Динамически загружается через JS -->
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Статус:</label>
+                <div class="select-container">
+                    <select id="status-filter" class="filter-select">
+                        <option value="">Все статусы</option>
+                        <option value="UP">UP</option>
+                        <option value="DOWN">DOWN</option>
+                        <option value="PAUSED">PAUSED</option>
+                        <option value="STARTING">STARTING</option>
+                        <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+
+            <div class="search-group">
+                <input type="text" id="search-input" class="search-input" placeholder="Поиск instance...">
+                <span class="search-icon">🔍</span>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="refresh-btn" class="action-btn primary-btn" title="Обновить">
+                <span class="refresh-icon">↻</span> Обновить
+            </button>
+
+            <div class="filter-group" style="margin-left: auto;">
+                <label>Автообновление:</label>
+                <div class="select-container">
+                    <select id="refresh-interval-select" class="filter-select">
+                        <option value="0">Откл.</option>
+                        <option value="5000">5 сек</option>
+                        <option value="15000">15 сек</option>
+                        <option value="30000" selected>30 сек</option>
+                        <option value="60000">60 сек</option>
+                    </select>
+                    <span class="select-arrow">▼</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Глобальная статистика -->
+    <div class="global-stats">
+        <div class="stat-card">
+            <div class="summary-label">Всего приложений</div>
+            <div class="summary-value" id="total-apps">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="summary-label">Всего instances</div>
+            <div class="summary-value" id="total-instances">0</div>
+        </div>
+        <div class="stat-card success">
+            <div class="summary-label">
+                <span class="status-dot status-up"></span> UP
+            </div>
+            <div class="summary-value" id="up-count">0</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="summary-label">
+                <span class="status-dot status-paused"></span> PAUSED
+            </div>
+            <div class="summary-value" id="paused-count">0</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="summary-label">
+                <span class="status-dot status-down"></span> DOWN
+            </div>
+            <div class="summary-value" id="down-count">0</div>
+        </div>
+        <div class="stat-card info">
+            <div class="summary-label">
+                <span class="status-dot status-starting"></span> STARTING
+            </div>
+            <div class="summary-value" id="starting-count">0</div>
+        </div>
+    </div>
+
+    <!-- Таблица instances -->
+    <div class="instances-table-container" id="table-container">
+        <table class="instances-table" id="instances-table">
+            <thead>
+                <tr>
+                    <th>Instance ID</th>
+                    <th>Приложение</th>
+                    <th>IP Адрес</th>
+                    <th>Порт</th>
+                    <th>Статус</th>
+                    <th>Маппинг</th>
+                    <th>Last Heartbeat</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="instances-tbody">
+                <!-- Данные будут загружены через JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Сообщение об отсутствии данных -->
+    <div class="empty-message" id="empty-message" style="display: none;">
+        <div class="empty-icon">🔍</div>
+        <h3>Нет Eureka instances</h3>
+        <p>Для начала работы активируйте чекбокс "Узел Eureka" на странице сервера, затем создайте Eureka server запись через API или настройте синхронизацию.</p>
+    </div>
+</div>
+
+<!-- Модальное окно для управления log level -->
+<div class="modal" id="loglevel-modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="loglevel-modal-title">Управление Log Level</h3>
+            <button class="modal-close" onclick="EurekaUI.closeLogLevelModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="logger-name">Logger Name:</label>
+                <input type="text" id="logger-name" class="form-control" placeholder="Например: com.example.service">
+            </div>
+            <div class="form-group">
+                <label for="log-level-select">Log Level:</label>
+                <select id="log-level-select" class="form-control">
+                    <option value="TRACE">TRACE</option>
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO" selected>INFO</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="duration">Длительность (минуты, необязательно):</label>
+                <input type="number" id="duration" class="form-control" placeholder="Оставьте пустым для постоянного изменения" min="1">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="EurekaUI.closeLogLevelModal()">Отмена</button>
+            <button class="btn btn-primary" onclick="EurekaUI.applyLogLevel()">Применить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<!-- Подключаем скрипты для Eureka -->
+<script src="{{ url_for('static', filename='js/eureka/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/eureka/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/eureka/filters.js') }}"></script>
+<script src="{{ url_for('static', filename='js/eureka/manager.js') }}"></script>
+{% endblock %}
