@@ -1,4 +1,3 @@
--- Database Schema for FAppControl
 -- PostgreSQL Database Creation Script
 -- Generated from SQLAlchemy Models
 
