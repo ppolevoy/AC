@@ -64,7 +64,7 @@ def get_maven_versions_for_app(app):
         artifacts = asyncio.run(fetch_maven_artifacts())
 
         if not artifacts:
-            logger.warning(f"Не удалось получить список артефактов для {app.name}")
+            logger.warning(f"Не удалось получить список артефактов для {app.instance_name}")
             return jsonify({
                 'success': False,
                 'error': 'Не удалось получить список версий из репозитория'
@@ -84,11 +84,11 @@ def get_maven_versions_for_app(app):
                 'timestamp': artifact.timestamp.isoformat() if artifact.timestamp else None
             })
 
-        logger.info(f"Загружено {len(versions)} Maven артефактов для приложения {app.name}")
+        logger.info(f"Загружено {len(versions)} Maven артефактов для приложения {app.instance_name}")
 
         return jsonify({
             'success': True,
-            'application': app.name,
+            'application': app.instance_name,
             'app_type': app.app_type,
             'versions': versions,
             'total': len(versions),
@@ -156,7 +156,7 @@ def get_docker_versions_for_app(app):
         images = asyncio.run(fetch_docker_images())
 
         if not images:
-            logger.warning(f"Не удалось получить список Docker образов для {app.name}")
+            logger.warning(f"Не удалось получить список Docker образов для {app.instance_name}")
             return jsonify({
                 'success': False,
                 'error': 'Не удалось получить список образов из репозитория'
@@ -176,11 +176,11 @@ def get_docker_versions_for_app(app):
                 'timestamp': image.created.isoformat() if image.created else None
             })
 
-        logger.info(f"Загружено {len(versions)} Docker образов для приложения {app.name}")
+        logger.info(f"Загружено {len(versions)} Docker образов для приложения {app.instance_name}")
 
         return jsonify({
             'success': True,
-            'application': app.name,
+            'application': app.instance_name,
             'app_type': 'docker',
             'versions': versions,
             'total': len(versions),
@@ -216,7 +216,7 @@ def get_application_artifacts(app_id):
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
 
-        logger.info(f"Получение версий для приложения {app.name}, тип: {app.app_type}")
+        logger.info(f"Получение версий для приложения {app.instance_name}, тип: {app.app_type}")
 
         # ВАЖНО: Проверяем тип приложения
         if app.app_type == 'docker':

@@ -849,26 +849,19 @@ def manage_instance_playbook(app_id):
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
-        if not app.instance:
-            return jsonify({
-                'success': False,
-                'error': 'Приложение не связано с экземпляром'
-            }), 400
-        
-        instance = app.instance
-        
+
+        # app уже является ApplicationInstance после рефакторинга
         if request.method == 'DELETE':
             # Удаление кастомного playbook
-            instance.custom_playbook_path = None
+            app.custom_playbook_path = None
             db.session.commit()
-            
+
             return jsonify({
                 'success': True,
                 'message': 'Кастомный playbook удален',
-                'effective_playbook': instance.get_effective_playbook_path() if hasattr(instance, 'get_effective_playbook_path') else None
+                'effective_playbook': app.get_effective_playbook_path()
             })
-        
+
         # PUT - установка кастомного playbook
         data = request.json
         if not data or 'playbook_path' not in data:
@@ -876,15 +869,15 @@ def manage_instance_playbook(app_id):
                 'success': False,
                 'error': "Отсутствует поле playbook_path"
             }), 400
-        
-        instance.custom_playbook_path = data['playbook_path']
+
+        app.custom_playbook_path = data['playbook_path']
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Кастомный playbook установлен',
-            'custom_playbook': instance.custom_playbook_path,
-            'effective_playbook': instance.get_effective_playbook_path() if hasattr(instance, 'get_effective_playbook_path') else instance.custom_playbook_path
+            'custom_playbook': app.custom_playbook_path,
+            'effective_playbook': app.get_effective_playbook_path()
         })
     except Exception as e:
         db.session.rollback()

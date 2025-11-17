@@ -129,12 +129,6 @@ class ApplicationInstance(db.Model):
         """Алиас для обратной совместимости - возвращает эффективный путь к playbook"""
         return self.get_effective_playbook_path()
 
-    @property
-    def base_name(self):
-        """Базовое имя приложения (без номера экземпляра)"""
-        base, _ = self.parse_application_name(self.instance_name)
-        return base
-
     def get_effective_playbook_path(self):
         """
         Получить эффективный путь к playbook с учетом приоритетов:

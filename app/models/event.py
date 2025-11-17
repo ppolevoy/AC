@@ -19,16 +19,5 @@ class Event(db.Model):
     server = db.relationship('Server', back_populates='events')
     instance = db.relationship('ApplicationInstance', back_populates='events')
 
-    # Алиас для обратной совместимости
-    @property
-    def application_id(self):
-        """Алиас для обратной совместимости"""
-        return self.instance_id
-
-    @application_id.setter
-    def application_id(self, value):
-        """Сеттер для обратной совместимости"""
-        self.instance_id = value
-
     def __repr__(self):
         return f'<Event {self.event_type} - {self.timestamp}>'

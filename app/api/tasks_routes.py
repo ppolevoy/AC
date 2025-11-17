@@ -31,13 +31,13 @@ def get_tasks():
                 # Групповая задача - загружаем приложения и формируем строку
                 apps = Application.query.filter(Application.id.in_(app_ids)).all()
                 if apps:
-                    task_data['application_name'] = ','.join([app.name for app in apps])
+                    task_data['application_name'] = ','.join([app.instance_name for app in apps])
                 else:
                     task_data['application_name'] = f"Apps: {','.join(map(str, app_ids))}"
             elif task.application_id:
                 # Одиночная задача
                 app = Application.query.get(task.application_id)
-                task_data['application_name'] = app.name if app else None
+                task_data['application_name'] = app.instance_name if app else None
             else:
                 task_data['application_name'] = None
 
@@ -82,13 +82,13 @@ def get_task(task_id):
             # Групповая задача - загружаем приложения и формируем строку
             apps = Application.query.filter(Application.id.in_(app_ids)).all()
             if apps:
-                task_data['application_name'] = ','.join([app.name for app in apps])
+                task_data['application_name'] = ','.join([app.instance_name for app in apps])
             else:
                 task_data['application_name'] = f"Apps: {','.join(map(str, app_ids))}"
         elif task.application_id:
             # Одиночная задача
             app = Application.query.get(task.application_id)
-            task_data['application_name'] = app.name if app else None
+            task_data['application_name'] = app.instance_name if app else None
         else:
             task_data['application_name'] = None
 
