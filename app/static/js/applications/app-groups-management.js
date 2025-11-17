@@ -394,21 +394,52 @@ async function loadInstanceSettings(appId) {
     try {
         const response = await fetch(`/api/applications/${appId}/instance-settings`);
         const data = await response.json();
-        
+
         if (data.success) {
             const form = document.getElementById('instance-settings-form');
             const nameSpan = document.getElementById('selected-instance-name');
-            
+
             form.style.display = 'block';
             nameSpan.textContent = `${data.application} #${data.instance_number}`;
-            
+
             // Заполняем форму
-            document.getElementById('instance-artifact-url').value = 
+            document.getElementById('instance-artifact-url').value =
                 data.individual_settings.custom_artifact_list_url || '';
-            document.getElementById('instance-artifact-extension').value = 
+            document.getElementById('instance-artifact-extension').value =
                 data.individual_settings.custom_artifact_extension || '';
-            document.getElementById('instance-playbook-path').value = 
-                data.custom_playbook || '';
+
+            // Отображаем эффективный playbook path (групповой, если нет кастомного)
+            const playbookInput = document.getElementById('instance-playbook-path');
+            const customPlaybook = data.individual_settings.custom_playbook_path;
+            const effectivePlaybook = data.effective_settings.playbook_path;
+            const groupPlaybook = data.group_settings?.update_playbook_path;
+
+            // Показываем эффективное значение
+            playbookInput.value = effectivePlaybook || '';
+
+            // Если используется групповой playbook (нет кастомного), добавляем визуальную индикацию
+            if (!customPlaybook && effectivePlaybook) {
+                playbookInput.style.fontStyle = 'italic';
+                playbookInput.style.color = '#888';
+                playbookInput.title = 'Используется playbook из настроек группы';
+                playbookInput.setAttribute('data-from-group', 'true');
+                playbookInput.setAttribute('data-group-playbook', groupPlaybook || '');
+            } else {
+                playbookInput.style.fontStyle = 'normal';
+                playbookInput.style.color = '';
+                playbookInput.title = '';
+                playbookInput.removeAttribute('data-from-group');
+                playbookInput.removeAttribute('data-group-playbook');
+            }
+
+            // Добавляем обработчик изменения поля для сброса визуальной индикации
+            playbookInput.addEventListener('input', function() {
+                if (this.getAttribute('data-from-group') === 'true') {
+                    this.style.fontStyle = 'normal';
+                    this.style.color = '';
+                    this.title = 'Устанавливается кастомный playbook для экземпляра';
+                }
+            }, { once: true });
         }
     } catch (error) {
         console.error('Error loading instance settings:', error);

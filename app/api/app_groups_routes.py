@@ -551,6 +551,10 @@ def update_application_group(group_id):
                 'error': "Отсутствуют данные для обновления"
             }), 400
 
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        synced_instances = 0
+
         # Обновляем только переданные поля
         if 'artifact_list_url' in data:
             group.artifact_list_url = data['artifact_list_url']
@@ -560,10 +564,26 @@ def update_application_group(group_id):
             group.artifact_extension = data['artifact_extension']
             logger.info(f"Обновлен artifact_extension для группы {group.name}: {data['artifact_extension']}")
 
-        # ВАЖНО: добавлена поддержка update_playbook_path
+        # ВАЖНО: добавлена поддержка update_playbook_path с синхронизацией экземпляров
         if 'update_playbook_path' in data:
-            group.update_playbook_path = data['update_playbook_path']
-            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {data['update_playbook_path']}")
+            new_playbook_path = data['update_playbook_path']
+            group.update_playbook_path = new_playbook_path
+            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {new_playbook_path}")
+
+            # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+            # у которых он совпадает со старым значением группы
+            sync_instances = data.get('sync_instances', True)
+            if sync_instances and old_playbook_path:
+                instances_to_sync = ApplicationInstance.query.filter(
+                    ApplicationInstance.group_id == group.id,
+                    ApplicationInstance.custom_playbook_path == old_playbook_path
+                ).all()
+
+                for instance in instances_to_sync:
+                    instance.custom_playbook_path = None
+                    synced_instances += 1
+                    logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                              f"(был установлен в старое значение группы)")
 
         if 'description' in data:
             group.description = data['description']
@@ -575,7 +595,7 @@ def update_application_group(group_id):
 
         db.session.commit()
 
-        return jsonify({
+        response = {
             'success': True,
             'message': f"Группа приложений {group.name} успешно обновлена",
             'group': {
@@ -588,7 +608,13 @@ def update_application_group(group_id):
                 'batch_grouping_strategy': group.batch_grouping_strategy,
                 'updated_at': group.updated_at.isoformat() if group.updated_at else None
             }
-        })
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении группы {group_id}: {str(e)}")
@@ -700,28 +726,55 @@ def update_group_playbook(group_name):
     """Установить путь к playbook для группы"""
     try:
         group = ApplicationGroup.query.filter_by(name=group_name).first()
-        
+
         if not group:
             return jsonify({
                 'success': False,
                 'error': f"Группа {group_name} не найдена"
             }), 404
-        
+
         data = request.json
         if not data or 'playbook_path' not in data:
             return jsonify({
                 'success': False,
                 'error': "Отсутствует поле playbook_path"
             }), 400
-        
-        group.update_playbook_path = data['playbook_path']
+
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        new_playbook_path = data['playbook_path']
+        synced_instances = 0
+
+        group.update_playbook_path = new_playbook_path
+
+        # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+        # у которых он совпадает со старым значением группы
+        sync_instances = data.get('sync_instances', True)
+        if sync_instances and old_playbook_path:
+            instances_to_sync = ApplicationInstance.query.filter(
+                ApplicationInstance.group_id == group.id,
+                ApplicationInstance.custom_playbook_path == old_playbook_path
+            ).all()
+
+            for instance in instances_to_sync:
+                instance.custom_playbook_path = None
+                synced_instances += 1
+                logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                          f"(был установлен в старое значение группы)")
+
         db.session.commit()
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'message': f"Playbook путь для группы {group_name} обновлен",
             'playbook_path': group.update_playbook_path
-        })
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении playbook для группы {group_name}: {str(e)}")
@@ -786,10 +839,30 @@ def update_group_settings(group_name):
                 'error': "Отсутствуют данные для обновления"
             }), 400
 
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        synced_instances = 0
+
         # Обновляем только переданные поля
         if 'update_playbook_path' in data:
-            group.update_playbook_path = data['update_playbook_path']
-            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {data['update_playbook_path']}")
+            new_playbook_path = data['update_playbook_path']
+            group.update_playbook_path = new_playbook_path
+            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {new_playbook_path}")
+
+            # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+            # у которых он совпадает со старым значением группы
+            sync_instances = data.get('sync_instances', True)
+            if sync_instances and old_playbook_path:
+                instances_to_sync = ApplicationInstance.query.filter(
+                    ApplicationInstance.group_id == group.id,
+                    ApplicationInstance.custom_playbook_path == old_playbook_path
+                ).all()
+
+                for instance in instances_to_sync:
+                    instance.custom_playbook_path = None
+                    synced_instances += 1
+                    logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                              f"(был установлен в старое значение группы)")
 
         if 'artifact_list_url' in data:
             group.artifact_list_url = data['artifact_list_url']
@@ -813,7 +886,7 @@ def update_group_settings(group_name):
 
         db.session.commit()
 
-        return jsonify({
+        response = {
             'success': True,
             'message': f"Настройки группы {group_name} обновлены",
             'settings': {
@@ -824,7 +897,13 @@ def update_group_settings(group_name):
                 'catalog_id': group.catalog_id,
                 'description': group.description
             }
-        })
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении настроек группы {group_name}: {str(e)}")

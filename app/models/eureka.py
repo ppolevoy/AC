@@ -315,7 +315,7 @@ class EurekaInstance(db.Model):
         if include_application and self.application:
             result['application'] = {
                 'id': self.application.id,
-                'name': self.application.name,
+                'name': self.application.instance_name,
                 'status': self.application.status,
                 'eureka_url': self.application.eureka_url,
                 'server_name': self.application.server.name if self.application.server else None

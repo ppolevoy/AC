@@ -248,13 +248,16 @@
                                                 ℹ
                                             </button>
                                         </div>
-                                        <input type="text" 
-                                            id="instance-playbook-path" 
-                                            class="form-control" 
+                                        <input type="text"
+                                            id="instance-playbook-path"
+                                            class="form-control"
                                             placeholder="Оставьте пустым для использования настроек группы"
                                             onblur="validatePlaybookPath(this)">
+                                        <div class="field-hint" style="font-size: 11px; color: #888; margin-top: 3px;">
+                                            💡 Если playbook не задан, будет использован playbook из настроек группы
+                                        </div>
                                         <div class="validation-feedback" id="instance-playbook-validation"></div>
-                                        
+
                                         <!-- Используем ту же панель помощи -->
                                         <div id="instance-variables-help" class="variables-help-panel" style="display: none;">
                                             <!-- Содержимое будет скопировано из group-variables-help -->

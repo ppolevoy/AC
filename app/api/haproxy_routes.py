@@ -426,11 +426,11 @@ def map_server_to_application(server_id):
 
         db.session.commit()
 
-        logger.info(f"Установлен ручной маппинг: {haproxy_server.server_name} -> {application.name}")
+        logger.info(f"Установлен ручной маппинг: {haproxy_server.server_name} -> {application.instance_name}")
 
         return jsonify({
             'success': True,
-            'message': f'Сервер {haproxy_server.server_name} успешно связан с приложением {application.name}',
+            'message': f'Сервер {haproxy_server.server_name} успешно связан с приложением {application.instance_name}',
             'server': haproxy_server.to_dict(include_application=True)
         }), 200
 
@@ -647,7 +647,7 @@ def search_applications_for_mapping():
         search_query = request.args.get('query', '').strip()
         if search_query:
             query_obj = query_obj.filter(
-                Application.name.ilike(f'%{search_query}%')
+                Application.instance_name.ilike(f'%{search_query}%')
             )
 
         applications = query_obj.all()
@@ -660,7 +660,7 @@ def search_applications_for_mapping():
             'count': len(applications),
             'applications': [{
                 'id': app.id,
-                'name': app.name,
+                'name': app.instance_name,
                 'ip': app.ip,
                 'port': app.port,
                 'status': app.status,
@@ -932,7 +932,7 @@ def get_all_mappings():
             hostname = app.server.name if app.server else "Unknown"
 
             mapping_info = {
-                'app_name': app.name,
+                'app_name': app.instance_name,
                 'server_addr': haproxy_server.addr or '',
                 'app_addr': f"{app.ip}:{app.port}" if app.ip and app.port else '',
                 'backend_name': backend.backend_name if backend else '',

@@ -69,6 +69,35 @@ class ApplicationGroup(db.Model):
             raise ValueError(f"Недопустимая стратегия группировки: {strategy}. Допустимые значения: {', '.join(BATCH_GROUPING_STRATEGIES.keys())}")
         self.batch_grouping_strategy = strategy
 
+    def sync_playbook_to_instances(self, old_playbook_path):
+        """
+        Синхронизировать playbook с экземплярами группы.
+
+        Очищает custom_playbook_path у тех экземпляров, у которых он совпадает
+        со старым значением группового playbook. Это гарантирует, что экземпляры,
+        которые использовали старый групповой playbook, автоматически переключатся
+        на новый групповой playbook.
+
+        Экземпляры с реально кастомными playbook (отличными от старого группового)
+        останутся без изменений.
+
+        Args:
+            old_playbook_path: Старый путь к playbook группы
+
+        Returns:
+            int: Количество синхронизированных экземпляров
+        """
+        if not old_playbook_path:
+            return 0
+
+        synced_count = 0
+        for instance in self.instances:
+            if instance.custom_playbook_path == old_playbook_path:
+                instance.custom_playbook_path = None
+                synced_count += 1
+
+        return synced_count
+
     def __repr__(self):
         return f'<ApplicationGroup {self.name}>'
 

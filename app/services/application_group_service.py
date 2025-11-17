@@ -154,7 +154,7 @@ class ApplicationGroupService:
             instance.instance_number = instance_number
 
             # Получаем или создаем группу
-            group_name = f"Группа {base_name}"
+            group_name = base_name
             group = ApplicationGroupService.get_or_create_group(group_name, catalog)
 
             # Связываем экземпляр с группой
