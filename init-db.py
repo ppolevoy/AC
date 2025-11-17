@@ -91,8 +91,11 @@ def load_demo_data(app):
     """Загрузка демонстрационных данных"""
     from app import db
     from app.models.server import Server
-    from app.models.application import Application
+    from app.models.application_instance import ApplicationInstance
     from app.models.event import Event
+
+    # Алиас для обратной совместимости с демо-данными
+    Application = ApplicationInstance
     
     with app.app_context():
         logger.info("Загрузка демонстрационных данных...")

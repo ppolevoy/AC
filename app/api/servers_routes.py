@@ -5,9 +5,12 @@ import logging
 
 from app import db
 from app.models.server import Server
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
 from app.services.agent_service import AgentService
 from app.api import bp
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 

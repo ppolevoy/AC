@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# РЕФАКТОРИНГ - обновлено для новой структуры БД
+
 import aiohttp
 import asyncio
 import logging
@@ -6,13 +8,16 @@ import json
 from datetime import datetime
 from app import db
 from app.models.server import Server
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
 from app.models.event import Event
 from app.config import Config
 
 from app.services.application_group_service import ApplicationGroupService
 
 logger = logging.getLogger(__name__)
+
+# Алиас для обратной совместимости с кодом
+Application = ApplicationInstance
 
 class AgentService:
     """
@@ -224,21 +229,21 @@ class AgentService:
     async def send_eureka_command(app, command):
         """Отправка команды для приложения через Eureka"""
         if not app.eureka_url:
-            logger.warning(f"Попытка отправить команду для приложения {app.name}, у которого нет Eureka URL")
+            logger.warning(f"Попытка отправить команду для приложения {app.instance_name}, у которого нет Eureka URL")
             return False
-        
+
         url = f"{app.eureka_url}/{command}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, timeout=Config.CONNECTION_TIMEOUT) as response:
                     if response.status == 200:
-                        logger.info(f"Команда {command} успешно отправлена приложению {app.name}")
+                        logger.info(f"Команда {command} успешно отправлена приложению {app.instance_name}")
                         return True
                     else:
-                        logger.warning(f"Ошибка при отправке команды {command} приложению {app.name}: {response.status}")
+                        logger.warning(f"Ошибка при отправке команды {command} приложению {app.instance_name}: {response.status}")
                         return False
         except Exception as e:
-            logger.error(f"Ошибка при отправке команды {command} приложению {app.name}: {str(e)}")
+            logger.error(f"Ошибка при отправке команды {command} приложению {app.instance_name}: {str(e)}")
             return False
     
     @staticmethod
@@ -291,40 +296,41 @@ class AgentService:
                     if not container_name:
                         logger.warning(f"Пропуск docker-приложения без имени контейнера на сервере {server.name}")
                         continue
-                    
-                    app = Application.query.filter_by(
-                        server_id=server.id, 
-                        name=container_name
+
+                    # Ищем экземпляр по instance_name
+                    instance = ApplicationInstance.query.filter_by(
+                        server_id=server.id,
+                        instance_name=container_name,
+                        app_type='docker'
                     ).first()
 
-                    if not app:
-                        logger.info(f"Создание нового docker-приложения {container_name} на сервере {server.name}")
-                        app = Application(
+                    if not instance:
+                        logger.info(f"Создание нового docker-экземпляра {container_name} на сервере {server.name}")
+                        instance = ApplicationInstance(
                             server_id=server.id,
-                            name=container_name,
+                            instance_name=container_name,
                             app_type='docker'
                         )
-                        db.session.add(app)
-                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
+                        db.session.add(instance)
+                        db.session.flush()  # Чтобы получить ID
                     else:
-                        logger.debug(f"Обновление существующего docker-приложения {container_name} на сервере {server.name}")
-                    
-                    # Обновляем данные приложения
-                    app.container_id = app_data.get('container_id')
-                    app.container_name = container_name
-                    app.eureka_url = app_data.get('eureka_url')
-                    app.compose_project_dir = app_data.get('compose_project_dir')
-                    app.ip = app_data.get('ip')
-                    app.port = app_data.get('port')
-                    app.status = 'online'  # Docker-приложения, которые приходят в списке, считаем онлайн
-                    
-                    # Определяем группу приложения и создаем/обновляем экземпляр
-                    instance = ApplicationGroupService.resolve_application_group(app)
-                    if instance:
-                        logger.debug(f"Docker-приложение {container_name} привязано к группе {instance.group.name}")
-                    
-                    if app.id:
-                        updated_app_ids.add(app.id)
+                        logger.debug(f"Обновление существующего docker-экземпляра {container_name} на сервере {server.name}")
+
+                    # Обновляем данные экземпляра
+                    instance.container_id = app_data.get('container_id')
+                    instance.container_name = container_name
+                    instance.eureka_url = app_data.get('eureka_url')
+                    instance.compose_project_dir = app_data.get('compose_project_dir')
+                    instance.ip = app_data.get('ip')
+                    instance.port = app_data.get('port')
+                    instance.status = 'online'  # Docker-приложения, которые приходят в списке, считаем онлайн
+                    instance.last_seen = datetime.utcnow()
+
+                    # Определяем группу и каталог для экземпляра
+                    ApplicationGroupService.resolve_application_group(instance)
+
+                    if instance.id:
+                        updated_app_ids.add(instance.id)
             
             # Обрабатываем site-приложения
             if 'site-app' in server_data and 'applications' in server_data['site-app']:
@@ -336,47 +342,47 @@ class AgentService:
                     if not name:
                         logger.warning(f"Пропуск site-приложения без имени на сервере {server.name}")
                         continue
-                    
-                    app = Application.query.filter_by(
-                        server_id=server.id, 
-                        name=name,
+
+                    # Ищем экземпляр по instance_name
+                    instance = ApplicationInstance.query.filter_by(
+                        server_id=server.id,
+                        instance_name=name,
                         app_type='site'
                     ).first()
-                    
-                    if not app:
-                        logger.info(f"Создание нового site-приложения {name} на сервере {server.name}")
-                        app = Application(
+
+                    if not instance:
+                        logger.info(f"Создание нового site-экземпляра {name} на сервере {server.name}")
+                        instance = ApplicationInstance(
                             server_id=server.id,
-                            name=name,
+                            instance_name=name,
                             app_type='site'
                         )
-                        db.session.add(app)
-                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
+                        db.session.add(instance)
+                        db.session.flush()  # Чтобы получить ID
                     else:
-                        logger.debug(f"Обновление существующего site-приложения {name} на сервере {server.name}")
-                    
-                    # Обновляем данные приложения
-                    app.path = app_data.get('path')
-                    app.log_path = app_data.get('log_path')
-                    app.version = app_data.get('version')
-                    app.distr_path = app_data.get('distr_path')
-                    app.ip = app_data.get('ip')
-                    app.port = app_data.get('port')
-                    app.status = app_data.get('status') or 'unknown'
-                    
+                        logger.debug(f"Обновление существующего site-экземпляра {name} на сервере {server.name}")
+
+                    # Обновляем данные экземпляра
+                    instance.path = app_data.get('path')
+                    instance.log_path = app_data.get('log_path')
+                    instance.version = app_data.get('version')
+                    instance.distr_path = app_data.get('distr_path')
+                    instance.ip = app_data.get('ip')
+                    instance.port = app_data.get('port')
+                    instance.status = app_data.get('status') or 'unknown'
+                    instance.last_seen = datetime.utcnow()
+
                     if 'start_time' in app_data and app_data['start_time']:
                         try:
-                            app.start_time = datetime.fromisoformat(app_data['start_time'])
+                            instance.start_time = datetime.fromisoformat(app_data['start_time'])
                         except ValueError:
-                            logger.warning(f"Некорректный формат времени запуска для приложения {name}: {app_data['start_time']}")
-                    
-                    # Определяем группу приложения и создаем/обновляем экземпляр
-                    instance = ApplicationGroupService.resolve_application_group(app)
-                    if instance:
-                        logger.debug(f"Site-приложение {name} привязано к группе {instance.group.name}")
-                    
-                    if app.id:
-                        updated_app_ids.add(app.id)
+                            logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
+
+                    # Определяем группу и каталог для экземпляра
+                    ApplicationGroupService.resolve_application_group(instance)
+
+                    if instance.id:
+                        updated_app_ids.add(instance.id)
             
             # Обрабатываем service-приложения
             if 'service-app' in server_data and 'applications' in server_data['service-app']:
@@ -388,58 +394,59 @@ class AgentService:
                     if not name:
                         logger.warning(f"Пропуск service-приложения без имени на сервере {server.name}")
                         continue
-                    
-                    app = Application.query.filter_by(
-                        server_id=server.id, 
-                        name=name,
+
+                    # Ищем экземпляр по instance_name
+                    instance = ApplicationInstance.query.filter_by(
+                        server_id=server.id,
+                        instance_name=name,
                         app_type='service'
                     ).first()
-                    
-                    if not app:
-                        logger.info(f"Создание нового service-приложения {name} на сервере {server.name}")
-                        app = Application(
+
+                    if not instance:
+                        logger.info(f"Создание нового service-экземпляра {name} на сервере {server.name}")
+                        instance = ApplicationInstance(
                             server_id=server.id,
-                            name=name,
+                            instance_name=name,
                             app_type='service'
                         )
-                        db.session.add(app)
-                        db.session.flush()  # Чтобы получить ID для связи с экземпляром
+                        db.session.add(instance)
+                        db.session.flush()  # Чтобы получить ID
                     else:
-                        logger.debug(f"Обновление существующего service-приложения {name} на сервере {server.name}")
-                    
-                    # Обновляем данные приложения
-                    app.path = app_data.get('path')
-                    app.log_path = app_data.get('log_path')
-                    app.version = app_data.get('version')
-                    app.distr_path = app_data.get('distr_path')
-                    app.ip = app_data.get('ip')
-                    app.port = app_data.get('port')
-                    app.status = app_data.get('status') or 'unknown'
-                    
+                        logger.debug(f"Обновление существующего service-экземпляра {name} на сервере {server.name}")
+
+                    # Обновляем данные экземпляра
+                    instance.path = app_data.get('path')
+                    instance.log_path = app_data.get('log_path')
+                    instance.version = app_data.get('version')
+                    instance.distr_path = app_data.get('distr_path')
+                    instance.ip = app_data.get('ip')
+                    instance.port = app_data.get('port')
+                    instance.status = app_data.get('status') or 'unknown'
+                    instance.last_seen = datetime.utcnow()
+
                     if 'start_time' in app_data and app_data['start_time']:
                         try:
-                            app.start_time = datetime.fromisoformat(app_data['start_time'])
+                            instance.start_time = datetime.fromisoformat(app_data['start_time'])
                         except ValueError:
-                            logger.warning(f"Некорректный формат времени запуска для приложения {name}: {app_data['start_time']}")
-                    
-                    # Определяем группу приложения и создаем/обновляем экземпляр
-                    instance = ApplicationGroupService.resolve_application_group(app)
-                    if instance:
-                        logger.debug(f"Service-приложение {name} привязано к группе {instance.group.name}")
-                    
-                    if app.id:
-                        updated_app_ids.add(app.id)
+                            logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
+
+                    # Определяем группу и каталог для экземпляра
+                    ApplicationGroupService.resolve_application_group(instance)
+
+                    if instance.id:
+                        updated_app_ids.add(instance.id)
             
-            # Находим приложения, которые были в БД, но отсутствуют в ответе агента
+            # Находим экземпляры, которые были в БД, но отсутствуют в ответе агента
             deleted_app_ids = existing_app_ids - updated_app_ids
             if deleted_app_ids:
-                logger.info(f"Обнаружено {len(deleted_app_ids)} удаленных приложений на сервере {server.name}")
-                
-                for app_id in deleted_app_ids:
-                    app = Application.query.get(app_id)
-                    if app:
-                        logger.info(f"Приложение {app.name} не найдено на сервере {server.name}, помечаем как offline")
-                        app.status = 'offline'
+                logger.info(f"Обнаружено {len(deleted_app_ids)} удаленных экземпляров на сервере {server.name}")
+
+                for instance_id in deleted_app_ids:
+                    instance = ApplicationInstance.query.get(instance_id)
+                    if instance:
+                        logger.info(f"Экземпляр {instance.instance_name} не найден на сервере {server.name}, помечаем как offline")
+                        instance.status = 'offline'
+                        instance.last_seen = datetime.utcnow()
             
             # Коммитим изменения
             db.session.commit()

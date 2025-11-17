@@ -1,10 +1,11 @@
 # app/models/server.py
+# РЕФАКТОРИНГ - обновлен relationship на ApplicationInstance
 from app import db
 from datetime import datetime
 
 class Server(db.Model):
     __tablename__ = 'servers'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
     ip = db.Column(db.String(15), nullable=False)
@@ -18,8 +19,15 @@ class Server(db.Model):
     # Eureka integration
     is_eureka_node = db.Column(db.Boolean, default=False, nullable=False)
 
-    applications = db.relationship('Application', backref='server', lazy='dynamic', cascade="all, delete-orphan")
-    events = db.relationship('Event', backref='server', lazy='dynamic', cascade="all, delete-orphan")
-    
+    # Relationships
+    instances = db.relationship('ApplicationInstance', back_populates='server', lazy='dynamic', cascade="all, delete-orphan")
+    events = db.relationship('Event', back_populates='server', lazy='dynamic', cascade="all, delete-orphan")
+
+    # Алиас для обратной совместимости
+    @property
+    def applications(self):
+        """Алиас для обратной совместимости с кодом, использующим server.applications"""
+        return self.instances
+
     def __repr__(self):
         return f'<Server {self.name} ({self.ip})>'

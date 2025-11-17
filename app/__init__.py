@@ -30,7 +30,8 @@ def create_app(config_name=None):
     with app.app_context():
         # Импортируем модели, чтобы SQLAlchemy их зарегистрировал
         from app.models.server import Server
-        from app.models.application import Application
+        from app.models.application_instance import ApplicationInstance
+        from app.models.application_catalog import ApplicationCatalog
         from app.models.application_group import ApplicationGroup
         from app.models.event import Event
         from app.models.orchestrator_playbook import OrchestratorPlaybook

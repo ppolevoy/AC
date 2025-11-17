@@ -9,9 +9,12 @@ import re
 import logging
 from typing import Optional, Tuple
 from app import db
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
 from app.models.server import Server
 from app.models.haproxy import HAProxyServer
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +110,7 @@ class HAProxyMapper:
         app = Application.query.filter_by(ip=ip, port=port).first()
 
         if app:
-            logger.info(f"Найдено приложение по адресу: {app.name} ({ip}:{port})")
+            logger.info(f"Найдено приложение по адресу: {app.instance_name} ({ip}:{port})")
             return app
 
         logger.debug(f"Приложение с адресом {ip}:{port} не найдено")
@@ -143,22 +146,22 @@ class HAProxyMapper:
             # Точное совпадение имени
             app = Application.query.filter_by(
                 server_id=server.id,
-                name=expected_app_name
+                instance_name=expected_app_name
             ).first()
 
             if app:
-                logger.info(f"Найдено приложение по имени: {app.name} на сервере {server.name}")
+                logger.info(f"Найдено приложение по имени: {app.instance_name} на сервере {server.name}")
                 return app
 
             # Если не нашли с номером instance, попробуем без него
             if instance > 0:
                 app = Application.query.filter_by(
                     server_id=server.id,
-                    name=app_name
+                    instance_name=app_name
                 ).first()
 
                 if app:
-                    logger.info(f"Найдено приложение по имени без instance: {app.name} на сервере {server.name}")
+                    logger.info(f"Найдено приложение по имени без instance: {app.instance_name} на сервере {server.name}")
                     return app
 
         logger.debug(f"Приложение с именем {expected_app_name} на хосте {hostname} не найдено")
@@ -207,7 +210,7 @@ class HAProxyMapper:
             if ip and port:
                 application = HAProxyMapper.map_by_address(ip, port)
                 if application:
-                    logger.info(f"Маппинг успешен (по адресу): {haproxy_server.server_name} -> {application.name}")
+                    logger.info(f"Маппинг успешен (по адресу): {haproxy_server.server_name} -> {application.instance_name}")
                     # Сохраняем связь
                     haproxy_server.map_to_application(application.id)
                     db.session.commit()
@@ -221,7 +224,7 @@ class HAProxyMapper:
         if hostname and app_name:
             application = HAProxyMapper.map_by_name(hostname, app_name, instance)
             if application:
-                logger.info(f"Маппинг успешен (по имени): {haproxy_server.server_name} -> {application.name}")
+                logger.info(f"Маппинг успешен (по имени): {haproxy_server.server_name} -> {application.instance_name}")
                 # Сохраняем связь
                 haproxy_server.map_to_application(application.id)
                 db.session.commit()

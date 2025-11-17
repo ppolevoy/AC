@@ -2,7 +2,8 @@ from flask import jsonify, request
 import logging
 
 from app.models.server import Server
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
+Application = ApplicationInstance  # Алиас
 from app.tasks.queue import task_queue
 from app.api import bp
 

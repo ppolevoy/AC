@@ -379,7 +379,7 @@ def map_server_to_application(server_id):
         notes: str (optional) - Заметки о маппинге
     """
     try:
-        from app.models.application import Application
+        from app.models.application_instance import ApplicationInstance as Application
 
         data = request.json
         if not data or 'application_id' not in data:
@@ -603,7 +603,7 @@ def search_applications_for_mapping():
         query: str (optional) - Поисковый запрос по имени приложения
     """
     try:
-        from app.models.application import Application
+        from app.models.application_instance import ApplicationInstance as Application
 
         server_id = request.args.get('server_id', type=int)
         if not server_id:
@@ -908,7 +908,7 @@ def get_all_mappings():
     }
     """
     try:
-        from app.models.application import Application
+        from app.models.application_instance import ApplicationInstance as Application
         from collections import defaultdict
 
         # Получаем все замапленные HAProxy серверы с join к приложениям и бэкендам

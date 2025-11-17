@@ -430,16 +430,16 @@ class SSHAnsibleService:
         try:
             # Получаем ID сервера по имени
             from app.models.server import Server
-            from app.models.application import Application
-            
+            from app.models.application_instance import ApplicationInstance
+
             server = Server.query.filter_by(name=server_name).first()
             if not server:
                 error_msg = f"Сервер с именем {server_name} не найден"
                 logger.error(error_msg)
                 return False, error_msg
-            
+
             # Получаем информацию о приложении
-            app = Application.query.get(app_id)
+            app = ApplicationInstance.query.get(app_id)
             image_url = None
             
             # Проверяем, если это Docker приложение

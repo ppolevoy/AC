@@ -187,7 +187,7 @@ class EurekaInstance(db.Model):
     status_page_url = db.Column(db.String(512), nullable=True)
 
     # Связь с приложением AC (nullable - может быть не определено)
-    application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
 
     # Поля для ручного маппинга
     is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)
@@ -202,7 +202,7 @@ class EurekaInstance(db.Model):
 
     # Relationships
     eureka_application = db.relationship('EurekaApplication', back_populates='instances')
-    application = db.relationship('Application', backref=db.backref('eureka_instances', lazy='dynamic'))
+    application = db.relationship('ApplicationInstance', backref=db.backref('eureka_instances', lazy='dynamic'))
     status_history = db.relationship('EurekaInstanceStatusHistory', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
     actions = db.relationship('EurekaInstanceAction', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
 

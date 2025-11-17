@@ -410,35 +410,35 @@ class TaskQueue:
     def _process_start_task(self, task):
         """
         Обработка задачи запуска приложения.
-        
+
         Args:
             task: Задача
-            
+
         Returns:
             str: Результат выполнения задачи
         """
         import asyncio
-        
+
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
-        
+
         # Получаем информацию о приложении внутри контекста приложения
         with self.app.app_context():
             from app.services.ansible_service import AnsibleService
-            from app.models.application import Application
+            from app.models.application_instance import ApplicationInstance
             from app.models.server import Server
-            
-            app = Application.query.get(task.application_id)
+
+            app = ApplicationInstance.query.get(task.application_id)
             if not app:
                 raise ValueError(f"Приложение с id {task.application_id} не найдено")
-            
+
             server = Server.query.get(app.server_id)
             if not server:
-                raise ValueError(f"Сервер для приложения {app.name} не найден")
-            
+                raise ValueError(f"Сервер для приложения {app.instance_name} не найден")
+
             # Сохраняем необходимые данные для использования вне контекста приложения
             app_id = app.id
-            app_name = app.name
+            app_name = app.instance_name
             server_name = server.name
         
         # Создаем event loop внутри метода
@@ -468,35 +468,35 @@ class TaskQueue:
     def _process_stop_task(self, task):
         """
         Обработка задачи остановки приложения.
-        
+
         Args:
             task: Задача
-            
+
         Returns:
             str: Результат выполнения задачи
         """
         import asyncio
-        
+
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
-        
+
         # Получаем информацию о приложении внутри контекста приложения
         with self.app.app_context():
             from app.services.ansible_service import AnsibleService
-            from app.models.application import Application
+            from app.models.application_instance import ApplicationInstance
             from app.models.server import Server
-            
-            app = Application.query.get(task.application_id)
+
+            app = ApplicationInstance.query.get(task.application_id)
             if not app:
                 raise ValueError(f"Приложение с id {task.application_id} не найдено")
-            
+
             server = Server.query.get(app.server_id)
             if not server:
-                raise ValueError(f"Сервер для приложения {app.name} не найден")
-            
+                raise ValueError(f"Сервер для приложения {app.instance_name} не найден")
+
             # Сохраняем необходимые данные для использования вне контекста приложения
             app_id = app.id
-            app_name = app.name
+            app_name = app.instance_name
             server_name = server.name
         
         # Создаем event loop внутри метода
@@ -526,35 +526,35 @@ class TaskQueue:
     def _process_restart_task(self, task):
         """
         Обработка задачи перезапуска приложения.
-        
+
         Args:
             task: Задача
-            
+
         Returns:
             str: Результат выполнения задачи
         """
         import asyncio
-        
+
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
-        
+
         # Получаем информацию о приложении внутри контекста приложения
         with self.app.app_context():
             from app.services.ansible_service import AnsibleService
-            from app.models.application import Application
+            from app.models.application_instance import ApplicationInstance
             from app.models.server import Server
-            
-            app = Application.query.get(task.application_id)
+
+            app = ApplicationInstance.query.get(task.application_id)
             if not app:
                 raise ValueError(f"Приложение с id {task.application_id} не найдено")
-            
+
             server = Server.query.get(app.server_id)
             if not server:
-                raise ValueError(f"Сервер для приложения {app.name} не найден")
-            
+                raise ValueError(f"Сервер для приложения {app.instance_name} не найден")
+
             # Сохраняем необходимые данные для использования вне контекста приложения
             app_id = app.id
-            app_name = app.name
+            app_name = app.instance_name
             server_name = server.name
         
         # Создаем event loop внутри метода
@@ -598,7 +598,7 @@ class TaskQueue:
 
         # Получаем данные внутри контекста приложения
         with self.app.app_context():
-            from app.models.application import Application
+            from app.models.application_instance import ApplicationInstance
             from app.models.server import Server
             from app.services.ssh_ansible_service import SSHAnsibleService
             from app import db
@@ -609,7 +609,7 @@ class TaskQueue:
 
             if is_batch_task:
                 # Групповая задача - загружаем все приложения по ID
-                apps = Application.query.filter(Application.id.in_(app_ids)).all()
+                apps = ApplicationInstance.query.filter(ApplicationInstance.id.in_(app_ids)).all()
 
                 if not apps:
                     raise ValueError(f"Приложения с ID {app_ids} не найдены")
@@ -620,13 +620,13 @@ class TaskQueue:
                     logger.warning(f"Некоторые приложения не найдены: {missing_ids}")
 
                 # Формируем список имен через запятую
-                app_name = ','.join([app.name for app in apps])
+                app_name = ','.join([app.instance_name for app in apps])
 
                 # Берем данные из первого приложения
                 first_app = apps[0]
                 server = Server.query.get(first_app.server_id)
                 if not server:
-                    raise ValueError(f"Сервер для приложения {first_app.name} не найден")
+                    raise ValueError(f"Сервер для приложения {first_app.instance_name} не найден")
 
                 server_id = server.id
                 server_name = server.name
@@ -635,16 +635,16 @@ class TaskQueue:
 
             else:
                 # Одиночная задача - используем application_id
-                app = Application.query.get(task.application_id)
+                app = ApplicationInstance.query.get(task.application_id)
                 if not app:
                     raise ValueError(f"Приложение с id {task.application_id} не найдено")
 
                 server = Server.query.get(app.server_id)
                 if not server:
-                    raise ValueError(f"Сервер для приложения {app.name} не найден")
+                    raise ValueError(f"Сервер для приложения {app.instance_name} не найден")
 
                 app_id = app.id
-                app_name = app.name
+                app_name = app.instance_name
                 app_type = app.app_type
                 server_id = server.id
                 server_name = server.name
@@ -696,13 +696,13 @@ class TaskQueue:
                         # Извлекаем короткое имя из FQDN (до первой точки)
                         short_name = srv.name.split('.')[0] if '.' in srv.name else srv.name
                         # Формируем составное имя с разделителем ::
-                        composite_name = f"{short_name}::{app.name}"
+                        composite_name = f"{short_name}::{app.instance_name}"
                         composite_names.append(composite_name)
 
                         # Сохраняем mapping для логирования
                         if short_name not in servers_apps_map:
                             servers_apps_map[short_name] = []
-                        servers_apps_map[short_name].append(app.name)
+                        servers_apps_map[short_name].append(app.instance_name)
 
                 logger.info(f"Сформированы составные имена для orchestrator:")
                 for comp in composite_names:
@@ -827,7 +827,7 @@ class TaskQueue:
                 # Обновляем информацию о приложении при успешном обновлении
                 # Только для одиночных задач (не для групповых)
                 if success and not is_batch_task:
-                    app = Application.query.get(app_id)
+                    app = ApplicationInstance.query.get(app_id)
                     if app:
                         app.distr_path = distr_url
 

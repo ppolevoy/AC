@@ -14,7 +14,8 @@ from datetime import datetime
 import re
 from typing import Tuple
 
-from app.models.application_group import ApplicationGroup, ApplicationInstance
+from app.models.application_group import ApplicationGroup
+from app.models.application_instance import ApplicationInstance
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,11 @@ from flask import jsonify, request
 import asyncio
 import logging
 
-from app.models.application import Application
-from app.models.application_group import ApplicationInstance
+from app.models.application_instance import ApplicationInstance
 from app.api import bp
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 
@@ -14,21 +16,20 @@ def get_maven_versions_for_app(app):
     Получение списка Maven артефактов для приложения
     """
     try:
-        # Получаем экземпляр приложения
-        instance = app.instance
-        if not instance or not instance.group:
-            logger.info(f"Приложение {app.name} не привязано к группе")
+        # app уже является ApplicationInstance после рефакторинга
+        if not app.group:
+            logger.info(f"Приложение {app.instance_name} не привязано к группе")
             return jsonify({
                 'success': False,
                 'error': 'Приложение не привязано к группе. Настройте группу приложений.'
             }), 404
 
         # Получаем URL артефактов и расширение
-        artifact_url = instance.get_effective_artifact_url()
-        artifact_extension = instance.get_effective_artifact_extension()
+        artifact_url = app.get_effective_artifact_url()
+        artifact_extension = app.get_effective_artifact_extension()
 
         if not artifact_url:
-            logger.info(f"URL артефактов не настроен для приложения {app.name}")
+            logger.info(f"URL артефактов не настроен для приложения {app.instance_name}")
             return jsonify({
                 'success': False,
                 'error': 'URL артефактов не настроен для данного приложения'
@@ -48,7 +49,7 @@ def get_maven_versions_for_app(app):
         # Запускаем асинхронную операцию
         async def fetch_maven_artifacts():
             async with NexusArtifactService() as service:
-                artifacts = await service.get_artifacts_for_application(instance)
+                artifacts = await service.get_artifacts_for_application(app)
 
                 # Фильтруем SNAPSHOT версии если нужно
                 if not include_snapshots:
@@ -108,30 +109,19 @@ def get_docker_versions_for_app(app):
     Получение списка Docker образов для приложения
     """
     try:
-        # Получаем экземпляр приложения
-        instance = app.instance
-        if not instance:
-            # Если экземпляра нет, пытаемся определить группу
-            from app.services.application_group_service import ApplicationGroupService
-            group = ApplicationGroupService.determine_group_for_application(app)
-            if not group:
-                return jsonify({
-                    'success': False,
-                    'error': 'Не удалось определить группу приложения для Docker'
-                }), 404
-
-            # Создаем временный экземпляр
-            instance = ApplicationInstance(
-                application_id=app.id,
-                group_id=group.id,
-                original_name=app.name
-            )
+        # app уже является ApplicationInstance после рефакторинга
+        if not app.group:
+            logger.warning(f"Приложение {app.instance_name} не привязано к группе")
+            return jsonify({
+                'success': False,
+                'error': 'Приложение не привязано к группе. Настройте группу приложений для Docker.'
+            }), 404
 
         # Получаем URL Docker репозитория
-        artifact_url = instance.get_effective_artifact_url()
+        artifact_url = app.get_effective_artifact_url()
 
         if not artifact_url:
-            logger.warning(f"URL Docker репозитория не настроен для приложения {app.name}")
+            logger.warning(f"URL Docker репозитория не настроен для приложения {app.instance_name}")
             return jsonify({
                 'success': False,
                 'error': 'URL Docker репозитория не настроен для данного приложения'
