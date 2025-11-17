@@ -62,3 +62,7 @@ seed_data.sql
 verify_schema.sql
 HAPROXY_EUREKA_FIXES_REPORT.md
 app/models/__pycache__/application_group.cpython-39.pyc
+app/services/__pycache__/agent_service.cpython-39.pyc
+app/services/__pycache__/ansible_service.cpython-39.pyc
+app/services/__pycache__/application_group_service.cpython-39.pyc
+app/services/__pycache__/ssh_ansible_service.cpython-39.pyc

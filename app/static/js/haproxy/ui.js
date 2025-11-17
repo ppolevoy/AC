@@ -323,12 +323,7 @@ const HAProxyUI = {
      */
     showLoading() {
         const container = document.getElementById('backends-container');
-        container.innerHTML = `
-            <div class="loading-message">
-                <span class="loading-spinner">⟳</span>
-                Загрузка данных HAProxy...
-            </div>
-        `;
+        container.innerHTML = '';
         document.getElementById('empty-message').style.display = 'none';
     },
 
@@ -484,11 +479,7 @@ const HAProxyUI = {
                         <button class="modal-close" onclick="HAProxyUI.closeMappingModal()">×</button>
                     </div>
                     <div class="modal-body">
-                        ${loading ? `
-                            <div class="loading-indicator">
-                                <span class="loading-spinner">⟳</span> Загрузка приложений...
-                            </div>
-                        ` : `
+                        ${loading ? `` : `
                             <div class="mapping-info">
                                 <p><strong>IP сервера:</strong> ${serverIp}</p>
                                 <p class="mapping-hint">Показаны только приложения с IP ${serverIp}</p>

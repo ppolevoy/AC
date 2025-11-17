@@ -87,28 +87,24 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     async function loadTasks() {
         try {
-            if (refreshBtn) {
-                refreshBtn.classList.add('rotating');
-            }
-            
             // Получаем выбранный статус фильтра
             const status = statusFilter && statusFilter.value !== 'all' ? statusFilter.value : null;
-            
+
             // Формируем URL с параметрами
             let url = '/api/tasks';
             const params = new URLSearchParams();
-            
+
             if (status) {
                 params.append('status', status);
             }
-            
+
             if (params.toString()) {
                 url += '?' + params.toString();
             }
-            
+
             const response = await fetch(url);
             const data = await response.json();
-            
+
             if (data.success) {
                 renderTasks(data.tasks);
                 updateLastUpdatedTime();
@@ -124,10 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
             showError('Не удалось загрузить список задач');
             if (tasksTableBody) {
                 tasksTableBody.innerHTML = '<tr><td colspan="7" class="table-loading error">Ошибка загрузки задач</td></tr>';
-            }
-        } finally {
-            if (refreshBtn) {
-                refreshBtn.classList.remove('rotating');
             }
         }
     }

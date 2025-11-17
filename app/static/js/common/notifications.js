@@ -18,47 +18,54 @@ function getNotificationContainer() {
 /**
  * Создает и отображает уведомление
  * @param {string} message - Текст уведомления
- * @param {string} type - Тип уведомления (success или error)
+ * @param {string} type - Тип уведомления (success, error, или info)
  * @param {number} duration - Продолжительность отображения в миллисекундах
  */
 function createNotification(message, type, duration) {
-    const container = getNotificationContainer();
+    // Удаляем предыдущие уведомления
+    const existingNotifications = document.querySelectorAll('.notification-toast');
+    existingNotifications.forEach(n => n.remove());
 
+    // Создаем новое уведомление
     const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
+    notification.className = `notification-toast notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            ${message}
+        </div>
+        <button class="notification-close">×</button>
+    `;
 
-    // Добавляем уведомление в начало контейнера (новые уведомления появляются снизу)
-    container.appendChild(notification);
+    // Добавляем в body
+    document.body.appendChild(notification);
 
-    // Анимация появления
+    // Показываем с анимацией
     setTimeout(() => {
         notification.classList.add('show');
     }, 10);
 
-    // Удаление уведомления
-    setTimeout(() => {
-        notification.classList.add('fade-out');
-        setTimeout(() => {
-            if (notification.parentNode) {
-                container.removeChild(notification);
-            }
-            // Удаляем контейнер, если он пуст
-            if (container.children.length === 0 && container.parentNode) {
-                document.body.removeChild(container);
-                notificationContainer = null;
-            }
-        }, 500);
+    // Автоматически скрываем через заданное время
+    const hideTimeout = setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
     }, duration);
+
+    // Обработчик закрытия
+    notification.querySelector('.notification-close').addEventListener('click', () => {
+        clearTimeout(hideTimeout);
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    });
 }
 
 /**
- * Отображает уведомление об успешном действии
+ * Отображает уведомление
  * @param {string} message - Текст уведомления
- * @param {number} duration - Продолжительность отображения в миллисекундах (по умолчанию 3000)
+ * @param {string} type - Тип уведомления (success, error, info, warning) (по умолчанию 'success')
+ * @param {number} duration - Продолжительность отображения в миллисекундах (по умолчанию 5000)
  */
-function showNotification(message, duration = 3000) {
-    createNotification(message, 'success', duration);
+function showNotification(message, type = 'success', duration = 5000) {
+    createNotification(message, type, duration);
 }
 
 /**
@@ -70,6 +77,26 @@ function showError(message, duration = 5000) {
     createNotification(message, 'error', duration);
 }
 
+/**
+ * Отображает сообщение об успехе
+ * @param {string} message - Текст сообщения об успехе
+ * @param {number} duration - Продолжительность отображения в миллисекундах (по умолчанию 5000)
+ */
+function showSuccess(message, duration = 5000) {
+    createNotification(message, 'success', duration);
+}
+
+/**
+ * Отображает предупреждающее сообщение
+ * @param {string} message - Текст предупреждающего сообщения
+ * @param {number} duration - Продолжительность отображения в миллисекундах (по умолчанию 5000)
+ */
+function showWarning(message, duration = 5000) {
+    createNotification(message, 'warning', duration);
+}
+
 // Экспортируем функции, чтобы они были доступны глобально
 window.showNotification = showNotification;
+window.showSuccess = showSuccess;
 window.showError = showError;
+window.showWarning = showWarning;

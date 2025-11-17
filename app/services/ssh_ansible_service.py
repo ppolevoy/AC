@@ -456,7 +456,7 @@ class SSHAnsibleService:
                     description=f"Ошибка SSH-подключения при обновлении {app_name} на {server_name}: {connection_msg}",
                     status='failed',
                     server_id=server.id,
-                    application_id=app_id
+                    instance_id=app_id
                 )
                 return False, f"SSH-соединение не удалось: {connection_msg}"
             
@@ -466,7 +466,7 @@ class SSHAnsibleService:
                 description=f"Запуск обновления приложения {app_name} на сервере {server_name}",
                 status='pending',
                 server_id=server.id,
-                application_id=app_id
+                instance_id=app_id
             )
             
             # Проверяем существование playbook на удаленном хосте
@@ -479,7 +479,7 @@ class SSHAnsibleService:
                     description=f"Ошибка обновления {app_name} на {server_name}: {error_msg}",
                     status='failed',
                     server_id=server.id,
-                    application_id=app_id
+                    instance_id=app_id
                 )
                 return False, error_msg
             
@@ -523,7 +523,7 @@ class SSHAnsibleService:
                     description=f"Обновление {app_name} на {server_name} завершено успешно",
                     status='success',
                     server_id=server.id,
-                    application_id=app_id
+                    instance_id=app_id
                 )
                 
                 return True, result_msg
@@ -536,7 +536,7 @@ class SSHAnsibleService:
                     description=f"Ошибка обновления {app_name} на {server_name}: {error_output}",
                     status='failed',
                     server_id=server.id,
-                    application_id=app_id
+                    instance_id=app_id
                 )
                 
                 return False, error_msg
@@ -551,7 +551,7 @@ class SSHAnsibleService:
                     description=f"Критическая ошибка обновления {app_name} на {server_name}: {str(e)}",
                     status='failed',
                     server_id=server.id if 'server' in locals() else None,
-                    application_id=app_id
+                    instance_id=app_id
                 )
             except:
                 pass
@@ -777,7 +777,7 @@ class SSHAnsibleService:
             return False, "", str(e)
     
     async def _create_event(self, event_type: str, description: str, status: str,
-                          server_id: Optional[int] = None, application_id: Optional[int] = None):
+                          server_id: Optional[int] = None, instance_id: Optional[int] = None):
         """Создает событие в БД"""
         try:
             event = Event(
@@ -785,7 +785,7 @@ class SSHAnsibleService:
                 description=description,
                 status=status,
                 server_id=server_id,
-                application_id=application_id
+                instance_id=instance_id
             )
             db.session.add(event)
             db.session.commit()

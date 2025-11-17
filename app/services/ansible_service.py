@@ -109,7 +109,7 @@ class AnsibleService:
                 description=f"Ошибка обновления приложения {app_name} на сервере {server_name}: {error_msg}",
                 status='failed',
                 server_id=server.id,
-                application_id=app_id
+                instance_id=app_id
             )
             db.session.add(event)
             db.session.commit()
@@ -130,7 +130,7 @@ class AnsibleService:
                 description=f"Запуск обновления приложения {app_name} на сервере {server_name}",
                 status='pending',
                 server_id=server.id,
-                application_id=app_id
+                instance_id=app_id
             )
             db.session.add(event)
             db.session.commit()
@@ -220,7 +220,7 @@ class AnsibleService:
                 description=f"Запуск {action} для приложения {app_name} на сервере {server_name}",
                 status='pending',
                 server_id=server.id,
-                application_id=app_id
+                instance_id=app_id
             )
             db.session.add(event)
             db.session.commit()

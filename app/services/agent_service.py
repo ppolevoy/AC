@@ -323,7 +323,28 @@ class AgentService:
                     instance.compose_project_dir = app_data.get('compose_project_dir')
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
-                    instance.status = 'online'  # Docker-приложения, которые приходят в списке, считаем онлайн
+                    instance.pid = app_data.get('pid')
+
+                    # Docker-специфичные поля
+                    instance.image = app_data.get('image')
+                    instance.tag = app_data.get('tag')
+                    instance.eureka_registered = app_data.get('eureka_registered', False)
+
+                    # Устанавливаем version из tag (версия Docker образа)
+                    instance.version = app_data.get('tag')
+
+                    # Устанавливаем path из compose_project_dir
+                    instance.path = app_data.get('compose_project_dir')
+
+                    # Парсим start_time если присутствует
+                    if 'start_time' in app_data and app_data['start_time']:
+                        try:
+                            instance.start_time = datetime.fromisoformat(app_data['start_time'].replace('Z', '+00:00'))
+                        except (ValueError, AttributeError) as e:
+                            logger.warning(f"Некорректный формат времени запуска для docker-экземпляра {container_name}: {app_data['start_time']}")
+
+                    # Используем статус от агента, если он указан, иначе считаем online
+                    instance.status = app_data.get('status', 'online')
                     instance.last_seen = datetime.utcnow()
 
                     # Определяем группу и каталог для экземпляра

@@ -374,13 +374,10 @@
                 const versionLower = version.version.toLowerCase();
 
                 if (versionLower.includes('snapshot')) {
-                    label += ' 📸';
                     className = 'version-snapshot';
                 } else if (versionLower.includes('dev')) {
-                    label += ' 🔹';
                     className = 'version-dev';
                 } else if (version.is_release) {
-                    label += ' ✅';
                     className = 'version-release';
                 }
 
@@ -1602,10 +1599,25 @@
                     }
 
                     if (!hasErrors) {
-                        showNotification(`✅ Создано задач: ${totalGroups} для ${totalApps} приложений`);
+                        showNotification(`✅ Создано задач: ${totalGroups} для ${totalApps} приложений`, 'success');
                     } else {
-                        showNotification(`⚠️ Обновление запущено с ошибками. Проверьте логи.`);
+                        showNotification(`⚠️ Обновление запущено с ошибками. Проверьте логи.`, 'warning');
                     }
+
+                    // Снимаем чекбоксы с приложений
+                    StateManager.clearSelection();
+                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    DOMUtils.querySelectorInTable('.group-checkbox').forEach(checkbox => {
+                        checkbox.checked = false;
+                        checkbox.indeterminate = false;
+                    });
+                    const selectAllCheckbox = document.getElementById('select-all');
+                    if (selectAllCheckbox) {
+                        selectAllCheckbox.checked = false;
+                    }
+                    UIRenderer.updateActionButtonsState(false);
 
                     await EventHandlers.loadApplications();
                     closeModal();
@@ -1684,25 +1696,23 @@
             const refreshBtn = document.querySelector('.refresh-artifacts-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
                     this.disabled = true;
-                    
+
                     // Используем переданный appId или берем из скрытого поля
-                    const targetAppId = this.dataset.appId || 
-                                       document.getElementById('current-app-id')?.value || 
+                    const targetAppId = this.dataset.appId ||
+                                       document.getElementById('current-app-id')?.value ||
                                        StateManager.state.allApplications[0]?.id;
-                    
+
                     if (targetAppId) {
                         StateManager.clearArtifactsCache(targetAppId);
                         const artifacts = await ArtifactsManager.loadWithCache(targetAppId, true);
                         ModalManager.updateVersionSelector(artifacts, '', targetAppId);
-                        
+
                         if (artifacts) {
-                            showNotification('Список версий обновлен');
+                            showNotification('Список версий обновлен', 'success');
                         }
                     }
-                    
-                    this.classList.remove('rotating');
+
                     this.disabled = false;
                 });
             }
@@ -1761,7 +1771,6 @@
             const refreshBtn = document.querySelector('.refresh-artifacts-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', async function() {
-                    this.classList.add('rotating');
                     this.disabled = true;
 
                     const group = this.dataset.group;
@@ -1779,7 +1788,6 @@
                         await updateFormContent(group, true);
                     }
 
-                    this.classList.remove('rotating');
                     this.disabled = false;
                 });
             }
@@ -1861,7 +1869,7 @@
                     }
                 }
 
-                showNotification(`Запуск обновления для ${appIds.length} приложений...`);
+                showNotification(`Запуск обновления для ${appIds.length} приложений...`, 'info');
 
                 // Используем новый batch_update endpoint
                 const response = await fetch('/api/applications/batch_update', {
@@ -1873,7 +1881,22 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showNotification(`Создано задач: ${result.groups_count} для ${appIds.length} приложений`);
+                    showNotification(`Создано задач: ${result.groups_count} для ${appIds.length} приложений`, 'success');
+
+                    // Снимаем чекбоксы с приложений
+                    StateManager.clearSelection();
+                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    DOMUtils.querySelectorInTable('.group-checkbox').forEach(checkbox => {
+                        checkbox.checked = false;
+                        checkbox.indeterminate = false;
+                    });
+                    const selectAllCheckbox = document.getElementById('select-all');
+                    if (selectAllCheckbox) {
+                        selectAllCheckbox.checked = false;
+                    }
+                    UIRenderer.updateActionButtonsState(false);
                 } else {
                     showError(`Ошибка: ${result.error}`);
                 }
@@ -1888,7 +1911,7 @@
 
         async processMultipleUpdates(updates) {
             try {
-                showNotification(`Запуск обновления ${updates.length} приложений...`);
+                showNotification(`Запуск обновления ${updates.length} приложений...`, 'info');
 
                 // Группируем приложения по (distr_url, mode) для batch запросов
                 const batches = {};
@@ -1926,9 +1949,9 @@
                 }
 
                 if (!hasErrors) {
-                    showNotification(`✅ Создано задач: ${totalGroups} для ${updates.length} приложений`);
+                    showNotification(`✅ Создано задач: ${totalGroups} для ${updates.length} приложений`, 'success');
                 } else {
-                    showNotification(`⚠️ Обновление запущено, но возникли ошибки. Проверьте логи.`);
+                    showNotification(`⚠️ Обновление запущено, но возникли ошибки. Проверьте логи.`, 'warning');
                 }
 
                 await EventHandlers.loadApplications();
@@ -1961,10 +1984,7 @@
             const refreshBtn = document.getElementById('refresh-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', function() {
-                    this.classList.add('rotating');
-                    EventHandlers.loadApplications().finally(() => {
-                        this.classList.remove('rotating');
-                    });
+                    EventHandlers.loadApplications();
                 });
             }
         },
@@ -2303,9 +2323,9 @@
                         const errorCount = result.results?.filter(r => !r.success).length || 0;
                         
                         if (errorCount === 0) {
-                            showNotification(`Действие "${actionName}" успешно выполнено`);
+                            showNotification(`Действие "${actionName}" успешно выполнено`, 'success');
                         } else if (successCount > 0) {
-                            showNotification(`Действие выполнено для ${successCount} из ${availableIds.length} приложений`);
+                            showNotification(`Действие выполнено для ${successCount} из ${availableIds.length} приложений`, 'success');
                         } else {
                             showError(`Не удалось выполнить действие "${actionName}"`);
                         }

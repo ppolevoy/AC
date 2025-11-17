@@ -746,45 +746,10 @@ async function initializeInstances() {
     }
 }
 
-// Функция показа уведомлений
-function showNotification(message, type = 'info') {
-    // Удаляем предыдущие уведомления
-    const existingNotifications = document.querySelectorAll('.notification-toast');
-    existingNotifications.forEach(n => n.remove());
-    
-    // Создаем новое уведомление
-    const notification = document.createElement('div');
-    notification.className = `notification-toast notification-${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            ${message}
-        </div>
-        <button class="notification-close">×</button>
-    `;
-    
-    // Добавляем в body
-    document.body.appendChild(notification);
-    
-    // Показываем с анимацией
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 10);
-    
-    // Автоматически скрываем через 5 секунд
-    const hideTimeout = setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
-    }, 5000);
-    
-    // Обработчик закрытия
-    notification.querySelector('.notification-close').addEventListener('click', () => {
-        clearTimeout(hideTimeout);
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
-    });
-}
+// Функция showNotification теперь доступна глобально из common/notifications.js
+// Дублирование удалено для консистентности
 
-// Добавляем стили
+// Добавляем стили для специфичных элементов страницы настроек
 const style = document.createElement('style');
 style.textContent = `
     .status-dot.warning {

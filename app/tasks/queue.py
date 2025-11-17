@@ -12,21 +12,24 @@ class Task:
     Класс, представляющий задачу для выполнения.
     """
     
-    def __init__(self, task_type, params, server_id=None, application_id=None):
+    def __init__(self, task_type, params, server_id=None, instance_id=None, application_id=None):
         """
         Инициализация новой задачи.
-        
+
         Args:
             task_type: Тип задачи (start, stop, restart, update)
             params: Словарь с параметрами задачи
             server_id: ID сервера (опционально)
-            application_id: ID приложения (опционально)
+            instance_id: ID экземпляра приложения (опционально)
+            application_id: ID приложения (deprecated, используйте instance_id)
         """
         self.id = str(uuid.uuid4())
         self.task_type = task_type
         self.params = params
         self.server_id = server_id
-        self.application_id = application_id
+        # Поддержка обратной совместимости
+        self.instance_id = instance_id or application_id
+        self.application_id = self.instance_id  # Алиас для обратной совместимости
         self.created_at = datetime.utcnow()
         self.started_at = None
         self.completed_at = None
@@ -42,7 +45,8 @@ class Task:
             "task_type": self.task_type,
             "params": self.params,
             "server_id": self.server_id,
-            "application_id": self.application_id,
+            "instance_id": self.instance_id,
+            "application_id": self.application_id,  # Для обратной совместимости
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -87,9 +91,10 @@ class TaskQueue:
             from app import db
             from app.models.event import Event
             
-            # Находим все незавершенные задачи (со статусом 'pending' или 'processing')
+            # Находим все незавершенные задачи (со статусом 'pending')
+            # Примечание: 'processing' удален из фильтра т.к. этот статус недопустим для Event
             pending_events = Event.query.filter(
-                Event.status.in_(['pending', 'processing'])
+                Event.status == 'pending'
             ).order_by(Event.timestamp.desc()).all()
             
             if not pending_events:
@@ -109,7 +114,7 @@ class TaskQueue:
                     task_type=event.event_type,
                     params={},
                     server_id=event.server_id,
-                    application_id=event.application_id
+                    instance_id=event.instance_id
                 )
                 task.status = 'failed'
                 task.created_at = event.timestamp
@@ -161,7 +166,7 @@ class TaskQueue:
                             event_type=task.task_type,
                             status='pending',
                             server_id=task.server_id,
-                            application_id=task.application_id
+                            instance_id=task.instance_id
                         ).first()
                         
                         if existing_event:
@@ -177,7 +182,7 @@ class TaskQueue:
                                 description=f"Задача {task.task_type} добавлена в очередь",
                                 status="pending",
                                 server_id=task.server_id,
-                                application_id=task.application_id
+                                instance_id=task.instance_id
                             )
                             db.session.add(event)
                             db.session.commit()
@@ -305,8 +310,8 @@ class TaskQueue:
                 # Используем контекст приложения для операций с БД
                 if self.app:
                     with self.app.app_context():
-                        # Обновляем событие в БД
-                        self._update_task_event(task, "processing", f"Началась обработка задачи {task.task_type}")
+                        # Обновляем событие в БД (используем pending т.к. processing не допустим)
+                        self._update_task_event(task, "pending", f"Началась обработка задачи {task.task_type}")
                 
                 logger.info(f"Обработка задачи {task.id} ({task.task_type})")
                 
@@ -378,7 +383,7 @@ class TaskQueue:
             event = Event.query.filter_by(
                 event_type=task.task_type,
                 server_id=task.server_id,
-                application_id=task.application_id
+                instance_id=task.instance_id
             ).order_by(Event.timestamp.desc()).first()
             
             if event and event.status == "pending":
@@ -394,7 +399,7 @@ class TaskQueue:
                     description=description,
                     status=status,
                     server_id=task.server_id,
-                    application_id=task.application_id
+                    instance_id=task.instance_id
                 )
                 db.session.add(event)
                 db.session.commit()

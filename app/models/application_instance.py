@@ -42,6 +42,9 @@ class ApplicationInstance(db.Model):
     container_id = db.Column(db.String(128), nullable=True)
     container_name = db.Column(db.String(128), nullable=True)
     compose_project_dir = db.Column(db.String(255), nullable=True)
+    image = db.Column(db.String(255), nullable=True)  # Docker образ
+    tag = db.Column(db.String(64), nullable=True)  # Версия образа
+    eureka_registered = db.Column(db.Boolean, default=False, nullable=True)  # Флаг регистрации в Eureka
 
     # Eureka-специфичные поля
     eureka_url = db.Column(db.String(255), nullable=True)
@@ -123,6 +126,15 @@ class ApplicationInstance(db.Model):
     def name(self):
         """Алиас для обратной совместимости с кодом, использующим app.name"""
         return self.instance_name
+
+    @property
+    def base_name(self):
+        """Базовое имя приложения без номера экземпляра"""
+        if self.catalog:
+            return self.catalog.name
+        # Парсим имя экземпляра
+        parsed_name, _ = self.parse_application_name(self.instance_name)
+        return parsed_name or self.instance_name
 
     @property
     def update_playbook_path(self):
@@ -235,6 +247,9 @@ class ApplicationInstance(db.Model):
             'container_id': self.container_id,
             'container_name': self.container_name,
             'compose_project_dir': self.compose_project_dir,
+            'image': self.image,
+            'tag': self.tag,
+            'eureka_registered': self.eureka_registered,
             'eureka_url': self.eureka_url,
             'ip': self.ip,
             'port': self.port,
