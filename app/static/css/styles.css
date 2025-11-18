@@ -2790,7 +2790,7 @@ body.light-theme .confirm-extra-message {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    background-color: white;
+    background-color: #333336;
     font-size: 14px;
     cursor: pointer;
     transition: border-color 0.3s;

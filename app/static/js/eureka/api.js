@@ -53,7 +53,7 @@ const EurekaAPI = {
      * @returns {Promise<Object>}
      */
     async getServers(activeOnly = false) {
-        const url = `${this.baseUrl}/servers${activeOnly ? '?active_only=true' : ''}`;
+        const url = `${this.baseUrl}/servers${activeOnly ? '?is_active=true' : ''}`;
         return await this._fetchWithErrorHandling(url, {}, 'Error fetching Eureka servers');
     },
 

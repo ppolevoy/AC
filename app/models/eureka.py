@@ -290,6 +290,7 @@ class EurekaInstance(db.Model):
         result = {
             'id': self.id,
             'eureka_application_id': self.eureka_application_id,
+            'eureka_server_id': self.eureka_application.eureka_server_id if self.eureka_application else None,
             'instance_id': self.instance_id,
             'ip_address': self.ip_address,
             'port': self.port,
