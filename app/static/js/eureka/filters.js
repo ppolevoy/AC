@@ -62,45 +62,34 @@ const EurekaFilters = {
      * Применить фильтры
      */
     applyFilters() {
-        console.log('Applying filters:', this.currentFilters);
-        console.log('Total instances before filtering:', this.allInstances.length);
-
         let filtered = [...this.allInstances];
 
         // Фильтр по серверу
         if (this.currentFilters.serverId) {
             const serverId = parseInt(this.currentFilters.serverId);
-            console.log('Filtering by server ID:', serverId);
             filtered = filtered.filter(inst =>
                 inst != null && inst.eureka_server_id != null && inst.eureka_server_id === serverId
             );
-            console.log('After server filter:', filtered.length);
         }
 
         // Фильтр по приложению
         if (this.currentFilters.appName) {
-            console.log('Filtering by app name:', this.currentFilters.appName);
-            console.log('Sample instance service_name:', filtered.length > 0 ? filtered[0].service_name : 'N/A');
             const appNameLower = this.currentFilters.appName.toLowerCase();
             filtered = filtered.filter(inst =>
                 inst != null && inst.service_name != null && inst.service_name.toLowerCase() === appNameLower
             );
-            console.log('After app filter:', filtered.length);
         }
 
         // Фильтр по статусу
         if (this.currentFilters.status) {
-            console.log('Filtering by status:', this.currentFilters.status);
             filtered = filtered.filter(inst =>
                 inst != null && inst.status != null && inst.status === this.currentFilters.status
             );
-            console.log('After status filter:', filtered.length);
         }
 
         // Фильтр по поисковому запросу
         if (this.currentFilters.searchText) {
             const searchText = this.currentFilters.searchText;
-            console.log('Filtering by search text:', searchText);
             filtered = filtered.filter(inst => {
                 if (inst == null) return false;
 
@@ -114,10 +103,7 @@ const EurekaFilters = {
                     ipAddress.includes(searchText)
                 );
             });
-            console.log('After search filter:', filtered.length);
         }
-
-        console.log('Final filtered count:', filtered.length);
 
         // Отрисовать отфильтрованные данные
         if (window.EurekaUI) {

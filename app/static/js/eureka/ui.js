@@ -318,8 +318,6 @@ const EurekaUI = {
     populateAppFilter(apps) {
         if (!this.elements.appFilter) return;
 
-        console.log('populateAppFilter received apps:', apps);
-
         this.elements.appFilter.innerHTML = '<option value="">Все приложения</option>';
 
         // Получаем уникальные имена приложений из instances
@@ -329,8 +327,6 @@ const EurekaUI = {
                 uniqueApps.add(app.app_name);
             }
         });
-
-        console.log('Unique app names:', Array.from(uniqueApps));
 
         Array.from(uniqueApps).sort().forEach(appName => {
             const option = document.createElement('option');
