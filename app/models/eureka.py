@@ -187,7 +187,7 @@ class EurekaInstance(db.Model):
     status_page_url = db.Column(db.String(512), nullable=True)
 
     # Связь с приложением AC (nullable - может быть не определено)
-    application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
 
     # Поля для ручного маппинга
     is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)
@@ -202,7 +202,7 @@ class EurekaInstance(db.Model):
 
     # Relationships
     eureka_application = db.relationship('EurekaApplication', back_populates='instances')
-    application = db.relationship('Application', backref=db.backref('eureka_instances', lazy='dynamic'))
+    application = db.relationship('ApplicationInstance', backref=db.backref('eureka_instances', lazy='dynamic'))
     status_history = db.relationship('EurekaInstanceStatusHistory', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
     actions = db.relationship('EurekaInstanceAction', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
 
@@ -290,6 +290,7 @@ class EurekaInstance(db.Model):
         result = {
             'id': self.id,
             'eureka_application_id': self.eureka_application_id,
+            'eureka_server_id': self.eureka_application.eureka_server_id if self.eureka_application else None,
             'instance_id': self.instance_id,
             'ip_address': self.ip_address,
             'port': self.port,
@@ -315,7 +316,7 @@ class EurekaInstance(db.Model):
         if include_application and self.application:
             result['application'] = {
                 'id': self.application.id,
-                'name': self.application.name,
+                'name': self.application.instance_name,
                 'status': self.application.status,
                 'eureka_url': self.application.eureka_url,
                 'server_name': self.application.server.name if self.application.server else None

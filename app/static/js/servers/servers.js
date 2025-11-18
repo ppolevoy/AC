@@ -159,17 +159,11 @@ function setupActionButtons() {
  */
 async function refreshServer(serverId) {
     try {
-        const btn = document.querySelector(`.refresh-btn[data-server-id="${serverId}"]`);
-        if (btn) {
-            // Добавляем класс для анимации вращения кнопки
-            btn.classList.add('rotating');
-        }
-        
         const response = await fetch(`/api/servers/${serverId}/refresh`, {
             method: 'POST'
         });
         const data = await response.json();
-        
+
         if (data.success) {
             // Обновляем список серверов после успешного обновления
             loadServers();
@@ -181,12 +175,6 @@ async function refreshServer(serverId) {
     } catch (error) {
         console.error('Ошибка при обновлении сервера:', error);
         showError('Не удалось обновить сервер');
-    } finally {
-        // Убираем анимацию вращения
-        const btn = document.querySelector(`.refresh-btn[data-server-id="${serverId}"]`);
-        if (btn) {
-            btn.classList.remove('rotating');
-        }
     }
 }
 

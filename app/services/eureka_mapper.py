@@ -6,9 +6,12 @@ EurekaMapper - сервис для маппинга Eureka экземпляро�
 import logging
 from typing import List, Optional, Tuple
 from app import db
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
 from app.models.eureka import EurekaInstance
 from difflib import SequenceMatcher
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,7 @@ class EurekaMapper:
         ).first()
 
         if application:
-            logger.debug(f"Найдено соответствие по eureka_url: {instance.instance_id} -> {application.name} (ID={application.id})")
+            logger.debug(f"Найдено соответствие по eureka_url: {instance.instance_id} -> {application.instance_name} (ID={application.id})")
             return application.id
 
         return None
@@ -117,7 +120,7 @@ class EurekaMapper:
         service_name_lower = instance.service_name.lower()
 
         for app in applications:
-            app_name_lower = app.name.lower()
+            app_name_lower = app.instance_name.lower()
 
             # Вычисляем сходство имён
             ratio = SequenceMatcher(None, service_name_lower, app_name_lower).ratio()
@@ -133,7 +136,7 @@ class EurekaMapper:
         if best_match:
             logger.debug(f"Найдено соответствие по имени (сходство {best_ratio:.2f}): "
                         f"{instance.instance_id} ({instance.service_name}) -> "
-                        f"{best_match.name} (ID={best_match.id})")
+                        f"{best_match.instance_name} (ID={best_match.id})")
             return best_match.id
 
         logger.debug(f"Не найдено соответствие для {instance.instance_id} по серверу и имени")

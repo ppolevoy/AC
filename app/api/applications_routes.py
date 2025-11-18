@@ -4,11 +4,14 @@ from collections import defaultdict
 
 from app import db
 from app.models.server import Server
-from app.models.application import Application
-from app.models.application_group import ApplicationGroup, ApplicationInstance
+from app.models.application_instance import ApplicationInstance
+from app.models.application_group import ApplicationGroup
 from app.models.event import Event
 from app.tasks.queue import task_queue, Task
 from app.api import bp
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,7 @@ def get_applications():
                 'type': app.app_type,
                 'status': app.status,
                 'version': app.version,
+                'path': app.path,
                 'group_name': app.group_name,
                 'instance_number': app.instance_number,
                 'start_time': app.start_time.isoformat() if app.start_time else None
@@ -75,7 +79,7 @@ def get_application(app_id):
         server = Server.query.get(app.server_id)
 
         # Получаем последние события для этого приложения
-        events = Event.query.filter_by(application_id=app.id).order_by(Event.timestamp.desc()).limit(10).all()
+        events = Event.query.filter_by(instance_id=app.id).order_by(Event.timestamp.desc()).limit(10).all()
         events_list = []
 
         for event in events:
@@ -176,32 +180,9 @@ def update_application(app_id):
                 'error': f"Сервер приложения не найден"
             }), 404
 
-        # Определяем путь к playbook
-        playbook_path = None
-
-        # Приоритет 1: Путь из Application
-        if app.update_playbook_path:
-            playbook_path = app.update_playbook_path
-            logger.info(f"Используется playbook приложения: {playbook_path}")
-
-        # Приоритет 2: Если есть экземпляр, проверяем его настройки
-        if not playbook_path:
-            instance = ApplicationInstance.query.filter_by(application_id=app_id).first()
-            if instance:
-                # Приоритет 2a: Кастомный путь экземпляра
-                if instance.custom_playbook_path:
-                    playbook_path = instance.custom_playbook_path
-                    logger.info(f"Используется кастомный playbook экземпляра: {playbook_path}")
-
-                # Приоритет 2b: Групповой путь
-                elif instance.group and instance.group.update_playbook_path:
-                    playbook_path = instance.group.update_playbook_path
-                    logger.info(f"Используется групповой playbook: {playbook_path}")
-
-                # Приоритет 2c: Эффективный путь
-                elif hasattr(instance, 'get_effective_playbook_path'):
-                    playbook_path = instance.get_effective_playbook_path()
-                    logger.info(f"Используется эффективный playbook экземпляра: {playbook_path}")
+        # Определяем путь к playbook (app уже является ApplicationInstance после рефакторинга)
+        playbook_path = app.get_effective_playbook_path()
+        logger.info(f"Используется playbook: {playbook_path}")
 
         # Приоритет 3: Дефолтный путь в зависимости от типа приложения
         if not playbook_path:
@@ -245,20 +226,20 @@ def update_application(app_id):
         # Логируем событие
         event = Event(
             event_type='update',
-            description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url}",
+            description=f"Запущено обновление {app.app_type} приложения {app.instance_name} на версию из {distr_url}",
             status='pending',
             server_id=server.id,
-            application_id=app.id
+            instance_id=app.id
         )
         db.session.add(event)
         db.session.commit()
 
-        logger.info(f"Задача обновления {app.name} добавлена в очередь (task_id: {task.id})")
+        logger.info(f"Задача обновления {app.instance_name} добавлена в очередь (task_id: {task.id})")
 
         # Возвращаем успешный ответ сразу - обработка будет происходить асинхронно
         return jsonify({
             'success': True,
-            'message': f"Обновление приложения {app.name} добавлено в очередь",
+            'message': f"Обновление приложения {app.instance_name} добавлено в очередь",
             'task_id': task.id
         })
 
@@ -337,26 +318,12 @@ def batch_update_applications():
         groups = defaultdict(list)
 
         for app in applications:
-            # Получаем экземпляр приложения
-            instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
-
+            # app уже является ApplicationInstance после рефакторинга
             # Определяем playbook_path
-            playbook_path = None
-            if instance:
-                playbook_path = instance.get_effective_playbook_path()
-            else:
-                # Fallback если нет instance
-                if app.update_playbook_path:
-                    playbook_path = app.update_playbook_path
-                else:
-                    from app.config import Config
-                    if app.app_type == 'docker':
-                        playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
-                    else:
-                        playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+            playbook_path = app.get_effective_playbook_path()
 
             # Определяем ключ группировки на основе стратегии
-            group = instance.group if instance else None
+            group = app.group
             strategy = group.get_batch_grouping_strategy() if group else 'by_group'
 
             # Проверяем, используется ли оркестратор
@@ -407,18 +374,8 @@ def batch_update_applications():
 
             # Получаем playbook_path и server_id из первого приложения группы
             first_app = apps_in_group[0]
-            first_instance = ApplicationInstance.query.filter_by(application_id=first_app.id).first()
-            playbook_path = first_instance.get_effective_playbook_path() if first_instance else None
-
-            if not playbook_path:
-                if first_app.update_playbook_path:
-                    playbook_path = first_app.update_playbook_path
-                else:
-                    from app.config import Config
-                    if first_app.app_type == 'docker':
-                        playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
-                    else:
-                        playbook_path = getattr(Config, 'DEFAULT_UPDATE_PLAYBOOK', '/site/ansible/fmcc/update-app.yml')
+            # first_app уже является ApplicationInstance после рефакторинга
+            playbook_path = first_app.get_effective_playbook_path()
 
             # Создаем задачу для группы
             task = Task(
@@ -440,14 +397,14 @@ def batch_update_applications():
             created_tasks.append(task.id)
 
             # Логируем события для каждого приложения в группе
-            app_names_for_log = ','.join([app.name for app in apps_in_group])
+            app_names_for_log = ','.join([app.instance_name for app in apps_in_group])
             for app in apps_in_group:
                 event = Event(
                     event_type='update',
-                    description=f"Запущено обновление {app.app_type} приложения {app.name} на версию из {distr_url} (группа: {app_names_for_log})",
+                    description=f"Запущено обновление {app.app_type} приложения {app.instance_name} на версию из {distr_url} (группа: {app_names_for_log})",
                     status='pending',
                     server_id=first_app.server_id,
-                    application_id=app.id
+                    instance_id=app.id
                 )
                 db.session.add(event)
 

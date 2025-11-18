@@ -1397,7 +1397,7 @@ body.light-theme .app-list li {
     pointer-events: none;
 }
 
-/* Notification */
+/* Old Notification (deprecated, kept for compatibility) */
 .notification {
     padding: 10px 16px;
     border-radius: 8px;
@@ -1437,6 +1437,121 @@ body.light-theme .notification.success {
 
 body.light-theme .notification.error {
     background-color: #dc2626;
+}
+
+/* New Notification Toast (improved design) */
+.notification-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: var(--z-notification);
+    min-width: 300px;
+    max-width: 500px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+}
+
+.notification-toast.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notification-toast .notification-content {
+    flex: 1;
+    color: white;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.notification-toast .notification-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.notification-toast .notification-close:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+/* Notification Toast Types */
+.notification-toast.notification-success {
+    background-color: rgba(16, 185, 129, 0.95);
+    border-left: 4px solid #059669;
+}
+
+.notification-toast.notification-error {
+    background-color: rgba(239, 68, 68, 0.95);
+    border-left: 4px solid #dc2626;
+}
+
+.notification-toast.notification-info {
+    background-color: rgba(59, 130, 246, 0.95);
+    border-left: 4px solid #2563eb;
+}
+
+.notification-toast.notification-warning {
+    background-color: rgba(245, 158, 11, 0.95);
+    border-left: 4px solid #d97706;
+}
+
+/* Light theme notification toasts */
+body.light-theme .notification-toast {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+body.light-theme .notification-toast.notification-success {
+    background-color: rgba(16, 185, 129, 0.95);
+    border-left-color: #059669;
+}
+
+body.light-theme .notification-toast.notification-error {
+    background-color: rgba(239, 68, 68, 0.95);
+    border-left-color: #dc2626;
+}
+
+body.light-theme .notification-toast.notification-info {
+    background-color: rgba(59, 130, 246, 0.95);
+    border-left-color: #2563eb;
+}
+
+body.light-theme .notification-toast.notification-warning {
+    background-color: rgba(245, 158, 11, 0.95);
+    border-left-color: #d97706;
+}
+
+body.light-theme .notification-toast .notification-content {
+    color: white;
+}
+
+body.light-theme .notification-toast .notification-close {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+body.light-theme .notification-toast .notification-close:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 /* Server Page Styles */
@@ -2675,7 +2790,7 @@ body.light-theme .confirm-extra-message {
     padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    background-color: white;
+    background-color: #333336;
     font-size: 14px;
     cursor: pointer;
     transition: border-color 0.3s;
@@ -2739,16 +2854,6 @@ body.light-theme .confirm-extra-message {
     font-style: italic;
 }
 
-/* Подсветка выбранной версии Release */
-.modal-form select option:contains("Release") {
-    font-weight: bold;
-    color: #4CAF50;
-}
-
-/* Подсветка версий Snapshot */
-.modal-form select option:contains("Snapshot") {
-    color: #ff9800;
-}
 /* Контейнер для селектора артефактов */
 .artifact-selector-wrapper {
     display: flex;
@@ -2911,70 +3016,21 @@ body.light-theme .modal-form::-webkit-scrollbar-thumb {
 body.light-theme .modal-form::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
-/* Выделение версий по типу в выпадающем списке */
-.artifact-select option.version-snapshot {
-    background-color: rgba(230, 126, 34, 0.1);
-    color: #e67e22;
-    font-weight: 500;
-}
-
-.artifact-select option.version-dev {
-    background-color: rgba(243, 156, 18, 0.1);
-    color: #f39c12;
-    font-weight: 500;
-}
-
-.artifact-select option.version-release {
-    background-color: rgba(46, 204, 113, 0.1);
-    color: #2ecc71;
-    font-weight: 600;
-}
-
-/* Темная тема - усиленная подсветка */
-body:not(.light-theme) .artifact-select option.version-snapshot {
-    background-color: rgba(230, 126, 34, 0.2);
-}
-
-body:not(.light-theme) .artifact-select option.version-dev {
-    background-color: rgba(243, 156, 18, 0.2);
-}
-
-body:not(.light-theme) .artifact-select option.version-release {
-    background-color: rgba(46, 204, 113, 0.2);
-}
-
-/* Светлая тема */
-body.light-theme .artifact-select option.version-snapshot {
-    background-color: rgba(230, 126, 34, 0.15);
-    color: #d35400;
-}
-
-body.light-theme .artifact-select option.version-dev {
-    background-color: rgba(243, 156, 18, 0.15);
-    color: #e67e22;
-}
-
-body.light-theme .artifact-select option.version-release {
-    background-color: rgba(39, 174, 96, 0.15);
-    color: #27ae60;
-}
-
-/* Стилизация выбранной опции в select */
+/* Базовые стили для селектора артефактов */
 .artifact-select {
     font-family: monospace;
     font-size: 14px;
 }
 
-.artifact-select:has(option.version-snapshot:checked) {
-    border-left: 3px solid #e67e22;
+/* Стили для option элементов в темной теме */
+.modal-form select option {
+    background-color: #333336;
+    color: #ebe4da;
 }
 
-.artifact-select:has(option.version-dev:checked) {
-    border-left: 3px solid #f39c12;
-}
-
-.artifact-select:has(option.version-release:checked) {
-    border-left: 3px solid #2ecc71;
+body.light-theme .modal-form select option {
+    background-color: #fff;
+    color: #333;
 }
 
 /* Индикатор загрузки */
@@ -3165,134 +3221,6 @@ body.light-theme .app-badge {
 body.light-theme .artifact-select option[value="custom"] {
     border-top-color: #ddd;
     color: #666;
-}
-
-.notification-toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    min-width: 300px;
-    max-width: 500px;
-    background-color: #2a2a2b;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    z-index: var(--z-highest);
-    transform: translateX(120%);
-    transition: transform 0.3s ease;
-    border-left: 4px solid #5ca5e1;
-}
-
-.notification-toast.show {
-    transform: translateX(0);
-}
-
-/* Типы уведомлений */
-.notification-toast.notification-success {
-    border-left-color: #2ecc71;
-    background-color: rgba(46, 204, 113, 0.1);
-}
-
-.notification-toast.notification-warning {
-    border-left-color: #f39c12;
-    background-color: rgba(243, 156, 18, 0.1);
-}
-
-.notification-toast.notification-error {
-    border-left-color: #e74c3c;
-    background-color: rgba(231, 76, 60, 0.1);
-}
-
-.notification-toast.notification-info {
-    border-left-color: #5ca5e1;
-    background-color: rgba(92, 165, 225, 0.1);
-}
-
-.notification-content {
-    flex: 1;
-    color: #ebe4da;
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.notification-close {
-    background: none;
-    border: none;
-    color: #aaa;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 0;
-    margin-left: 16px;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-}
-
-.notification-close:hover {
-    color: #ebe4da;
-}
-
-/* Светлая тема */
-body.light-theme .notification-toast {
-    background-color: #fff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-body.light-theme .notification-toast.notification-success {
-    background-color: rgba(46, 204, 113, 0.05);
-}
-
-body.light-theme .notification-toast.notification-warning {
-    background-color: rgba(243, 156, 18, 0.05);
-}
-
-body.light-theme .notification-toast.notification-error {
-    background-color: rgba(231, 76, 60, 0.05);
-}
-
-body.light-theme .notification-toast.notification-info {
-    background-color: rgba(92, 165, 225, 0.05);
-}
-
-body.light-theme .notification-content {
-    color: #333;
-}
-
-body.light-theme .notification-close {
-    color: #999;
-}
-
-body.light-theme .notification-close:hover {
-    color: #333;
-}
-
-/* Анимация появления */
-@keyframes slideIn {
-    from {
-        transform: translateX(120%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(120%);
-        opacity: 0;
-    }
 }
 
 

@@ -152,26 +152,15 @@ const EurekaUI = {
             </button>
         `);
 
-        // Pause/Resume
-        if (instance.status === 'PAUSED') {
-            buttons.push(`
-                <button class="table-action-btn primary"
-                        data-action="resume"
-                        data-instance-id="${instance.id}"
-                        title="Resume">
-                    ▶
-                </button>
-            `);
-        } else {
-            buttons.push(`
-                <button class="table-action-btn warning"
-                        data-action="pause"
-                        data-instance-id="${instance.id}"
-                        title="Pause">
-                    ⏸
-                </button>
-            `);
-        }
+        // Pause (всегда показываем кнопку Pause, т.к. реализация кастомная)
+        buttons.push(`
+            <button class="table-action-btn warning"
+                    data-action="pause"
+                    data-instance-id="${instance.id}"
+                    title="Pause">
+                ⏸
+            </button>
+        `);
 
         // Log Level
         buttons.push(`
@@ -334,7 +323,9 @@ const EurekaUI = {
         // Получаем уникальные имена приложений из instances
         const uniqueApps = new Set();
         apps.forEach(app => {
-            uniqueApps.add(app.app_name);
+            if (app && app.app_name) {
+                uniqueApps.add(app.app_name);
+            }
         });
 
         Array.from(uniqueApps).sort().forEach(appName => {

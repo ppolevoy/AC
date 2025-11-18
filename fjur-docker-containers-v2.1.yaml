@@ -1,0 +1,210 @@
+#!/usr/bin/ansible-playbook
+# Ansible Playbook v2.0 - Docker Container Version Update
+# Purpose: Update version numbers in .env file for Docker containers
+# Last updated: 2025-10-27
+
+- name: Normalize server name
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Extract short hostname from FQDN
+      set_fact:
+        target_host: "{{ server.split('.')[0] if (server is defined and '.' in server) else (server | default('localhost')) }}"
+      run_once: true
+      
+    - name: Add target host dynamically
+      add_host:
+        name: "{{ target_host }}"
+        groups: dynamic_targets
+      changed_when: false
+
+- name: Update Docker container version in .env file
+  hosts: dynamic_targets
+  gather_facts: no
+ 
+  vars:
+    env_file_path: "/site/app/.env"
+    scripts_path: "~/bin/"
+    dry_run_mode: "{{ dry_run | default(false) | bool }}"
+    
+# ================
+# Validate parameters
+# ================
+    
+  tasks:
+    - name: Validate input parameters
+      tags: [always, validate]
+      fail:
+        msg: "Parameter '{{ item.name }}' is required. Please provide it with -e '{{ item.name }}=value'"
+      when: item.value | length == 0
+      loop:
+        - { name: 'app_name', value: "{{ app_name | default('') }}" }
+        - { name: 'image_url', value: "{{ image_url | default('') }}" }
+      loop_control:
+        label: "{{ item.name }}"
+        
+    - name: Extract version tag from image URL
+      tags: [always, validate]
+      set_fact:
+        version_tag: "{{ image_url.split(':')[-1] }}"
+        
+    - name: Validate extracted version tag
+      tags: [always, validate]
+      fail:
+        msg: "Could not extract version tag from URL: {{ image_url }}"
+      when: version_tag == image_url or version_tag == ""
+    
+    - name: Normalize application name for .env variable lookup
+      tags: [always, validate]
+      set_fact:
+        original_app_name: "{{ app_name }}"
+        normalized_app_name: "{{ app_name | regex_replace('-', '_') | regex_replace('_\\d+$', '') }}"
+    
+    - name: Set name conversion flag
+      tags: [always, validate]
+      set_fact:
+        name_was_converted: "{{ original_app_name != normalized_app_name }}"
+      
+    - name: Display validated input parameters
+      tags: [always, validate]
+      debug:
+        msg:
+          - "Target server: {{ inventory_hostname }}"
+          - "Container name: {{ original_app_name }}"
+          - "Normalized name for .env: {{ normalized_app_name }}"
+          - "Name conversion applied: {{ name_was_converted }}"
+          - "Image URL: {{ image_url }}"
+          - "Extracted version tag: {{ version_tag }}"
+          - "Dry-run mode: {{ dry_run_mode }}"
+
+# ================
+# Check environment
+# ================
+
+    - name: Check environment prerequisites
+      tags: [always, check]
+      block:
+        - name: Check if .env file exists
+          stat:
+            path: "{{ env_file_path }}"
+          register: env_file_stat
+          
+        - name: Fail if .env file doesn't exist
+          fail:
+            msg: "Environment file {{ env_file_path }} does not exist"
+          when: not env_file_stat.stat.exists
+        
+        - name: Check if application variable exists in .env
+          shell: "grep '^export {{ normalized_app_name }}_version=' {{ env_file_path }}"
+          register: var_check
+          failed_when: false
+          changed_when: false
+          
+        - name: Fail if application not found in .env
+          fail:
+            msg: "Application '{{ normalized_app_name }}' not found in {{ env_file_path }}. Expected variable: export {{ normalized_app_name }}_version="
+          when: var_check.rc != 0
+          
+        - name: Extract current version from .env
+          set_fact:
+            current_version: "{{ var_check.stdout | regex_replace('^export ' + normalized_app_name + '_version=(.*)$', '\\1') }}"
+          when: var_check.rc == 0
+          
+        - name: Display current version
+          debug:
+            msg: "Current version in .env: {{ current_version }}"
+          when: var_check.rc == 0
+
+# ================
+# Backup .env file
+# ================
+
+    - name: Create backup of .env file
+      tags: [always, backup]
+      block:
+        - name: Generate backup timestamp
+          set_fact:
+            backup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    
+        - name: Backup .env file
+          copy:
+            src: "{{ env_file_path }}"
+            dest: "{{ env_file_path }}.backup.{{ backup_timestamp }}"
+            remote_src: yes
+          when: not dry_run_mode
+          register: backup_result
+          
+        - name: Display backup information
+          debug:
+            msg: 
+              - "Backup created: {{ env_file_path }}.backup.{{ backup_timestamp }}"
+              - "Backup timestamp: {{ backup_timestamp }}"
+          when: not dry_run_mode
+          
+        - name: Display dry-run backup notice
+          debug:
+            msg: "DRY-RUN: Would create backup at {{ env_file_path }}.backup.{{ backup_timestamp }}"
+          when: dry_run_mode
+
+# ================
+# Update version in .env
+# ================
+    
+    - name: Update version in .env file
+      tags: [always, update]
+      block:
+        - name: Update version variable in .env
+          lineinfile:
+            path: "{{ env_file_path }}"
+            regexp: "^export {{ normalized_app_name }}_version=.*"
+            line: "export {{ normalized_app_name }}_version={{ version_tag }}"
+            backup: no
+          when: not dry_run_mode
+          register: update_result
+
+        - name: Display dry-run update notice
+          debug:
+            msg: 
+              - "DRY-RUN: Would update version in {{ env_file_path }}"
+              - "DRY-RUN: Old line: export {{ normalized_app_name }}_version={{ current_version }}"
+              - "DRY-RUN: New line: export {{ normalized_app_name }}_version={{ version_tag }}"
+          when: dry_run_mode
+
+        - name: Verify version was updated
+          shell: "grep '^export {{ normalized_app_name }}_version=' {{ env_file_path }}"
+          register: updated_version_check
+          changed_when: false
+          when: not dry_run_mode
+
+        - name: Extract updated version value
+          set_fact:
+            updated_version: "{{ updated_version_check.stdout | regex_replace('^export ' + normalized_app_name + '_version=(.*)$', '\\1') }}"
+          when: 
+            - not dry_run_mode
+            - updated_version_check is defined
+
+        - name: Display updated version
+          debug:
+            msg: "Updated version in .env: {{ updated_version_check.stdout }}"
+          when: 
+            - not dry_run_mode
+            - updated_version_check is defined
+
+# ================
+# Summary
+# ================
+
+    - name: Display deployment summary
+      tags: [always]
+      debug:
+        msg:
+          - "=== Update Summary ==="
+          - "Target server: {{ inventory_hostname }}"
+          - "Container name: {{ original_app_name }}"
+          - "{{ 'Converted to .env variable: ' + normalized_app_name + '_version' if name_was_converted else 'Env variable: ' + normalized_app_name + '_version' }}"
+          - "Environment file: {{ env_file_path }}"
+          - "Version change: {{ current_version }} → {{ version_tag }}"
+          - "Backup file: {{ env_file_path }}.backup.{{ backup_timestamp }}"
+          - "Image URL: {{ image_url }}"
+          - "Dry-run mode: {{ dry_run_mode }}"
+          - "Status: {{ 'DRY-RUN COMPLETED (no changes made)' if dry_run_mode else 'UPDATE COMPLETED SUCCESSFULLY' }}"

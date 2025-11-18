@@ -1,10 +1,13 @@
 from flask import jsonify, request
 from app import db
-from app.models.application import Application
-from app.models.application_group import ApplicationGroup, ApplicationInstance
+from app.models.application_instance import ApplicationInstance
+from app.models.application_group import ApplicationGroup
 from app.services.application_group_service import ApplicationGroupService
 from app.api import bp
 import logging
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 
@@ -12,24 +15,20 @@ logger = logging.getLogger(__name__)
 def get_applications_with_groups():
     """Получить список всех приложений с информацией о группах"""
     try:
-        # Получаем все приложения с информацией о группах через application_instances
+        # Получаем все приложения (ApplicationInstance) с информацией о группах
         apps = db.session.query(
-            Application,
             ApplicationInstance,
             ApplicationGroup
-        ).outerjoin(
-            ApplicationInstance,
-            Application.id == ApplicationInstance.application_id
         ).outerjoin(
             ApplicationGroup,
             ApplicationInstance.group_id == ApplicationGroup.id
         ).all()
-        
+
         result = []
-        for app, instance, group in apps:
+        for app, group in apps:
             result.append({
                 'id': app.id,
-                'name': app.name,
+                'name': app.instance_name,
                 'server_name': app.server.name if app.server else 'Unknown',
                 'server_id': app.server_id,
                 'type': app.app_type,
@@ -37,11 +36,11 @@ def get_applications_with_groups():
                 'version': app.version,
                 'group_id': group.id if group else None,
                 'group_name': group.name if group else None,
-                'instance_number': instance.instance_number if instance else 0,
-                'has_instance': instance is not None,
-                'group_resolved': instance.group_resolved if instance else False
+                'instance_number': app.instance_number,
+                'has_instance': True,  # ApplicationInstance всегда существует
+                'group_resolved': group is not None
             })
-        
+
         return jsonify({
             'success': True,
             'applications': result
@@ -60,30 +59,26 @@ def get_application_with_group(app_id):
     try:
         # Получаем приложение с информацией о группе
         result = db.session.query(
-            Application,
             ApplicationInstance,
             ApplicationGroup
         ).outerjoin(
-            ApplicationInstance,
-            Application.id == ApplicationInstance.application_id
-        ).outerjoin(
             ApplicationGroup,
             ApplicationInstance.group_id == ApplicationGroup.id
-        ).filter(Application.id == app_id).first()
-        
+        ).filter(ApplicationInstance.id == app_id).first()
+
         if not result:
             return jsonify({
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
-        app, instance, group = result
-        
+
+        app, group = result
+
         return jsonify({
             'success': True,
             'application': {
                 'id': app.id,
-                'name': app.name,
+                'name': app.instance_name,
                 'server_name': app.server.name if app.server else 'Unknown',
                 'server_id': app.server_id,
                 'type': app.app_type,
@@ -91,9 +86,9 @@ def get_application_with_group(app_id):
                 'version': app.version,
                 'group_id': group.id if group else None,
                 'group_name': group.name if group else None,
-                'instance_number': instance.instance_number if instance else 0,
-                'has_instance': instance is not None,
-                'group_resolved': instance.group_resolved if instance else False
+                'instance_number': app.instance_number,
+                'has_instance': True,
+                'group_resolved': group is not None
             }
         })
     except Exception as e:
@@ -108,18 +103,11 @@ def get_application_with_group(app_id):
 def get_ungrouped_applications():
     """Получить список приложений без назначенной группы"""
     try:
-        # Найти все приложения без группы или с неразрешенной группой
-        ungrouped_apps = db.session.query(Application).outerjoin(
-            ApplicationInstance,
-            Application.id == ApplicationInstance.application_id
-        ).filter(
-            db.or_(
-                ApplicationInstance.id.is_(None),
-                ApplicationInstance.group_resolved == False,
-                ApplicationInstance.group_id.is_(None)
-            )
+        # Найти все приложения (ApplicationInstance) без группы
+        ungrouped_apps = ApplicationInstance.query.filter(
+            ApplicationInstance.group_id.is_(None)
         ).all()
-        
+
         result = []
         for app in ungrouped_apps:
             result.append({
@@ -165,68 +153,47 @@ def get_groups_statistics():
 
 @bp.route('/applications/<int:app_id>/reassign-group', methods=['POST'])
 def reassign_application_group_manual(app_id):
-    """Ручное переназначение группы для приложения с флагом manual_assignment"""
+    """Ручное переназначение группы для приложения"""
     try:
-        app = Application.query.get(app_id)
+        # app УЖЕ является ApplicationInstance после рефакторинга
+        app = ApplicationInstance.query.get(app_id)
         if not app:
             return jsonify({
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
+
         data = request.json
         if not data or 'group_name' not in data:
             return jsonify({
                 'success': False,
                 'error': "Отсутствует поле group_name"
             }), 400
-        
+
         group_name = data['group_name']
-        instance_number = data.get('instance_number', 0)
-        manual_assignment = data.get('manual_assignment', False)
-        
+        instance_number = data.get('instance_number', app.instance_number)
+
         # Получаем или создаем группу
         group = ApplicationGroupService.get_or_create_group(group_name)
-        
-        # Проверяем существующий экземпляр
-        instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
-        
-        if not instance:
-            # Создаем новый экземпляр
-            instance = ApplicationInstance(
-                original_name=app.name,
-                instance_number=instance_number,
-                group_id=group.id,
-                application_id=app.id,
-                group_resolved=True
-            )
-            db.session.add(instance)
-            logger.info(f"Создан экземпляр для {app.name}: группа={group_name}, номер={instance_number}")
-        else:
-            # Обновляем существующий экземпляр
-            old_group_name = instance.group.name if instance.group else "без группы"
-            
-            # Если это ручное назначение, устанавливаем специальный флаг
-            if manual_assignment:
-                instance.group_resolved = True  # Помечаем как разрешенную вручную
-            
-            instance.group_id = group.id
-            instance.instance_number = instance_number
-            instance.original_name = app.name
-            
-            logger.info(f"Приложение {app.name} переназначено из группы '{old_group_name}' в группу '{group_name}'")
-        
+
+        # Обновляем приложение (которое уже является ApplicationInstance)
+        old_group_name = app.group.name if app.group else "без группы"
+
+        app.group_id = group.id
+        app.instance_number = instance_number
+
+        logger.info(f"Приложение {app.instance_name} переназначено из группы '{old_group_name}' в группу '{group_name}'")
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
-            'message': f"Приложение {app.name} успешно назначено в группу {group_name}",
+            'message': f"Приложение {app.instance_name} успешно назначено в группу {group_name}",
             'application': {
                 'id': app.id,
-                'name': app.name,
+                'name': app.instance_name,
                 'group_name': group.name,
-                'instance_number': instance_number,
-                'manual_assignment': manual_assignment
+                'instance_number': app.instance_number
             }
         })
     except Exception as e:
@@ -294,62 +261,34 @@ def get_group_instances_detailed(group_id):
 def get_application_instance_settings(app_id):
     """Получить настройки экземпляра приложения"""
     try:
-        app = Application.query.get(app_id)
+        # app УЖЕ является ApplicationInstance
+        app = ApplicationInstance.query.get(app_id)
         if not app:
             return jsonify({
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
-        instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
-        
-        if not instance:
-            # Если экземпляра нет, создаем его
-            logger.info(f"Создание экземпляра для приложения {app.name}")
-            from app.services.application_group_service import ApplicationGroupService
-            instance = ApplicationGroupService.resolve_application_group(app)
-            
-            if instance:
-                db.session.commit()
-                logger.info(f"Экземпляр создан для приложения {app.name}")
-            else:
-                # Создаем экземпляр без группы
-                group_name = app.name
-                group = ApplicationGroup(name=group_name)
-                db.session.add(group)
-                db.session.flush()
-                
-                instance = ApplicationInstance(
-                    original_name=app.name,
-                    instance_number=0,
-                    group_id=group.id,
-                    application_id=app.id,
-                    group_resolved=False
-                )
-                db.session.add(instance)
-                db.session.commit()
-                logger.info(f"Создан экземпляр без группы для приложения {app.name}")
-        
+
         return jsonify({
             'success': True,
-            'application': app.name,
-            'instance_number': instance.instance_number,
+            'application': app.instance_name,
+            'instance_number': app.instance_number,
             'individual_settings': {
-                'custom_artifact_list_url': instance.custom_artifact_list_url,
-                'custom_artifact_extension': instance.custom_artifact_extension,
-                'custom_playbook_path': instance.custom_playbook_path
+                'custom_artifact_url': app.custom_artifact_url,
+                'custom_artifact_extension': app.custom_artifact_extension,
+                'custom_playbook_path': app.custom_playbook_path
             },
             'group_settings': {
-                'artifact_list_url': instance.group.artifact_list_url,
-                'artifact_extension': instance.group.artifact_extension,
-                'update_playbook_path': instance.group.update_playbook_path
-            } if instance.group else {},
-            'effective_settings': {
-                'artifact_list_url': instance.get_effective_artifact_url() if hasattr(instance, 'get_effective_artifact_url') else None,
-                'artifact_extension': instance.get_effective_artifact_extension() if hasattr(instance, 'get_effective_artifact_extension') else None,
-                'playbook_path': instance.get_effective_playbook_path() if hasattr(instance, 'get_effective_playbook_path') else None
+                'artifact_url': app.group.artifact_list_url if app.group else None,
+                'artifact_extension': app.group.artifact_extension if app.group else None,
+                'update_playbook_path': app.group.update_playbook_path if app.group else None
             },
-            'custom_playbook': instance.custom_playbook_path
+            'effective_settings': {
+                'artifact_url': app.get_effective_artifact_url(),
+                'artifact_extension': app.get_effective_artifact_extension(),
+                'playbook_path': app.get_effective_playbook_path()
+            },
+            'custom_playbook': app.custom_playbook_path
         })
     except Exception as e:
         logger.error(f"Ошибка при получении настроек экземпляра для приложения {app_id}: {str(e)}")
@@ -363,24 +302,13 @@ def get_application_instance_settings(app_id):
 def update_application_instance_settings(app_id):
     """Обновить настройки экземпляра приложения"""
     try:
-        app = Application.query.get(app_id)
+        # app УЖЕ является ApplicationInstance
+        app = ApplicationInstance.query.get(app_id)
         if not app:
             return jsonify({
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
-        instance = ApplicationInstance.query.filter_by(application_id=app.id).first()
-        
-        if not instance:
-            # Если экземпляра нет, создаем его
-            from app.services.application_group_service import ApplicationGroupService
-            instance = ApplicationGroupService.resolve_application_group(app)
-            if not instance:
-                return jsonify({
-                    'success': False,
-                    'error': 'Не удалось создать экземпляр для приложения'
-                }), 400
         
         data = request.json
         if not data:
@@ -388,31 +316,31 @@ def update_application_instance_settings(app_id):
                 'success': False,
                 'error': "Отсутствуют данные для обновления"
             }), 400
-        
-        # Обновляем кастомные настройки экземпляра
-        if 'custom_artifact_list_url' in data:
-            instance.custom_artifact_list_url = data['custom_artifact_list_url'] or None
-        
+
+        # Обновляем кастомные настройки приложения (app уже является ApplicationInstance)
+        if 'custom_artifact_url' in data:
+            app.custom_artifact_url = data['custom_artifact_url'] or None
+
         if 'custom_artifact_extension' in data:
-            instance.custom_artifact_extension = data['custom_artifact_extension'] or None
-        
+            app.custom_artifact_extension = data['custom_artifact_extension'] or None
+
         if 'custom_playbook_path' in data:
-            instance.custom_playbook_path = data['custom_playbook_path'] or None
-        
+            app.custom_playbook_path = data['custom_playbook_path'] or None
+
         from datetime import datetime
-        instance.updated_at = datetime.utcnow()
-        
+        app.updated_at = datetime.utcnow()
+
         db.session.commit()
-        
-        logger.info(f"Обновлены настройки экземпляра для приложения {app.name}")
-        
+
+        logger.info(f"Обновлены настройки экземпляра для приложения {app.instance_name}")
+
         return jsonify({
             'success': True,
-            'message': f"Настройки экземпляра {app.name} обновлены",
+            'message': f"Настройки экземпляра {app.instance_name} обновлены",
             'settings': {
-                'custom_artifact_list_url': instance.custom_artifact_list_url,
-                'custom_artifact_extension': instance.custom_artifact_extension,
-                'custom_playbook_path': instance.custom_playbook_path
+                'custom_artifact_url': app.custom_artifact_url,
+                'custom_artifact_extension': app.custom_artifact_extension,
+                'custom_playbook_path': app.custom_playbook_path
             }
         })
     except Exception as e:
@@ -526,6 +454,10 @@ def get_application_groups():
                 'name': group.name,
                 'artifact_list_url': group.artifact_list_url,
                 'artifact_extension': group.artifact_extension,
+                'update_playbook_path': group.update_playbook_path,
+                'description': group.description,
+                'batch_grouping_strategy': group.batch_grouping_strategy,
+                'catalog_id': group.catalog_id,
                 'instance_count': instance_count,
                 'servers': [{'id': s.id, 'name': s.name} for s in servers],
                 'created_at': group.created_at.isoformat() if group.created_at else None,
@@ -584,6 +516,10 @@ def get_application_group(group_id):
                 'name': group.name,
                 'artifact_list_url': group.artifact_list_url,
                 'artifact_extension': group.artifact_extension,
+                'update_playbook_path': group.update_playbook_path,
+                'description': group.description,
+                'batch_grouping_strategy': group.batch_grouping_strategy,
+                'catalog_id': group.catalog_id,
                 'created_at': group.created_at.isoformat() if group.created_at else None,
                 'updated_at': group.updated_at.isoformat() if group.updated_at else None,
                 'applications': sorted(app_list, key=lambda x: x['instance_number'])
@@ -599,7 +535,7 @@ def get_application_group(group_id):
 
 @bp.route('/application-groups/<int:group_id>', methods=['PUT'])
 def update_application_group(group_id):
-    """Обновление параметров группы приложений (artifact_list_url, artifact_extension)"""
+    """Обновление параметров группы приложений"""
     try:
         group = ApplicationGroup.query.get(group_id)
         if not group:
@@ -607,26 +543,59 @@ def update_application_group(group_id):
                 'success': False,
                 'error': f"Группа приложений с id {group_id} не найдена"
             }), 404
-        
+
         data = request.json
         if not data:
             return jsonify({
                 'success': False,
                 'error': "Отсутствуют данные для обновления"
             }), 400
-        
+
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        synced_instances = 0
+
         # Обновляем только переданные поля
         if 'artifact_list_url' in data:
             group.artifact_list_url = data['artifact_list_url']
             logger.info(f"Обновлен artifact_list_url для группы {group.name}: {data['artifact_list_url']}")
-        
+
         if 'artifact_extension' in data:
             group.artifact_extension = data['artifact_extension']
             logger.info(f"Обновлен artifact_extension для группы {group.name}: {data['artifact_extension']}")
-        
+
+        # ВАЖНО: добавлена поддержка update_playbook_path с синхронизацией экземпляров
+        if 'update_playbook_path' in data:
+            new_playbook_path = data['update_playbook_path']
+            group.update_playbook_path = new_playbook_path
+            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {new_playbook_path}")
+
+            # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+            # у которых он совпадает со старым значением группы
+            sync_instances = data.get('sync_instances', True)
+            if sync_instances and old_playbook_path:
+                instances_to_sync = ApplicationInstance.query.filter(
+                    ApplicationInstance.group_id == group.id,
+                    ApplicationInstance.custom_playbook_path == old_playbook_path
+                ).all()
+
+                for instance in instances_to_sync:
+                    instance.custom_playbook_path = None
+                    synced_instances += 1
+                    logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                              f"(был установлен в старое значение группы)")
+
+        if 'description' in data:
+            group.description = data['description']
+            logger.info(f"Обновлен description для группы {group.name}")
+
+        if 'batch_grouping_strategy' in data:
+            group.batch_grouping_strategy = data['batch_grouping_strategy']
+            logger.info(f"Обновлен batch_grouping_strategy для группы {group.name}: {data['batch_grouping_strategy']}")
+
         db.session.commit()
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'message': f"Группа приложений {group.name} успешно обновлена",
             'group': {
@@ -634,9 +603,18 @@ def update_application_group(group_id):
                 'name': group.name,
                 'artifact_list_url': group.artifact_list_url,
                 'artifact_extension': group.artifact_extension,
+                'update_playbook_path': group.update_playbook_path,
+                'description': group.description,
+                'batch_grouping_strategy': group.batch_grouping_strategy,
                 'updated_at': group.updated_at.isoformat() if group.updated_at else None
             }
-        })
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении группы {group_id}: {str(e)}")
@@ -748,28 +726,55 @@ def update_group_playbook(group_name):
     """Установить путь к playbook для группы"""
     try:
         group = ApplicationGroup.query.filter_by(name=group_name).first()
-        
+
         if not group:
             return jsonify({
                 'success': False,
                 'error': f"Группа {group_name} не найдена"
             }), 404
-        
+
         data = request.json
         if not data or 'playbook_path' not in data:
             return jsonify({
                 'success': False,
                 'error': "Отсутствует поле playbook_path"
             }), 400
-        
-        group.update_playbook_path = data['playbook_path']
+
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        new_playbook_path = data['playbook_path']
+        synced_instances = 0
+
+        group.update_playbook_path = new_playbook_path
+
+        # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+        # у которых он совпадает со старым значением группы
+        sync_instances = data.get('sync_instances', True)
+        if sync_instances and old_playbook_path:
+            instances_to_sync = ApplicationInstance.query.filter(
+                ApplicationInstance.group_id == group.id,
+                ApplicationInstance.custom_playbook_path == old_playbook_path
+            ).all()
+
+            for instance in instances_to_sync:
+                instance.custom_playbook_path = None
+                synced_instances += 1
+                logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                          f"(был установлен в старое значение группы)")
+
         db.session.commit()
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'message': f"Playbook путь для группы {group_name} обновлен",
             'playbook_path': group.update_playbook_path
-        })
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении playbook для группы {group_name}: {str(e)}")
@@ -788,17 +793,24 @@ def get_group_settings(group_name):
     """Получить настройки группы"""
     try:
         group = ApplicationGroup.query.filter_by(name=group_name).first()
-        
+
         if not group:
             return jsonify({
                 'success': False,
                 'error': f"Группа {group_name} не найдена"
             }), 404
-        
+
         return jsonify({
             'success': True,
             'group_name': group.name,
-            'settings': group.group_settings or {}
+            'settings': {
+                'update_playbook_path': group.update_playbook_path,
+                'artifact_list_url': group.artifact_list_url,
+                'artifact_extension': group.artifact_extension,
+                'batch_grouping_strategy': group.batch_grouping_strategy,
+                'catalog_id': group.catalog_id,
+                'description': group.description
+            }
         })
     except Exception as e:
         logger.error(f"Ошибка при получении настроек группы {group_name}: {str(e)}")
@@ -813,36 +825,85 @@ def update_group_settings(group_name):
     """Обновить настройки группы"""
     try:
         group = ApplicationGroup.query.filter_by(name=group_name).first()
-        
+
         if not group:
             return jsonify({
                 'success': False,
                 'error': f"Группа {group_name} не найдена"
             }), 404
-        
+
         data = request.json
         if not data:
             return jsonify({
                 'success': False,
                 'error': "Отсутствуют данные для обновления"
             }), 400
-        
-        if request.method == 'PUT':
-            # PUT - полная замена настроек
-            group.group_settings = data
-        else:
-            # PATCH - частичное обновление
-            if not group.group_settings:
-                group.group_settings = {}
-            group.group_settings.update(data)
-        
+
+        # Сохраняем старый playbook path для синхронизации с экземплярами
+        old_playbook_path = group.update_playbook_path
+        synced_instances = 0
+
+        # Обновляем только переданные поля
+        if 'update_playbook_path' in data:
+            new_playbook_path = data['update_playbook_path']
+            group.update_playbook_path = new_playbook_path
+            logger.info(f"Обновлен update_playbook_path для группы {group.name}: {new_playbook_path}")
+
+            # Синхронизация с экземплярами: очищаем custom_playbook_path у тех экземпляров,
+            # у которых он совпадает со старым значением группы
+            sync_instances = data.get('sync_instances', True)
+            if sync_instances and old_playbook_path:
+                instances_to_sync = ApplicationInstance.query.filter(
+                    ApplicationInstance.group_id == group.id,
+                    ApplicationInstance.custom_playbook_path == old_playbook_path
+                ).all()
+
+                for instance in instances_to_sync:
+                    instance.custom_playbook_path = None
+                    synced_instances += 1
+                    logger.info(f"Очищен custom_playbook_path для экземпляра {instance.instance_name} "
+                              f"(был установлен в старое значение группы)")
+
+        if 'artifact_list_url' in data:
+            group.artifact_list_url = data['artifact_list_url']
+            logger.info(f"Обновлен artifact_list_url для группы {group.name}: {data['artifact_list_url']}")
+
+        if 'artifact_extension' in data:
+            group.artifact_extension = data['artifact_extension']
+            logger.info(f"Обновлен artifact_extension для группы {group.name}: {data['artifact_extension']}")
+
+        if 'batch_grouping_strategy' in data:
+            group.batch_grouping_strategy = data['batch_grouping_strategy']
+            logger.info(f"Обновлен batch_grouping_strategy для группы {group.name}: {data['batch_grouping_strategy']}")
+
+        if 'description' in data:
+            group.description = data['description']
+            logger.info(f"Обновлен description для группы {group.name}")
+
+        if 'catalog_id' in data:
+            group.catalog_id = data['catalog_id']
+            logger.info(f"Обновлен catalog_id для группы {group.name}: {data['catalog_id']}")
+
         db.session.commit()
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'message': f"Настройки группы {group_name} обновлены",
-            'settings': group.group_settings
-        })
+            'settings': {
+                'update_playbook_path': group.update_playbook_path,
+                'artifact_list_url': group.artifact_list_url,
+                'artifact_extension': group.artifact_extension,
+                'batch_grouping_strategy': group.batch_grouping_strategy,
+                'catalog_id': group.catalog_id,
+                'description': group.description
+            }
+        }
+
+        if synced_instances > 0:
+            response['synced_instances'] = synced_instances
+            response['message'] += f" (синхронизировано экземпляров: {synced_instances})"
+
+        return jsonify(response)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Ошибка при обновлении настроек группы {group_name}: {str(e)}")
@@ -867,26 +928,19 @@ def manage_instance_playbook(app_id):
                 'success': False,
                 'error': f"Приложение с id {app_id} не найдено"
             }), 404
-        
-        if not app.instance:
-            return jsonify({
-                'success': False,
-                'error': 'Приложение не связано с экземпляром'
-            }), 400
-        
-        instance = app.instance
-        
+
+        # app уже является ApplicationInstance после рефакторинга
         if request.method == 'DELETE':
             # Удаление кастомного playbook
-            instance.custom_playbook_path = None
+            app.custom_playbook_path = None
             db.session.commit()
-            
+
             return jsonify({
                 'success': True,
                 'message': 'Кастомный playbook удален',
-                'effective_playbook': instance.get_effective_playbook_path() if hasattr(instance, 'get_effective_playbook_path') else None
+                'effective_playbook': app.get_effective_playbook_path()
             })
-        
+
         # PUT - установка кастомного playbook
         data = request.json
         if not data or 'playbook_path' not in data:
@@ -894,15 +948,15 @@ def manage_instance_playbook(app_id):
                 'success': False,
                 'error': "Отсутствует поле playbook_path"
             }), 400
-        
-        instance.custom_playbook_path = data['playbook_path']
+
+        app.custom_playbook_path = data['playbook_path']
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Кастомный playbook установлен',
-            'custom_playbook': instance.custom_playbook_path,
-            'effective_playbook': instance.get_effective_playbook_path() if hasattr(instance, 'get_effective_playbook_path') else instance.custom_playbook_path
+            'custom_playbook': app.custom_playbook_path,
+            'effective_playbook': app.get_effective_playbook_path()
         })
     except Exception as e:
         db.session.rollback()

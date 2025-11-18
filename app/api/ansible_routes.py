@@ -2,7 +2,8 @@ from flask import jsonify, request
 import os
 import logging
 
-from app.models.application import Application
+from app.models.application_instance import ApplicationInstance
+Application = ApplicationInstance  # Алиас
 from app.models.server import Server
 from app.services.ssh_ansible_service import get_ssh_ansible_service, SSHAnsibleService
 from app.api import bp

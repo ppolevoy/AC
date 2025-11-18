@@ -3,12 +3,15 @@ import asyncio
 import logging
 
 from app import db
-from app.models.application import Application
-from app.models.application_group import ApplicationGroup, ApplicationInstance
+from app.models.application_instance import ApplicationInstance
+from app.models.application_group import ApplicationGroup
 from app.services.application_group_service import ApplicationGroupService
 from app.api import bp
 from app.services.nexus_artifact_service import NexusArtifactService, Artifact
 from app.services.nexus_docker_service import NexusDockerService
+
+# Алиас для обратной совместимости
+Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
 

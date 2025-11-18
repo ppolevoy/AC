@@ -53,3 +53,16 @@ migrations/add_is_haproxy_node_column.py
 migrations/apply_haproxy_migration.py
 migrations/apply_haproxy_sql_migration.py
 integrations/EUREKA_CONTROL_API.md
+database_schema.sql
+DATABASE_SETUP.md
+drop_schema.sql
+.gitignore
+HAPROXY_EUREKA_REFACTORING_AUDIT.md
+seed_data.sql
+verify_schema.sql
+HAPROXY_EUREKA_FIXES_REPORT.md
+app/models/__pycache__/application_group.cpython-39.pyc
+app/services/__pycache__/agent_service.cpython-39.pyc
+app/services/__pycache__/ansible_service.cpython-39.pyc
+app/services/__pycache__/application_group_service.cpython-39.pyc
+app/services/__pycache__/ssh_ansible_service.cpython-39.pyc

@@ -174,7 +174,7 @@ class HAProxyServer(db.Model):
     smax = db.Column(db.Integer, default=0)  # max sessions
 
     # Связь с приложением AC (nullable - может быть не определено)
-    application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
 
     # Поля для ручного маппинга
     is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)  # Флаг ручного маппинга
@@ -189,7 +189,7 @@ class HAProxyServer(db.Model):
 
     # Relationships
     backend = db.relationship('HAProxyBackend', back_populates='servers')
-    application = db.relationship('Application', backref=db.backref('haproxy_servers', lazy='dynamic'))
+    application = db.relationship('ApplicationInstance', backref=db.backref('haproxy_servers', lazy='dynamic'))
     status_history = db.relationship('HAProxyServerStatusHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
     mapping_history = db.relationship('HAProxyMappingHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
 
@@ -306,7 +306,7 @@ class HAProxyServer(db.Model):
         if include_application and self.application:
             result['application'] = {
                 'id': self.application.id,
-                'name': self.application.name,
+                'name': self.application.instance_name,
                 'status': self.application.status,
                 'server_name': self.application.server.name if self.application.server else None
             }
@@ -370,8 +370,8 @@ class HAProxyMappingHistory(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     haproxy_server_id = db.Column(db.Integer, db.ForeignKey('haproxy_servers.id', ondelete='CASCADE'), nullable=False)
-    old_application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
-    new_application_id = db.Column(db.Integer, db.ForeignKey('applications.id', ondelete='SET NULL'), nullable=True)
+    old_application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
+    new_application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
     changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     change_reason = db.Column(db.String(32), nullable=False)  # manual, automatic
     mapped_by = db.Column(db.String(64), nullable=True)  # Кто выполнил маппинг (для ручного)
@@ -379,8 +379,8 @@ class HAProxyMappingHistory(db.Model):
 
     # Relationships
     haproxy_server = db.relationship('HAProxyServer', back_populates='mapping_history')
-    old_application = db.relationship('Application', foreign_keys=[old_application_id])
-    new_application = db.relationship('Application', foreign_keys=[new_application_id])
+    old_application = db.relationship('ApplicationInstance', foreign_keys=[old_application_id])
+    new_application = db.relationship('ApplicationInstance', foreign_keys=[new_application_id])
 
     # Индексы
     __table_args__ = (
@@ -406,14 +406,14 @@ class HAProxyMappingHistory(db.Model):
         if self.old_application:
             result['old_application'] = {
                 'id': self.old_application.id,
-                'name': self.old_application.name
+                'name': self.old_application.instance_name
             }
 
         # Включаем информацию о новом приложении, если оно есть
         if self.new_application:
             result['new_application'] = {
                 'id': self.new_application.id,
-                'name': self.new_application.name
+                'name': self.new_application.instance_name
             }
 
         return result

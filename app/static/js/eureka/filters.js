@@ -74,8 +74,9 @@ const EurekaFilters = {
 
         // Фильтр по приложению
         if (this.currentFilters.appName) {
+            const appNameLower = this.currentFilters.appName.toLowerCase();
             filtered = filtered.filter(inst =>
-                inst != null && inst.service_name != null && inst.service_name === this.currentFilters.appName
+                inst != null && inst.service_name != null && inst.service_name.toLowerCase() === appNameLower
             );
         }
 
