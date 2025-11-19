@@ -105,13 +105,34 @@ const EurekaUI = {
             ? this.formatTimestamp(instance.last_heartbeat)
             : '<span style="color: #6b7280;">N/A</span>';
 
+        // Проверяем статус получения данных от агента (на уровне приложения)
+        const hasFetchError = instance.eureka_application && instance.eureka_application.last_fetch_status === 'failed';
+        const rowClass = hasFetchError ? 'fetch-error' : '';
+
+        // Формируем сообщение об ошибке если есть
+        const errorMessage = hasFetchError && instance.eureka_application.last_fetch_error
+            ? `
+                <div class="fetch-error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div class="fetch-error-text">
+                        <strong>Ошибка получения данных от агента:</strong><br>
+                        ${this.escapeHtml(instance.eureka_application.last_fetch_error)}
+                    </div>
+                </div>
+            `
+            : '';
+
         return `
-            <tr data-instance-id="${instance.id}">
+            <tr data-instance-id="${instance.id}" class="${rowClass}">
                 <td>
                     <span class="instance-id">${this.escapeHtml(instance.instance_id)}</span>
                 </td>
                 <td>
-                    <span class="app-name">${this.escapeHtml(instance.service_name)}</span>
+                    <div>
+                        <span class="app-name">${this.escapeHtml(instance.service_name)}</span>
+                        ${hasFetchError ? '<span class="error-indicator" title="Application fetch error"><i class="fas fa-exclamation-circle"></i></span>' : ''}
+                        ${errorMessage}
+                    </div>
                 </td>
                 <td>
                     <span class="ip-address">${this.escapeHtml(instance.ip_address)}</span>

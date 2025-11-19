@@ -201,6 +201,7 @@ def get_applications():
         # Фильтры
         eureka_server_id = request.args.get('eureka_server_id', type=int)
         app_name = request.args.get('app_name')
+        fetch_status = request.args.get('fetch_status')  # success, failed, unknown
 
         query = EurekaApplication.query
 
@@ -209,6 +210,9 @@ def get_applications():
 
         if app_name:
             query = query.filter(EurekaApplication.app_name.ilike(f'%{app_name}%'))
+
+        if fetch_status:
+            query = query.filter(EurekaApplication.last_fetch_status == fetch_status)
 
         applications = query.all()
 
@@ -593,8 +597,15 @@ def get_summary():
             EurekaServer.is_active == True,
             EurekaServer.removed_at.is_(None)
         ).count()
+        servers_with_errors = EurekaServer.query.filter(
+            EurekaServer.consecutive_failures > 0,
+            EurekaServer.removed_at.is_(None)
+        ).count()
 
         total_applications = EurekaApplication.query.count()
+        applications_with_errors = EurekaApplication.query.filter(
+            EurekaApplication.last_fetch_status == 'failed'
+        ).count()
 
         total_instances = EurekaInstance.query.filter(EurekaInstance.removed_at.is_(None)).count()
         instances_up = EurekaInstance.query.filter(
@@ -615,10 +626,12 @@ def get_summary():
             'data': {
                 'servers': {
                     'total': total_servers,
-                    'active': active_servers
+                    'active': active_servers,
+                    'with_errors': servers_with_errors
                 },
                 'applications': {
-                    'total': total_applications
+                    'total': total_applications,
+                    'with_errors': applications_with_errors
                 },
                 'instances': {
                     'total': total_instances,

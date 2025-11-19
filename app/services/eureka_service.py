@@ -540,7 +540,16 @@ class EurekaService:
             success, applications_data = await EurekaService.get_all_applications(eureka_server)
 
             if not success:
-                eureka_server.mark_sync_failed("Failed to fetch applications from Eureka")
+                error_message = "Failed to fetch applications from Eureka"
+                eureka_server.mark_sync_failed(error_message)
+
+                # Отмечаем все приложения этого сервера как failed
+                existing_apps = EurekaApplication.query.filter_by(
+                    eureka_server_id=eureka_server.id
+                ).all()
+                for app in existing_apps:
+                    app.mark_fetch_failed(error_message)
+
                 db.session.commit()
                 return False
 
@@ -569,48 +578,58 @@ class EurekaService:
                     db.session.add(eureka_app)
                     db.session.flush()
 
-                # Обрабатываем экземпляры
-                for inst_data in instances:
-                    instance_id = inst_data.get('instance_id')
-                    if not instance_id:
-                        continue
+                try:
+                    # Обрабатываем экземпляры
+                    for inst_data in instances:
+                        instance_id = inst_data.get('instance_id')
+                        if not instance_id:
+                            continue
 
-                    seen_instance_ids.add(instance_id)
+                        seen_instance_ids.add(instance_id)
 
-                    # Парсим instance_id
-                    ip_address, service_name, port = EurekaService._parse_instance_id(instance_id)
-                    if not ip_address or not port:
-                        continue
+                        # Парсим instance_id
+                        ip_address, service_name, port = EurekaService._parse_instance_id(instance_id)
+                        if not ip_address or not port:
+                            continue
 
-                    # Находим или создаем EurekaInstance
-                    eureka_instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
+                        # Находим или создаем EurekaInstance
+                        eureka_instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
 
-                    if not eureka_instance:
-                        eureka_instance = EurekaInstance(
-                            eureka_application_id=eureka_app.id,
-                            instance_id=instance_id,
-                            ip_address=ip_address,
-                            port=port,
-                            service_name=service_name or app_name
-                        )
-                        db.session.add(eureka_instance)
-                        db.session.flush()  # Получить ID перед вызовом update_status
+                        if not eureka_instance:
+                            eureka_instance = EurekaInstance(
+                                eureka_application_id=eureka_app.id,
+                                instance_id=instance_id,
+                                ip_address=ip_address,
+                                port=port,
+                                service_name=service_name or app_name
+                            )
+                            db.session.add(eureka_instance)
+                            db.session.flush()  # Получить ID перед вызовом update_status
 
-                    # Обновляем данные экземпляра
-                    new_status = inst_data.get('status', 'UNKNOWN')
-                    eureka_instance.update_status(new_status, reason='sync', changed_by='system')
-                    eureka_instance.instance_metadata = inst_data.get('metadata')
-                    eureka_instance.health_check_url = inst_data.get('health_check_url')
-                    eureka_instance.home_page_url = inst_data.get('home_page_url')
-                    eureka_instance.status_page_url = inst_data.get('status_page_url')
-                    eureka_instance.last_seen = datetime.utcnow()
+                        # Обновляем данные экземпляра
+                        new_status = inst_data.get('status', 'UNKNOWN')
+                        eureka_instance.update_status(new_status, reason='sync', changed_by='system')
+                        eureka_instance.instance_metadata = inst_data.get('metadata')
+                        eureka_instance.health_check_url = inst_data.get('health_check_url')
+                        eureka_instance.home_page_url = inst_data.get('home_page_url')
+                        eureka_instance.status_page_url = inst_data.get('status_page_url')
+                        eureka_instance.last_seen = datetime.utcnow()
 
-                    # Восстанавливаем если был удален
-                    if eureka_instance.is_removed():
-                        eureka_instance.restore()
+                        # Восстанавливаем если был удален
+                        if eureka_instance.is_removed():
+                            eureka_instance.restore()
 
-                # Обновляем статистику приложения
-                eureka_app.update_statistics()
+                    # Обновляем статистику приложения
+                    eureka_app.update_statistics()
+
+                    # Отмечаем успешное получение данных от агента для этого приложения
+                    eureka_app.mark_fetch_success()
+
+                except Exception as app_error:
+                    # Ошибка обработки конкретного приложения - отмечаем только его как failed
+                    logger.error(f"Ошибка обработки приложения {app_name}: {str(app_error)}")
+                    eureka_app.mark_fetch_failed(f"Error processing application: {str(app_error)}")
+                    # Продолжаем обработку других приложений
 
             # Мягкое удаление исчезнувших экземпляров
             all_instances = EurekaInstance.query.join(EurekaApplication).filter(

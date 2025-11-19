@@ -15,6 +15,11 @@ const EurekaManager = {
     currentRefreshRate: 30000, // 30 секунд по умолчанию
 
     /**
+     * Отслеживание приложений с ошибками (для уведомлений о новых ошибках)
+     */
+    applicationsWithErrors: new Set(),
+
+    /**
      * Инициализация менеджера
      */
     async init() {
@@ -80,6 +85,9 @@ const EurekaManager = {
             if (instancesResult.success && instancesResult.data) {
                 // Установить instances в фильтры
                 EurekaFilters.setInstances(instancesResult.data);
+
+                // Проверяем наличие новых ошибок
+                this.checkForNewApplicationErrors(instancesResult.data);
             } else {
                 // Показать пустое сообщение
                 EurekaFilters.setInstances([]);
@@ -90,6 +98,51 @@ const EurekaManager = {
             EurekaUI.showError('Ошибка при загрузке данных: ' + error.message);
             EurekaFilters.setInstances([]);
         }
+    },
+
+    /**
+     * Проверка наличия новых ошибок приложений и показ уведомлений
+     * @param {Array} instances - Массив instances
+     */
+    checkForNewApplicationErrors(instances) {
+        if (!instances || instances.length === 0) {
+            return;
+        }
+
+        // Собираем уникальные приложения с ошибками
+        const currentErrorApps = new Map(); // app_id -> {app_name, error}
+        const newErrors = [];
+
+        instances.forEach(instance => {
+            if (instance.eureka_application && instance.eureka_application.last_fetch_status === 'failed') {
+                const appId = instance.eureka_application.id;
+                const appName = instance.eureka_application.app_name;
+                const error = instance.eureka_application.last_fetch_error || 'Неизвестная ошибка';
+
+                currentErrorApps.set(appId, { appName, error });
+
+                // Если это новая ошибка (не была в предыдущей проверке)
+                if (!this.applicationsWithErrors.has(appId)) {
+                    newErrors.push({ appId, appName, error });
+                }
+            }
+        });
+
+        // Показываем уведомление о новых ошибках
+        if (newErrors.length > 0) {
+            const message = newErrors.length === 1
+                ? `⚠️ Ошибка получения данных от агента для приложения "${newErrors[0].appName}"`
+                : `⚠️ Обнаружено ${newErrors.length} приложений с ошибками получения данных`;
+
+            if (window.showNotification) {
+                window.showNotification(message, 'warning');
+            } else {
+                console.warn(message);
+            }
+        }
+
+        // Обновляем список отслеживаемых ошибок
+        this.applicationsWithErrors = new Set(currentErrorApps.keys());
     },
 
     /**

@@ -19,6 +19,7 @@ class EurekaServer(db.Model):
     # Статус синхронизации
     last_sync = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
+    consecutive_failures = db.Column(db.Integer, default=0)  # Счетчик последовательных сбоев
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -41,11 +42,13 @@ class EurekaServer(db.Model):
         """Отметить успешную синхронизацию"""
         self.last_sync = datetime.utcnow()
         self.last_error = None
+        self.consecutive_failures = 0  # Сброс счетчика при успехе
 
     def mark_sync_failed(self, error_message):
         """Отметить неудачную синхронизацию"""
         self.last_sync = datetime.utcnow()
         self.last_error = error_message
+        self.consecutive_failures = (self.consecutive_failures or 0) + 1  # Увеличение счетчика
 
     def soft_delete(self):
         """Мягкое удаление Eureka сервера"""
@@ -76,6 +79,7 @@ class EurekaServer(db.Model):
             'is_active': self.is_active,
             'last_sync': self.last_sync.isoformat() if self.last_sync else None,
             'last_error': self.last_error,
+            'consecutive_failures': self.consecutive_failures or 0,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'removed_at': self.removed_at.isoformat() if self.removed_at else None,
@@ -110,6 +114,11 @@ class EurekaApplication(db.Model):
     instances_down = db.Column(db.Integer, default=0)
     instances_paused = db.Column(db.Integer, default=0)
 
+    # Error tracking for application data fetching
+    last_fetch_status = db.Column(db.String(20), default='unknown')  # success, failed, unknown
+    last_fetch_error = db.Column(db.Text, nullable=True)  # Error message if failed
+    last_fetch_at = db.Column(db.DateTime, nullable=True)  # Last fetch attempt timestamp
+
     last_sync = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -136,6 +145,18 @@ class EurekaApplication(db.Model):
         self.last_sync = datetime.utcnow()
         self.updated_at = datetime.utcnow()
 
+    def mark_fetch_success(self):
+        """Отметить успешное получение данных от агента"""
+        self.last_fetch_status = 'success'
+        self.last_fetch_error = None
+        self.last_fetch_at = datetime.utcnow()
+
+    def mark_fetch_failed(self, error_message):
+        """Отметить неудачную попытку получения данных от агента"""
+        self.last_fetch_status = 'failed'
+        self.last_fetch_error = error_message
+        self.last_fetch_at = datetime.utcnow()
+
     def to_dict(self, include_instances=False):
         """Преобразование в словарь для API"""
         result = {
@@ -147,6 +168,9 @@ class EurekaApplication(db.Model):
             'instances_down': self.instances_down,
             'instances_paused': self.instances_paused,
             'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'last_fetch_status': self.last_fetch_status,
+            'last_fetch_error': self.last_fetch_error,
+            'last_fetch_at': self.last_fetch_at.isoformat() if self.last_fetch_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -313,6 +337,18 @@ class EurekaInstance(db.Model):
             'is_removed': self.is_removed()
         }
 
+        # Include EurekaApplication (with error tracking)
+        if include_application and self.eureka_application:
+            result['eureka_application'] = {
+                'id': self.eureka_application.id,
+                'app_name': self.eureka_application.app_name,
+                'eureka_server_id': self.eureka_application.eureka_server_id,
+                'last_fetch_status': self.eureka_application.last_fetch_status,
+                'last_fetch_error': self.eureka_application.last_fetch_error,
+                'last_fetch_at': self.eureka_application.last_fetch_at.isoformat() if self.eureka_application.last_fetch_at else None
+            }
+
+        # Include mapped AC Application if exists
         if include_application and self.application:
             result['application'] = {
                 'id': self.application.id,

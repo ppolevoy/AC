@@ -591,6 +591,112 @@
     font-family: 'Courier New', monospace;
 }
 
+/* ===== ERROR INDICATION STYLES ===== */
+
+/* Application row with fetch error */
+.instances-table tbody tr.fetch-error {
+    border-left: 3px solid #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.instances-table tbody tr.fetch-error:hover {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+/* Fetch status badge */
+.fetch-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.fetch-status-badge.status-success {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
+.fetch-status-badge.status-failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.fetch-status-badge.status-unknown {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+}
+
+/* Error message inline display */
+.fetch-error-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 4px;
+    font-size: 12px;
+    color: #ef4444;
+    line-height: 1.4;
+}
+
+.fetch-error-message i {
+    color: #ef4444;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.fetch-error-text {
+    flex: 1;
+    word-break: break-word;
+}
+
+/* Error icon indicator in table cell */
+.error-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #ef4444;
+    font-size: 13px;
+}
+
+.error-indicator i {
+    font-size: 14px;
+}
+
+/* Server row with consecutive failures */
+.server-row.has-failures {
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.server-row.has-failures:hover {
+    background: rgba(245, 158, 11, 0.08);
+}
+
+/* Consecutive failures badge */
+.failures-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.failures-badge i {
+    font-size: 12px;
+}
+
 /* ===== LIGHT THEME SUPPORT ===== */
 
 /* Controls Panel */
@@ -863,4 +969,58 @@ body.light-theme .modal .btn-secondary:hover {
 
 body.light-theme .timestamp {
     color: #6b7280;
+}
+
+/* Error Indication - Light Theme */
+body.light-theme .instances-table tbody tr.fetch-error {
+    border-left: 3px solid #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+body.light-theme .instances-table tbody tr.fetch-error:hover {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+body.light-theme .fetch-status-badge.status-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #047857;
+}
+
+body.light-theme .fetch-status-badge.status-failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+body.light-theme .fetch-status-badge.status-unknown {
+    background: rgba(156, 163, 175, 0.1);
+    color: #6b7280;
+}
+
+body.light-theme .fetch-error-message {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #dc2626;
+}
+
+body.light-theme .fetch-error-message i {
+    color: #dc2626;
+}
+
+body.light-theme .error-indicator {
+    color: #dc2626;
+}
+
+body.light-theme .server-row.has-failures {
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+}
+
+body.light-theme .server-row.has-failures:hover {
+    background: rgba(245, 158, 11, 0.12);
+}
+
+body.light-theme .failures-badge {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
