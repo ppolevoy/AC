@@ -350,6 +350,14 @@ class HAProxyService:
                 db.session.commit()
                 return False
 
+            # Получаем все бэкенды из БД для проверки настроек опроса
+            existing_backends = {
+                b.backend_name: b
+                for b in HAProxyBackend.query.filter_by(
+                    haproxy_instance_id=haproxy_instance.id
+                ).all()
+            }
+
             # Отмечаем все существующие backends как потенциально удаленные
             current_backend_names = set()
 
@@ -363,6 +371,12 @@ class HAProxyService:
                     backend_name = backend_data.get('name')
 
                 if not backend_name:
+                    continue
+
+                # Проверяем, отключен ли опрос для этого бэкенда
+                existing = existing_backends.get(backend_name)
+                if existing and not existing.enable_polling:
+                    logger.debug(f"Skipping backend {backend_name} - polling disabled")
                     continue
 
                 current_backend_names.add(backend_name)
@@ -394,7 +408,10 @@ class HAProxyService:
                 )
 
                 if not success:
-                    logger.warning(f"Не удалось получить серверы для backend {backend_name}")
+                    error_msg = f"Не удалось получить серверы для backend {backend_name}"
+                    logger.warning(error_msg)
+                    backend.mark_fetch_failed(error_msg)
+                    db.session.commit()
                     continue
 
                 # Обрабатываем серверы
@@ -461,6 +478,10 @@ class HAProxyService:
                 for missing_server in missing_servers:
                     missing_server.soft_delete()
                     logger.debug(f"Сервер {missing_server.server_name} помечен как удаленный")
+
+                # Отмечаем успешное получение данных для этого backend
+                backend.mark_fetch_success()
+                db.session.commit()
 
             # Мягко удаляем backends, которых больше нет
             missing_backends = HAProxyBackend.query.filter(

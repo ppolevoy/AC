@@ -89,6 +89,9 @@ def get_instance_backends(instance_id):
 
     Args:
         instance_id: ID HAProxy инстанса
+
+    Query parameters:
+        include_removed: если true, возвращает также удаленные бэкенды
     """
     try:
         instance = HAProxyInstance.query.get(instance_id)
@@ -99,17 +102,24 @@ def get_instance_backends(instance_id):
                 'error': 'HAProxy instance not found'
             }), 404
 
-        # Получаем только не удаленные backends
-        backends = HAProxyBackend.query.filter_by(
-            haproxy_instance_id=instance_id
-        ).filter(HAProxyBackend.removed_at.is_(None)).all()
+        # Новый параметр для показа удаленных бэкендов
+        include_removed = request.args.get('include_removed', 'false').lower() == 'true'
+
+        query = HAProxyBackend.query.filter_by(haproxy_instance_id=instance_id)
+
+        # Фильтрация удаленных только если не запрошено обратное
+        if not include_removed:
+            query = query.filter(HAProxyBackend.removed_at.is_(None))
+
+        backends = query.order_by(HAProxyBackend.backend_name).all()
 
         result = {
             'success': True,
             'instance_id': instance_id,
             'instance_name': instance.name,
             'count': len(backends),
-            'backends': [backend.to_dict(include_servers=True) for backend in backends]
+            'backends': [backend.to_dict(include_servers=True) for backend in backends],
+            'include_removed': include_removed
         }
 
         return jsonify(result), 200
@@ -162,6 +172,65 @@ def get_backend_servers(backend_id):
         }), 500
 
 
+@bp.route('/haproxy/backends/<int:backend_id>/polling', methods=['PUT'])
+def update_backend_polling(backend_id):
+    """
+    Включить или отключить опрос для конкретного бэкенда.
+
+    Args:
+        backend_id: ID бэкенда
+
+    Body:
+        enable_polling: bool - включить (true) или отключить (false) опрос
+    """
+    try:
+        data = request.json
+        if not data or 'enable_polling' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Поле enable_polling обязательно'
+            }), 400
+
+        backend = HAProxyBackend.query.get(backend_id)
+        if not backend:
+            return jsonify({
+                'success': False,
+                'error': 'Backend не найден'
+            }), 404
+
+        old_state = backend.enable_polling
+        new_state = data['enable_polling']
+
+        # Обновляем состояние опроса
+        backend.enable_polling = new_state
+
+        # При отключении опроса помечаем как удаленный
+        if not new_state and old_state:
+            backend.soft_delete()
+            logger.info(f"Backend {backend.backend_name} (id={backend_id}) polling disabled and marked as removed")
+        # При включении опроса восстанавливаем
+        elif new_state and not old_state:
+            backend.restore()
+            logger.info(f"Backend {backend.backend_name} (id={backend_id}) polling enabled and restored")
+
+        backend.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Опрос {"включен" if new_state else "отключен"} для бэкенда {backend.backend_name}',
+            'backend': backend.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating backend polling for backend {backend_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @bp.route('/haproxy/summary', methods=['GET'])
 def get_haproxy_summary():
     """
@@ -205,6 +274,34 @@ def get_haproxy_summary():
 
     except Exception as e:
         logger.error(f"Error getting HAProxy summary: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/haproxy/errors/summary', methods=['GET'])
+def get_errors_summary():
+    """
+    Получение списка бэкендов с ошибками получения данных от агентов.
+    """
+    try:
+        # Получаем все бэкенды со статусом ошибки
+        backends_with_errors = HAProxyBackend.query.filter(
+            HAProxyBackend.last_fetch_status == 'failed',
+            HAProxyBackend.removed_at.is_(None)
+        ).all()
+
+        result = {
+            'success': True,
+            'count': len(backends_with_errors),
+            'backends': [backend.to_dict() for backend in backends_with_errors]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error getting error summary: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)

@@ -853,7 +853,8 @@ async function loadHAProxyBackends(instanceId, instanceIndex) {
     try {
         container.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">Загрузка backends...</div>';
 
-        const response = await fetch(`/api/haproxy/instances/${instanceId}/backends`);
+        // Всегда показываем все бэкенды, включая отключенные
+        const response = await fetch(`/api/haproxy/instances/${instanceId}/backends?include_removed=true`);
         const data = await response.json();
 
         if (data.success && data.backends) {
@@ -876,11 +877,28 @@ async function loadHAProxyBackends(instanceId, instanceIndex) {
                     const downCount = stats.DOWN || 0;
                     const drainCount = stats.DRAIN || 0;
                     const maintCount = stats.MAINT || 0;
+                    const isRemoved = backend.removed_at != null;
+                    const pollingEnabled = backend.enable_polling !== false;
 
                     backendsHtml += `
-                        <div style="padding: 10px 12px; background: #252525; border: 1px solid #374151; border-radius: 4px;">
+                        <div id="backend-item-${backend.id}" style="padding: 10px 12px; background: #252525; border: 1px solid #374151; border-radius: 4px; ${!pollingEnabled ? 'opacity: 0.7; border-color: #6b7280;' : ''}">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 14px; font-weight: 500; color: #fff;">${backend.backend_name}</div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <!-- Чекбокс для управления опросом -->
+                                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;" title="Включить/отключить опрос бэкенда">
+                                        <input type="checkbox"
+                                               id="polling-backend-${backend.id}"
+                                               ${pollingEnabled ? 'checked' : ''}
+                                               onchange="toggleBackendPolling(${backend.id}, '${backend.backend_name}', this.checked, ${instanceId})"
+                                               style="width: 16px; height: 16px; cursor: pointer; accent-color: #2563eb;">
+                                        <span style="font-size: 12px; color: #888;">Опрос</span>
+                                    </label>
+                                    <!-- Имя бэкенда -->
+                                    <div style="font-size: 14px; font-weight: 500; color: ${isRemoved ? '#888' : '#fff'};">
+                                        ${backend.backend_name}
+                                        ${isRemoved ? '<span style="color: #ef4444; font-size: 11px; margin-left: 8px;">(Отключен)</span>' : ''}
+                                    </div>
+                                </div>
                                 <div style="display: flex; gap: 12px; font-size: 12px; align-items: center;">
                                     <div style="display: flex; align-items: center; gap: 4px;">
                                         <span style="width: 8px; height: 8px; border-radius: 50%; background: #4CAF50;"></span>
@@ -1325,5 +1343,207 @@ async function viewBackendServers(backendId, backendName) {
         console.error('Ошибка при загрузке серверов:', error);
         showError('Не удалось загрузить список серверов');
     }
+}
+
+// ==================== HAProxy Backend Polling Management ====================
+
+/**
+ * Переключить опрос для HAProxy бэкенда
+ */
+async function toggleBackendPolling(backendId, backendName, isEnabled, instanceId) {
+    try {
+        // Показать предупреждение при отключении
+        if (!isEnabled) {
+            const confirmResult = await showConfirmDialog(
+                'Отключение опроса бэкенда',
+                `
+                <div style="padding: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                        <span style="font-size: 24px;">⚠️</span>
+                        <h3 style="margin: 0; color: #fff;">Отключение опроса бэкенда</h3>
+                    </div>
+
+                    <p style="color: #d1d5db; margin-bottom: 16px;">
+                        Вы собираетесь отключить опрос для бэкенда <strong style="color: #fff;">"${backendName}"</strong>.
+                    </p>
+
+                    <div style="background: #374151; border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                        <p style="margin: 0 0 8px 0; color: #fbbf24; font-weight: 500;">
+                            ⚠️ Это приведет к следующим последствиям:
+                        </p>
+                        <ul style="margin: 0; padding-left: 20px; color: #d1d5db;">
+                            <li>Данные этого бэкенда перестанут обновляться</li>
+                            <li>Бэкенд будет скрыт на странице HAProxy</li>
+                            <li>Мониторинг серверов в этом бэкенде прекратится</li>
+                        </ul>
+                    </div>
+
+                    <p style="color: #9ca3af; font-size: 14px; margin-bottom: 20px;">
+                        <strong>Примечание:</strong> Существующие данные будут сохранены.
+                        Вы сможете включить опрос снова в любое время.
+                    </p>
+
+                    <div style="text-align: center; color: #fff; font-weight: 500;">
+                        Вы уверены, что хотите продолжить?
+                    </div>
+                </div>
+                `,
+                'Отключить опрос',
+                'Отмена'
+            );
+
+            if (!confirmResult) {
+                // Пользователь отменил - возвращаем чекбокс в исходное состояние
+                const checkbox = document.getElementById(`polling-backend-${backendId}`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+                return;
+            }
+        }
+
+        // Выполняем переключение
+        await performBackendPollingToggle(backendId, isEnabled, instanceId);
+
+    } catch (error) {
+        console.error('Error toggling backend polling:', error);
+        showError('Ошибка при изменении настроек опроса');
+        // Возвращаем чекбокс в исходное состояние
+        const checkbox = document.getElementById(`polling-backend-${backendId}`);
+        if (checkbox) {
+            checkbox.checked = !isEnabled;
+        }
+    }
+}
+
+/**
+ * Выполнить переключение опроса для HAProxy бэкенда
+ */
+async function performBackendPollingToggle(backendId, isEnabled, instanceId) {
+    try {
+        const response = await fetch(`/api/haproxy/backends/${backendId}/polling`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ enable_polling: isEnabled })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(
+                isEnabled
+                    ? '✓ Опрос бэкенда включен'
+                    : '⚠️ Опрос бэкенда отключен',
+                isEnabled ? 'success' : 'warning'
+            );
+
+            // Перезагружаем список бэкендов для этого instance
+            if (instanceId) {
+                // Перезагружаем список бэкендов
+                loadHAProxyBackends(instanceId, 0);
+            } else {
+                // Если instanceId не передан, обновляем визуально (fallback)
+                const backendElement = document.getElementById(`backend-item-${backendId}`);
+                if (backendElement) {
+                    if (!isEnabled) {
+                        backendElement.style.opacity = '0.7';
+                        backendElement.style.borderColor = '#6b7280';
+                    } else {
+                        backendElement.style.opacity = '1';
+                        backendElement.style.borderColor = '#374151';
+                    }
+                }
+            }
+        } else {
+            throw new Error(data.error || 'Не удалось обновить настройки');
+        }
+    } catch (error) {
+        console.error('Error performing backend polling toggle:', error);
+        showError(error.message || 'Ошибка соединения с сервером');
+        // Возвращаем чекбокс в исходное состояние
+        const checkbox = document.getElementById(`polling-backend-${backendId}`);
+        if (checkbox) {
+            checkbox.checked = !isEnabled;
+        }
+        throw error;
+    }
+}
+
+/**
+ * Показать диалог подтверждения как overlay поверх текущего окна
+ */
+function showConfirmDialog(title, message, confirmText = 'Подтвердить', cancelText = 'Отмена') {
+    return new Promise((resolve) => {
+        // Создаем overlay поверх существующего модального окна
+        const overlay = document.createElement('div');
+        overlay.id = 'confirm-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+        `;
+
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: #1a1a1d;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        `;
+
+        dialog.innerHTML = `
+            <div style="padding: 20px; border-bottom: 1px solid #374151;">
+                <h3 style="margin: 0; color: #fff; font-size: 18px;">${title}</h3>
+            </div>
+            <div style="padding: 0;">
+                ${message}
+                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; padding: 20px; border-top: 1px solid #374151;">
+                    <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">${cancelText}</button>
+                    <button type="button" class="btn btn-danger" id="confirm-ok-btn">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        // Обработчики кнопок
+        const handleClose = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+
+        document.getElementById('confirm-cancel-btn').onclick = () => handleClose(false);
+        document.getElementById('confirm-ok-btn').onclick = () => handleClose(true);
+
+        // Закрытие по клику на overlay
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                handleClose(false);
+            }
+        };
+
+        // Закрытие по Escape
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                handleClose(false);
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    });
 }
 

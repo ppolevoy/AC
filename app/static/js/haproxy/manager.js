@@ -15,6 +15,11 @@ const HAProxyManager = {
     refreshInterval: null,
 
     /**
+     * Отслеживание бэкендов с ошибками (для уведомлений о новых ошибках)
+     */
+    backendsWithErrors: new Set(),
+
+    /**
      * Инициализация менеджера
      */
     async init() {
@@ -147,6 +152,9 @@ const HAProxyManager = {
 
                 HAProxyUI.renderBackends(backendsWithServers);
 
+                // Проверяем наличие новых ошибок
+                this.checkForNewBackendErrors(backendsWithServers);
+
             } else {
                 // Загружаем все backends для всех инстансов
                 const summary = await HAProxyAPI.getSummary();
@@ -192,6 +200,9 @@ const HAProxyManager = {
                 }
 
                 HAProxyUI.renderBackends(allBackends);
+
+                // Проверяем наличие новых ошибок
+                this.checkForNewBackendErrors(allBackends);
             }
 
             // Применяем фильтры после загрузки
@@ -201,6 +212,51 @@ const HAProxyManager = {
             console.error('Error loading backends:', error);
             throw error;
         }
+    },
+
+    /**
+     * Проверка наличия новых ошибок бэкендов и показ уведомлений
+     * @param {Array} backends - Массив backends
+     */
+    checkForNewBackendErrors(backends) {
+        if (!backends || backends.length === 0) {
+            return;
+        }
+
+        // Находим бэкенды с ошибками
+        const currentErrorBackends = new Set();
+        const newErrors = [];
+
+        backends.forEach(backend => {
+            if (backend.last_fetch_status === 'failed') {
+                currentErrorBackends.add(backend.id);
+
+                // Если это новая ошибка (не была в предыдущей проверке)
+                if (!this.backendsWithErrors.has(backend.id)) {
+                    newErrors.push({
+                        id: backend.id,
+                        name: backend.backend_name,
+                        error: backend.last_fetch_error || 'Неизвестная ошибка'
+                    });
+                }
+            }
+        });
+
+        // Показываем уведомление о новых ошибках
+        if (newErrors.length > 0) {
+            const message = newErrors.length === 1
+                ? `⚠️ Ошибка получения данных от агента для бэкенда "${newErrors[0].name}"`
+                : `⚠️ Обнаружено ${newErrors.length} бэкендов с ошибками получения данных`;
+
+            if (window.showNotification) {
+                window.showNotification(message, 'warning');
+            } else {
+                console.warn(message);
+            }
+        }
+
+        // Обновляем список отслеживаемых ошибок
+        this.backendsWithErrors = currentErrorBackends;
     },
 
     /**

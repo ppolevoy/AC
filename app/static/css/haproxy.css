@@ -1144,3 +1144,45 @@ body.light-theme .loading-indicator {
 .server-row.row-updated {
     animation: rowUpdateFlash 1s ease-out;
 }
+
+/* ===== Backend Error Indicators ===== */
+.backend-accordion-item.has-error {
+    border-left: 3px solid #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+}
+
+body.light-theme .backend-accordion-item.has-error {
+    border-left: 3px solid #ef4444;
+    background: rgba(239, 68, 68, 0.03);
+}
+
+.backend-error-indicator {
+    color: #ef4444;
+    font-size: 18px;
+    margin-left: 8px;
+    cursor: help;
+}
+
+.backend-error-message {
+    color: #ef4444;
+    font-size: 12px;
+    margin-top: 4px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 4px;
+    border-left: 2px solid #ef4444;
+}
+
+body.light-theme .backend-error-message {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.backend-error-time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+body.light-theme .backend-error-time {
+    color: #999;
+}

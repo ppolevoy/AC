@@ -61,8 +61,37 @@ const HAProxyUI = {
             const servers = backend.servers || [];
             const statusCounts = this.countStatusInServers(servers);
 
+            // Check for backend fetch errors
+            const hasError = backend.last_fetch_status === 'failed';
+            const errorIndicator = hasError ? '<span class="backend-error-indicator" title="' + (backend.last_fetch_error || 'Ошибка получения данных от агента') + '">⚠️</span>' : '';
+            const errorClass = hasError ? 'has-error' : '';
+
+            // Format last fetch time
+            let lastFetchInfo = '';
+            if (backend.last_fetch_at) {
+                const fetchTime = new Date(backend.last_fetch_at);
+                const now = new Date();
+                const diffMinutes = Math.floor((now - fetchTime) / 60000);
+                let timeAgo = '';
+                if (diffMinutes < 1) {
+                    timeAgo = 'только что';
+                } else if (diffMinutes < 60) {
+                    timeAgo = `${diffMinutes} мин. назад`;
+                } else {
+                    const diffHours = Math.floor(diffMinutes / 60);
+                    timeAgo = `${diffHours} ч. назад`;
+                }
+
+                if (hasError) {
+                    lastFetchInfo = `<div class="backend-error-message">
+                        <strong>Ошибка:</strong> ${backend.last_fetch_error || 'Не удалось получить данные от агента'}
+                        <div class="backend-error-time">Последняя попытка: ${timeAgo}</div>
+                    </div>`;
+                }
+            }
+
             const backendDiv = document.createElement('div');
-            backendDiv.className = 'backend-accordion-item';
+            backendDiv.className = 'backend-accordion-item ' + errorClass;
             backendDiv.dataset.backendId = backend.id;
             backendDiv.innerHTML = `
                 <div class="backend-header" onclick="HAProxyUI.toggleBackend(this)">
@@ -70,7 +99,7 @@ const HAProxyUI = {
                         <button class="accordion-toggle">
                             <span class="toggle-icon">▶</span>
                         </button>
-                        <h3 class="backend-name">${backend.backend_name}</h3>
+                        <h3 class="backend-name">${backend.backend_name}${errorIndicator}</h3>
                         <span class="backend-server-count">${servers.length} серверов</span>
                     </div>
                     <div class="backend-header-right">
@@ -94,6 +123,7 @@ const HAProxyUI = {
                         </div>
                     </div>
                 </div>
+                ${lastFetchInfo}
 
                 <div class="backend-content">
                     <div class="data-table-container">

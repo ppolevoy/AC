@@ -87,6 +87,14 @@ class HAProxyBackend(db.Model):
     haproxy_instance_id = db.Column(db.Integer, db.ForeignKey('haproxy_instances.id', ondelete='CASCADE'), nullable=False)
     backend_name = db.Column(db.String(128), nullable=False)
 
+    # Backend polling configuration
+    enable_polling = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Error tracking for backend data fetching
+    last_fetch_status = db.Column(db.String(20), default='unknown')  # success, failed, unknown
+    last_fetch_error = db.Column(db.Text, nullable=True)  # Error message if failed
+    last_fetch_at = db.Column(db.DateTime, nullable=True)  # Last fetch attempt timestamp
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     removed_at = db.Column(db.DateTime, nullable=True)  # Soft delete
@@ -114,6 +122,18 @@ class HAProxyBackend(db.Model):
         """Восстановление удаленного backend"""
         self.removed_at = None
 
+    def mark_fetch_success(self):
+        """Отметить успешное получение данных от агента"""
+        self.last_fetch_status = 'success'
+        self.last_fetch_error = None
+        self.last_fetch_at = datetime.utcnow()
+
+    def mark_fetch_failed(self, error_message):
+        """Отметить неудачную попытку получения данных от агента"""
+        self.last_fetch_status = 'failed'
+        self.last_fetch_error = error_message
+        self.last_fetch_at = datetime.utcnow()
+
     def to_dict(self, include_servers=False):
         """Преобразование в словарь для API"""
         # Подсчет servers (не удаленных)
@@ -123,6 +143,10 @@ class HAProxyBackend(db.Model):
             'id': self.id,
             'haproxy_instance_id': self.haproxy_instance_id,
             'backend_name': self.backend_name,
+            'enable_polling': self.enable_polling,
+            'last_fetch_status': self.last_fetch_status,
+            'last_fetch_error': self.last_fetch_error,
+            'last_fetch_at': self.last_fetch_at.isoformat() if self.last_fetch_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'removed_at': self.removed_at.isoformat() if self.removed_at else None,
             'is_removed': self.is_removed(),
