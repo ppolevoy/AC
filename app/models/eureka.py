@@ -210,15 +210,6 @@ class EurekaInstance(db.Model):
     home_page_url = db.Column(db.String(512), nullable=True)
     status_page_url = db.Column(db.String(512), nullable=True)
 
-    # Связь с приложением AC (nullable - может быть не определено)
-    application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
-
-    # Поля для ручного маппинга
-    is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)
-    mapped_by = db.Column(db.String(64), nullable=True)
-    mapped_at = db.Column(db.DateTime, nullable=True)
-    mapping_notes = db.Column(db.Text, nullable=True)
-
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -226,7 +217,6 @@ class EurekaInstance(db.Model):
 
     # Relationships
     eureka_application = db.relationship('EurekaApplication', back_populates='instances')
-    application = db.relationship('ApplicationInstance', backref=db.backref('eureka_instances', lazy='dynamic'))
     status_history = db.relationship('EurekaInstanceStatusHistory', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
     actions = db.relationship('EurekaInstanceAction', back_populates='eureka_instance', lazy='dynamic', cascade='all, delete-orphan')
 
@@ -236,7 +226,6 @@ class EurekaInstance(db.Model):
         db.Index('idx_eureka_instance_status', 'status'),
         db.Index('idx_eureka_instance_instance_id', 'instance_id'),
         db.Index('idx_eureka_instance_ip', 'ip_address'),
-        db.Index('idx_eureka_instance_ac_app', 'application_id'),
         db.Index('idx_eureka_instance_removed', 'removed_at'),
     )
 
@@ -276,41 +265,37 @@ class EurekaInstance(db.Model):
         """Восстановление удаленного экземпляра"""
         self.removed_at = None
 
-    def map_to_application(self, application_id, is_manual=False, mapped_by=None, notes=None):
-        """
-        Связать с приложением AC.
-
-        Args:
-            application_id: ID приложения для связывания (или None для отвязки)
-            is_manual: Флаг ручного маппинга
-            mapped_by: Кто установил маппинг (для ручного маппинга)
-            notes: Заметки о маппинге (для ручного маппинга)
-        """
-        old_application_id = self.application_id
-
-        # Обновляем маппинг
-        self.application_id = application_id
-        self.is_manual_mapping = is_manual
-
-        if is_manual:
-            self.mapped_by = mapped_by
-            self.mapped_at = datetime.utcnow()
-            self.mapping_notes = notes
-        else:
-            # При автоматическом маппинге очищаем поля ручного маппинга
-            if not self.is_manual_mapping:
-                self.mapped_by = None
-                self.mapped_at = None
-                self.mapping_notes = None
-
-        self.updated_at = datetime.utcnow()
-
     def get_ip_port(self):
         """Получить IP:port в формате строки для маппинга"""
         return f"{self.ip_address}:{self.port}"
 
     def to_dict(self, include_application=True, include_history=False):
         """Преобразование в словарь для API"""
+        # Получаем маппинг из унифицированной таблицы
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
+        mapping = ApplicationMapping.query.filter_by(
+            entity_type=MappingType.EUREKA_INSTANCE.value,
+            entity_id=self.id,
+            is_active=True
+        ).first()
+
+        # Данные маппинга из унифицированной таблицы
+        if mapping:
+            application_id = mapping.application_id
+            is_manual_mapping = mapping.is_manual
+            mapped_by = mapping.mapped_by
+            mapped_at = mapping.mapped_at
+            mapping_notes = mapping.notes
+            application = mapping.application
+        else:
+            application_id = None
+            is_manual_mapping = False
+            mapped_by = None
+            mapped_at = None
+            mapping_notes = None
+            application = None
+
         result = {
             'id': self.id,
             'eureka_application_id': self.eureka_application_id,
@@ -325,11 +310,11 @@ class EurekaInstance(db.Model):
             'health_check_url': self.health_check_url,
             'home_page_url': self.home_page_url,
             'status_page_url': self.status_page_url,
-            'application_id': self.application_id,
-            'is_manual_mapping': self.is_manual_mapping,
-            'mapped_by': self.mapped_by,
-            'mapped_at': self.mapped_at.isoformat() if self.mapped_at else None,
-            'mapping_notes': self.mapping_notes,
+            'application_id': application_id,
+            'is_manual_mapping': is_manual_mapping,
+            'mapped_by': mapped_by,
+            'mapped_at': mapped_at.isoformat() if mapped_at else None,
+            'mapping_notes': mapping_notes,
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -349,13 +334,13 @@ class EurekaInstance(db.Model):
             }
 
         # Include mapped AC Application if exists
-        if include_application and self.application:
+        if include_application and application:
             result['application'] = {
-                'id': self.application.id,
-                'name': self.application.instance_name,
-                'status': self.application.status,
-                'eureka_url': self.application.eureka_url,
-                'server_name': self.application.server.name if self.application.server else None
+                'id': application.id,
+                'name': application.instance_name,
+                'status': application.status,
+                'eureka_url': application.eureka_url,
+                'server_name': application.server.name if application.server else None
             }
 
         if include_history:

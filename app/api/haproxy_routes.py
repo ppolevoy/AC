@@ -552,6 +552,9 @@ def unmap_server_from_application(server_id):
         notes: str (optional) - Причина удаления маппинга
     """
     try:
+        from app.models.application_mapping import ApplicationMapping, MappingType
+        from app.services.mapping_service import mapping_service
+
         data = request.json or {}
 
         # Получаем HAProxy сервер
@@ -562,26 +565,30 @@ def unmap_server_from_application(server_id):
                 'error': 'HAProxy сервер не найден'
             }), 404
 
-        if not haproxy_server.application_id:
+        # Проверяем наличие маппинга в унифицированной таблице
+        mapping = ApplicationMapping.query.filter_by(
+            entity_type=MappingType.HAPROXY_SERVER.value,
+            entity_id=server_id,
+            is_active=True
+        ).first()
+
+        if not mapping:
             return jsonify({
                 'success': False,
                 'error': 'Сервер не связан с приложением'
             }), 400
 
-        old_app_id = haproxy_server.application_id
         notes = data.get('notes', 'Маппинг удален вручную')
 
-        # Удаляем маппинг (записывается в историю через map_to_application)
-        haproxy_server.map_to_application(
-            application_id=None,
-            is_manual=False,  # Сбрасываем флаг ручного маппинга
-            mapped_by='admin',
-            notes=notes
+        # Удаляем маппинг через MappingService
+        count = mapping_service.unmap_entity(
+            entity_type=MappingType.HAPROXY_SERVER.value,
+            entity_id=server_id,
+            unmapped_by='admin',
+            reason=notes
         )
 
-        db.session.commit()
-
-        logger.info(f"Удален маппинг для сервера {haproxy_server.server_name} (был привязан к app_id={old_app_id})")
+        logger.info(f"Удален маппинг для сервера {haproxy_server.server_name}")
 
         return jsonify({
             'success': True,
@@ -608,12 +615,20 @@ def get_unmapped_servers():
         instance_id: int (optional) - Фильтр по HAProxy instance
     """
     try:
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
         backend_id = request.args.get('backend_id', type=int)
         instance_id = request.args.get('instance_id', type=int)
 
-        # Базовый запрос: серверы без application_id
+        # Подзапрос для получения ID HAProxy серверов с активными маппингами
+        mapped_server_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
+        # Базовый запрос: серверы без маппинга в новой таблице
         query = HAProxyServer.query.filter(
-            HAProxyServer.application_id.is_(None),
+            ~HAProxyServer.id.in_(mapped_server_ids),
             HAProxyServer.removed_at.is_(None)
         )
 
@@ -701,6 +716,7 @@ def search_applications_for_mapping():
     """
     try:
         from app.models.application_instance import ApplicationInstance as Application
+        from app.models.application_mapping import ApplicationMapping, MappingType
 
         server_id = request.args.get('server_id', type=int)
         if not server_id:
@@ -728,10 +744,10 @@ def search_applications_for_mapping():
                 'error': 'Не удалось определить IP адрес HAProxy сервера'
             }), 400
 
-        # Подзапрос для получения ID приложений, которые уже замаплены на HAProxy серверы
-        mapped_app_ids = db.session.query(HAProxyServer.application_id).filter(
-            HAProxyServer.application_id.isnot(None),
-            HAProxyServer.removed_at.is_(None)
+        # Подзапрос для получения ID приложений с активными HAProxy маппингами
+        mapped_app_ids = db.session.query(ApplicationMapping.application_id).filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True
         ).subquery()
 
         # Ищем приложения с таким же IP, исключая уже замапленные
@@ -1006,25 +1022,28 @@ def get_all_mappings():
     """
     try:
         from app.models.application_instance import ApplicationInstance as Application
+        from app.models.application_mapping import ApplicationMapping, MappingType
         from collections import defaultdict
 
-        # Получаем все замапленные HAProxy серверы с join к приложениям и бэкендам
-        haproxy_servers = db.session.query(HAProxyServer).join(
-            HAProxyBackend, HAProxyServer.backend_id == HAProxyBackend.id
-        ).join(
-            Application, HAProxyServer.application_id == Application.id
-        ).join(
-            Server, Application.server_id == Server.id
-        ).filter(
-            HAProxyServer.application_id.isnot(None),
-            HAProxyServer.removed_at.is_(None)
+        # Получаем все активные маппинги из унифицированной таблицы
+        mappings = ApplicationMapping.query.filter_by(
+            entity_type=MappingType.HAPROXY_SERVER.value,
+            is_active=True
         ).all()
 
         # Группируем по hostname
         mappings_by_host = defaultdict(list)
 
-        for haproxy_server in haproxy_servers:
-            app = haproxy_server.application
+        for mapping in mappings:
+            # Получаем HAProxy сервер
+            haproxy_server = HAProxyServer.query.get(mapping.entity_id)
+            if not haproxy_server or haproxy_server.removed_at:
+                continue
+
+            app = mapping.application
+            if not app:
+                continue
+
             backend = haproxy_server.backend
             hostname = app.server.name if app.server else "Unknown"
 

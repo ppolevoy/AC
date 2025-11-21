@@ -8,12 +8,18 @@ from typing import List, Optional, Tuple
 from app import db
 from app.models.application_instance import ApplicationInstance
 from app.models.eureka import EurekaInstance
+from app.models.application_mapping import MappingType
 from difflib import SequenceMatcher
 
 # Алиас для обратной совместимости
 Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
+
+# Lazy import для избежания циклических импортов
+def get_mapping_service():
+    from app.services.mapping_service import mapping_service
+    return mapping_service
 
 
 class EurekaMapper:
@@ -29,10 +35,18 @@ class EurekaMapper:
         """
         logger.info("Начало автоматического маппинга Eureka экземпляров на приложения")
 
-        # Получаем все экземпляры, которые не связаны и не имеют ручного маппинга
+        mapping_service = get_mapping_service()
+        from app.models.application_mapping import ApplicationMapping
+
+        # Получаем ID экземпляров с активными маппингами из унифицированной таблицы
+        mapped_instance_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
+        # Получаем все несвязанные экземпляры
         unmapped_instances = EurekaInstance.query.filter(
-            EurekaInstance.application_id.is_(None),
-            EurekaInstance.is_manual_mapping == False,
+            ~EurekaInstance.id.in_(mapped_instance_ids),
             EurekaInstance.removed_at.is_(None)
         ).all()
 
@@ -45,6 +59,16 @@ class EurekaMapper:
         mapped_count = 0
 
         for instance in unmapped_instances:
+            # Проверяем ручной маппинг в новой таблице
+            existing_mappings = mapping_service.get_mappings_for_entity(
+                MappingType.EUREKA_INSTANCE.value,
+                instance.id,
+                active_only=True
+            )
+            if existing_mappings and existing_mappings[0].is_manual:
+                logger.debug(f"Пропуск маппинга для {instance.instance_id}: установлен ручной маппинг (unified)")
+                continue
+
             # Пробуем основную стратегию - по eureka_url
             app_id = EurekaMapper.map_by_eureka_url(instance)
 
@@ -54,7 +78,15 @@ class EurekaMapper:
 
             # Если нашли соответствие - устанавливаем маппинг
             if app_id:
-                instance.map_to_application(app_id, is_manual=False)
+                # Сохраняем в унифицированную таблицу маппингов
+                mapping_service.map_eureka_instance(
+                    eureka_instance_id=instance.id,
+                    application_id=app_id,
+                    is_manual=False,
+                    mapped_by='auto',
+                    notes='Automatic mapping'
+                )
+
                 mapped_count += 1
                 logger.info(f"Автоматически связан Eureka экземпляр {instance.instance_id} с приложением ID={app_id}")
 
@@ -169,13 +201,24 @@ class EurekaMapper:
                     logger.error(f"Приложение с ID={application_id} не найдено")
                     return False
 
-            # Устанавливаем маппинг
-            instance.map_to_application(
-                application_id=application_id,
-                is_manual=True,
-                mapped_by=mapped_by,
-                notes=notes
-            )
+            # Сохраняем маппинг в унифицированную таблицу
+            mapping_service = get_mapping_service()
+            if application_id:
+                mapping_service.map_eureka_instance(
+                    eureka_instance_id=instance_id,
+                    application_id=application_id,
+                    is_manual=True,
+                    mapped_by=mapped_by,
+                    notes=notes
+                )
+            else:
+                # Деактивируем маппинги для этого экземпляра
+                mapping_service.unmap_entity(
+                    MappingType.EUREKA_INSTANCE.value,
+                    instance_id,
+                    unmapped_by=mapped_by,
+                    reason=notes or "Manual unmapping"
+                )
 
             db.session.commit()
 
@@ -244,8 +287,16 @@ class EurekaMapper:
         Returns:
             Список несвязанных экземпляров
         """
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
+        # Получаем ID экземпляров с активными маппингами
+        mapped_instance_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
         return EurekaInstance.query.filter(
-            EurekaInstance.application_id.is_(None),
+            ~EurekaInstance.id.in_(mapped_instance_ids),
             EurekaInstance.removed_at.is_(None)
         ).all()
 
@@ -257,25 +308,28 @@ class EurekaMapper:
         Returns:
             Словарь со статистикой
         """
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
         total_instances = EurekaInstance.query.filter(
             EurekaInstance.removed_at.is_(None)
         ).count()
 
-        mapped_instances = EurekaInstance.query.filter(
-            EurekaInstance.application_id.isnot(None),
-            EurekaInstance.removed_at.is_(None)
+        # Статистика из унифицированной таблицы маппингов
+        mapped_instances = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True
         ).count()
 
-        manual_mappings = EurekaInstance.query.filter(
-            EurekaInstance.application_id.isnot(None),
-            EurekaInstance.is_manual_mapping == True,
-            EurekaInstance.removed_at.is_(None)
+        manual_mappings = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True,
+            ApplicationMapping.is_manual == True
         ).count()
 
-        automatic_mappings = EurekaInstance.query.filter(
-            EurekaInstance.application_id.isnot(None),
-            EurekaInstance.is_manual_mapping == False,
-            EurekaInstance.removed_at.is_(None)
+        automatic_mappings = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True,
+            ApplicationMapping.is_manual == False
         ).count()
 
         unmapped_instances = total_instances - mapped_instances

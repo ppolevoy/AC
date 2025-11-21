@@ -453,7 +453,8 @@ def get_unmapped_instances():
 
         return jsonify({
             'success': True,
-            'data': [inst.to_dict(include_application=False) for inst in unmapped]
+            'count': len(unmapped),
+            'instances': [inst.to_dict(include_application=False) for inst in unmapped]
         }), 200
 
     except Exception as e:
@@ -514,6 +515,88 @@ def get_mapping_statistics():
 
     except Exception as e:
         logger.error(f"Ошибка получения статистики маппинга: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@eureka_bp.route('/applications/search', methods=['GET'])
+def search_applications_for_mapping():
+    """
+    Поиск приложений для маппинга Eureka экземпляра.
+
+    Query parameters:
+        instance_id: int (required) - ID Eureka экземпляра (для фильтрации по IP)
+        query: str (optional) - Поисковый запрос по имени приложения
+    """
+    try:
+        from app.models.application_instance import ApplicationInstance as Application
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
+        instance_id = request.args.get('instance_id', type=int)
+        if not instance_id:
+            return jsonify({
+                'success': False,
+                'error': 'Параметр instance_id обязателен'
+            }), 400
+
+        # Получаем Eureka экземпляр
+        eureka_instance = EurekaInstance.query.get(instance_id)
+        if not eureka_instance:
+            return jsonify({
+                'success': False,
+                'error': 'Eureka экземпляр не найден'
+            }), 404
+
+        # IP адрес экземпляра
+        instance_ip = eureka_instance.ip_address
+
+        if not instance_ip:
+            return jsonify({
+                'success': False,
+                'error': 'Не удалось определить IP адрес Eureka экземпляра'
+            }), 400
+
+        # Подзапрос для получения ID приложений с активными Eureka маппингами
+        mapped_app_ids = db.session.query(ApplicationMapping.application_id).filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
+        # Ищем приложения с таким же IP, исключая уже замапленные
+        query_obj = Application.query.filter(
+            Application.ip == instance_ip,
+            ~Application.id.in_(mapped_app_ids)
+        )
+
+        # Дополнительный поиск по имени, если указан
+        search_query = request.args.get('query', '').strip()
+        if search_query:
+            query_obj = query_obj.filter(
+                Application.instance_name.ilike(f'%{search_query}%')
+            )
+
+        applications = query_obj.all()
+
+        result = {
+            'success': True,
+            'instance_id': instance_id,
+            'instance_name': eureka_instance.instance_id,
+            'instance_ip': instance_ip,
+            'count': len(applications),
+            'applications': [{
+                'id': app.id,
+                'name': app.instance_name,
+                'ip': app.ip,
+                'port': app.port,
+                'status': app.status,
+                'server_name': app.server.name if app.server else None,
+                'server_id': app.server_id
+            } for app in applications]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Ошибка поиска приложений: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

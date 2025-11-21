@@ -197,15 +197,6 @@ class HAProxyServer(db.Model):
     scur = db.Column(db.Integer, default=0)  # current sessions
     smax = db.Column(db.Integer, default=0)  # max sessions
 
-    # Связь с приложением AC (nullable - может быть не определено)
-    application_id = db.Column(db.Integer, db.ForeignKey('application_instances.id', ondelete='SET NULL'), nullable=True)
-
-    # Поля для ручного маппинга
-    is_manual_mapping = db.Column(db.Boolean, default=False, nullable=False)  # Флаг ручного маппинга
-    mapped_by = db.Column(db.String(64), nullable=True)  # Кто установил маппинг
-    mapped_at = db.Column(db.DateTime, nullable=True)  # Когда установлен
-    mapping_notes = db.Column(db.Text, nullable=True)  # Заметки о маппинге
-
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -213,7 +204,6 @@ class HAProxyServer(db.Model):
 
     # Relationships
     backend = db.relationship('HAProxyBackend', back_populates='servers')
-    application = db.relationship('ApplicationInstance', backref=db.backref('haproxy_servers', lazy='dynamic'))
     status_history = db.relationship('HAProxyServerStatusHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
     mapping_history = db.relationship('HAProxyMappingHistory', back_populates='haproxy_server', lazy='dynamic', cascade='all, delete-orphan')
 
@@ -221,7 +211,6 @@ class HAProxyServer(db.Model):
     __table_args__ = (
         db.UniqueConstraint('backend_id', 'server_name', name='uq_server_per_backend'),
         db.Index('idx_haproxy_server_backend', 'backend_id'),
-        db.Index('idx_haproxy_server_application', 'application_id'),
         db.Index('idx_haproxy_server_status', 'status'),
         db.Index('idx_haproxy_server_removed', 'removed_at'),
     )
@@ -260,49 +249,33 @@ class HAProxyServer(db.Model):
         """Восстановление удаленного сервера"""
         self.removed_at = None
 
-    def map_to_application(self, application_id, is_manual=False, mapped_by=None, notes=None):
-        """
-        Связать с приложением AC.
-
-        Args:
-            application_id: ID приложения для связывания (или None для отвязки)
-            is_manual: Флаг ручного маппинга
-            mapped_by: Кто установил маппинг (для ручного маппинга)
-            notes: Заметки о маппинге (для ручного маппинга)
-        """
-        old_application_id = self.application_id
-
-        # Создаем запись в истории только если маппинг изменился
-        if old_application_id != application_id:
-            history = HAProxyMappingHistory(
-                haproxy_server_id=self.id,
-                old_application_id=old_application_id,
-                new_application_id=application_id,
-                change_reason='manual' if is_manual else 'automatic',
-                mapped_by=mapped_by,
-                notes=notes
-            )
-            db.session.add(history)
-
-        # Обновляем маппинг
-        self.application_id = application_id
-        self.is_manual_mapping = is_manual
-
-        if is_manual:
-            self.mapped_by = mapped_by
-            self.mapped_at = datetime.utcnow()
-            self.mapping_notes = notes
-        else:
-            # При автоматическом маппинге очищаем поля ручного маппинга
-            if not self.is_manual_mapping:  # Только если это не был ручной маппинг
-                self.mapped_by = None
-                self.mapped_at = None
-                self.mapping_notes = None
-
-        self.updated_at = datetime.utcnow()
-
     def to_dict(self, include_application=True, include_backend=False):
         """Преобразование в словарь для API"""
+        # Получаем маппинг из унифицированной таблицы
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
+        mapping = ApplicationMapping.query.filter_by(
+            entity_type=MappingType.HAPROXY_SERVER.value,
+            entity_id=self.id,
+            is_active=True
+        ).first()
+
+        # Данные маппинга из унифицированной таблицы
+        if mapping:
+            application_id = mapping.application_id
+            is_manual_mapping = mapping.is_manual
+            mapped_by = mapping.mapped_by
+            mapped_at = mapping.mapped_at
+            mapping_notes = mapping.notes
+            application = mapping.application
+        else:
+            application_id = None
+            is_manual_mapping = False
+            mapped_by = None
+            mapped_at = None
+            mapping_notes = None
+            application = None
+
         result = {
             'id': self.id,
             'backend_id': self.backend_id,
@@ -316,23 +289,23 @@ class HAProxyServer(db.Model):
             'downtime': self.downtime,
             'scur': self.scur,
             'smax': self.smax,
-            'application_id': self.application_id,
-            'is_manual_mapping': self.is_manual_mapping,
-            'mapped_by': self.mapped_by,
-            'mapped_at': self.mapped_at.isoformat() if self.mapped_at else None,
-            'mapping_notes': self.mapping_notes,
+            'application_id': application_id,
+            'is_manual_mapping': is_manual_mapping,
+            'mapped_by': mapped_by,
+            'mapped_at': mapped_at.isoformat() if mapped_at else None,
+            'mapping_notes': mapping_notes,
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'removed_at': self.removed_at.isoformat() if self.removed_at else None,
             'is_removed': self.is_removed()
         }
 
-        if include_application and self.application:
+        if include_application and application:
             result['application'] = {
-                'id': self.application.id,
-                'name': self.application.instance_name,
-                'status': self.application.status,
-                'server_name': self.application.server.name if self.application.server else None
+                'id': application.id,
+                'name': application.instance_name,
+                'status': application.status,
+                'server_name': application.server.name if application.server else None
             }
 
         if include_backend and self.backend:

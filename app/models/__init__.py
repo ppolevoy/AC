@@ -8,6 +8,7 @@ from app.models.application_group import ApplicationGroup
 from app.models.event import Event
 from app.models.orchestrator_playbook import OrchestratorPlaybook
 from app.models.haproxy import HAProxyInstance, HAProxyBackend, HAProxyServer, HAProxyServerStatusHistory
+from app.models.application_mapping import ApplicationMapping, ApplicationMappingHistory, MappingType
 
 # Алиас для обратной совместимости с кодом, использующим Application
 Application = ApplicationInstance
@@ -23,5 +24,8 @@ __all__ = [
     'HAProxyInstance',
     'HAProxyBackend',
     'HAProxyServer',
-    'HAProxyServerStatusHistory'
+    'HAProxyServerStatusHistory',
+    'ApplicationMapping',
+    'ApplicationMappingHistory',
+    'MappingType'
 ]

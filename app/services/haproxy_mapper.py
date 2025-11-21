@@ -12,11 +12,17 @@ from app import db
 from app.models.application_instance import ApplicationInstance
 from app.models.server import Server
 from app.models.haproxy import HAProxyServer
+from app.models.application_mapping import MappingType
 
 # Алиас для обратной совместимости
 Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
+
+# Lazy import для избежания циклических импортов
+def get_mapping_service():
+    from app.services.mapping_service import mapping_service
+    return mapping_service
 
 
 class HAProxyMapper:
@@ -184,12 +190,18 @@ class HAProxyMapper:
             Application или None
         """
         # ЗАЩИТА РУЧНОГО МАППИНГА: не перезаписываем ручной маппинг
-        if haproxy_server.is_manual_mapping:
+        # Проверяем в унифицированной таблице маппингов
+        mapping_service = get_mapping_service()
+        existing_mappings = mapping_service.get_mappings_for_entity(
+            MappingType.HAPROXY_SERVER.value,
+            haproxy_server.id,
+            active_only=True
+        )
+
+        # Проверяем ручной маппинг
+        if existing_mappings and existing_mappings[0].is_manual:
             logger.debug(f"Пропуск маппинга для {haproxy_server.server_name}: установлен ручной маппинг")
-            # Возвращаем текущее приложение, если оно есть
-            if haproxy_server.application_id:
-                return Application.query.get(haproxy_server.application_id)
-            return None
+            return existing_mappings[0].application
 
         cache_key = f"{haproxy_server.id}"
 
@@ -211,9 +223,14 @@ class HAProxyMapper:
                 application = HAProxyMapper.map_by_address(ip, port)
                 if application:
                     logger.info(f"Маппинг успешен (по адресу): {haproxy_server.server_name} -> {application.instance_name}")
-                    # Сохраняем связь
-                    haproxy_server.map_to_application(application.id)
-                    db.session.commit()
+                    # Сохраняем в унифицированную таблицу маппингов
+                    mapping_service.map_haproxy_server(
+                        haproxy_server_id=haproxy_server.id,
+                        application_id=application.id,
+                        is_manual=False,
+                        mapped_by='auto',
+                        notes='Automatic mapping by address'
+                    )
 
                     # Кэшируем результат
                     HAProxyMapper._mapping_cache[cache_key] = application.id
@@ -225,9 +242,14 @@ class HAProxyMapper:
             application = HAProxyMapper.map_by_name(hostname, app_name, instance)
             if application:
                 logger.info(f"Маппинг успешен (по имени): {haproxy_server.server_name} -> {application.instance_name}")
-                # Сохраняем связь
-                haproxy_server.map_to_application(application.id)
-                db.session.commit()
+                # Сохраняем в унифицированную таблицу маппингов
+                mapping_service.map_haproxy_server(
+                    haproxy_server_id=haproxy_server.id,
+                    application_id=application.id,
+                    is_manual=False,
+                    mapped_by='auto',
+                    notes='Automatic mapping by name'
+                )
 
                 # Кэшируем результат
                 HAProxyMapper._mapping_cache[cache_key] = application.id
@@ -253,19 +275,28 @@ class HAProxyMapper:
         # Очищаем кэш
         HAProxyMapper.clear_cache()
 
+        from app.models.application_mapping import ApplicationMapping
+
+        # Получаем ID серверов с активными маппингами из унифицированной таблицы
+        mapped_server_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
         # Получаем все HAProxy серверы без привязки к приложению
-        # ИСКЛЮЧАЕМ серверы с ручным маппингом
         unmapped_servers = HAProxyServer.query.filter(
-            HAProxyServer.application_id.is_(None),
-            HAProxyServer.removed_at.is_(None),
-            HAProxyServer.is_manual_mapping == False  # Пропускаем ручной маппинг
+            ~HAProxyServer.id.in_(mapped_server_ids),
+            HAProxyServer.removed_at.is_(None)
         ).all()
 
         mapped_count = 0
         total_count = len(unmapped_servers)
-        skipped_manual = HAProxyServer.query.filter(
-            HAProxyServer.removed_at.is_(None),
-            HAProxyServer.is_manual_mapping == True
+
+        # Подсчет ручных маппингов
+        skipped_manual = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True,
+            ApplicationMapping.is_manual == True
         ).count()
 
         logger.info(f"Найдено {total_count} несопоставленных серверов (пропущено {skipped_manual} с ручным маппингом)")
@@ -292,22 +323,25 @@ class HAProxyMapper:
         Returns:
             dict с информацией о маппинге (включая ручной/автоматический)
         """
+        from app.models.application_mapping import ApplicationMapping, MappingType
+
         total_servers = HAProxyServer.query.filter(
             HAProxyServer.removed_at.is_(None)
         ).count()
 
-        mapped_servers = HAProxyServer.query.filter(
-            HAProxyServer.application_id.isnot(None),
-            HAProxyServer.removed_at.is_(None)
+        # Статистика из унифицированной таблицы маппингов
+        mapped_servers = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True
         ).count()
 
         unmapped_servers = total_servers - mapped_servers
 
         # Статистика по ручному маппингу
-        manual_mapped = HAProxyServer.query.filter(
-            HAProxyServer.application_id.isnot(None),
-            HAProxyServer.is_manual_mapping == True,
-            HAProxyServer.removed_at.is_(None)
+        manual_mapped = ApplicationMapping.query.filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True,
+            ApplicationMapping.is_manual == True
         ).count()
 
         auto_mapped = mapped_servers - manual_mapped
