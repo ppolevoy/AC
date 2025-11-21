@@ -1463,6 +1463,88 @@
     .manual-mapping-form .form-group:last-of-type {
         margin-bottom: 10px;
     }
+
+    /* Mapping unmap button */
+    .mapping-btn-unmap {
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+        background: rgba(244, 67, 54, 0.2);
+        color: #f44336;
+    }
+
+    .mapping-btn-unmap:hover {
+        background: rgba(244, 67, 54, 0.3);
+    }
+
+    body.light-theme .mapping-btn-unmap {
+        background: rgba(244, 67, 54, 0.15);
+    }
+
+    body.light-theme .mapping-btn-unmap:hover {
+        background: rgba(244, 67, 54, 0.25);
+    }
+
+    /* Code styling in tables */
+    .mappings-table code {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+
+    body.light-theme .mappings-table code {
+        background: rgba(0, 0, 0, 0.08);
+    }
+
+    /* Type badges */
+    .type-badge {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        text-align: center;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 12px;
+    }
+
+    .type-haproxy {
+        background: rgba(33, 150, 243, 0.2);
+        color: #2196f3;
+    }
+
+    .type-eureka {
+        background: rgba(76, 175, 80, 0.2);
+        color: #4caf50;
+    }
+
+    /* Warning color for unmapped count */
+    .stat-value-warning {
+        color: #ff9800;
+    }
+
+    /* Stat detail (smaller text) */
+    .stat-detail {
+        font-size: 11px;
+        color: #888;
+        font-weight: normal;
+    }
+
+    .type-haproxy-text {
+        color: #2196f3;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    .type-eureka-text {
+        color: #4caf50;
+        font-weight: bold;
+        font-size: 14px;
+    }
 </style>
 
 <script>

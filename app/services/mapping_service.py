@@ -433,12 +433,16 @@ class MappingService:
 
     def get_mapping_statistics(self) -> Dict[str, Any]:
         """Получить статистику маппингов"""
+        from app.models.haproxy import HAProxyServer
+        from app.models.eureka import EurekaInstance
+
         stats = {
             'total': ApplicationMapping.query.count(),
             'active': ApplicationMapping.query.filter_by(is_active=True).count(),
             'manual': ApplicationMapping.query.filter_by(is_manual=True, is_active=True).count(),
             'automatic': ApplicationMapping.query.filter_by(is_manual=False, is_active=True).count(),
-            'by_type': {}
+            'by_type': {},
+            'unmapped': {}
         }
 
         for mapping_type in MappingType:
@@ -449,6 +453,35 @@ class MappingService:
                     is_active=True
                 ).count()
             }
+
+        # Подсчёт неназначенных сущностей
+        # HAProxy серверы без маппинга
+        mapped_haproxy_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
+        unmapped_haproxy = HAProxyServer.query.filter(
+            ~HAProxyServer.id.in_(mapped_haproxy_ids),
+            HAProxyServer.removed_at.is_(None)
+        ).count()
+
+        # Eureka instances без маппинга
+        mapped_eureka_ids = db.session.query(ApplicationMapping.entity_id).filter(
+            ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
+            ApplicationMapping.is_active == True
+        ).subquery()
+
+        unmapped_eureka = EurekaInstance.query.filter(
+            ~EurekaInstance.id.in_(mapped_eureka_ids),
+            EurekaInstance.removed_at.is_(None)
+        ).count()
+
+        stats['unmapped'] = {
+            'haproxy_server': unmapped_haproxy,
+            'eureka_instance': unmapped_eureka,
+            'total': unmapped_haproxy + unmapped_eureka
+        }
 
         return stats
 

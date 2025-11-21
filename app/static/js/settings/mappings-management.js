@@ -72,14 +72,15 @@ class MappingsManagement {
         const container = document.getElementById('mappings-statistics');
         if (!container || !this.stats) return;
 
+        const unmappedTotal = this.stats.unmapped?.total || 0;
+        const unmappedClass = unmappedTotal > 0 ? 'stat-value-warning' : '';
+        const haproxyCount = this.stats.by_type?.haproxy_server?.active || 0;
+        const eurekaCount = this.stats.by_type?.eureka_instance?.active || 0;
+
         container.innerHTML = `
             <div class="stat-item">
                 <div class="stat-label">Всего маппингов</div>
-                <div class="stat-value">${this.stats.total}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">Активных</div>
-                <div class="stat-value">${this.stats.active}</div>
+                <div class="stat-value">${this.stats.active} <span class="stat-detail">(<span class="type-haproxy-text">H</span>: ${haproxyCount}, <span class="type-eureka-text">E</span>: ${eurekaCount})</span></div>
             </div>
             <div class="stat-item">
                 <div class="stat-label">Ручных</div>
@@ -90,12 +91,8 @@ class MappingsManagement {
                 <div class="stat-value">${this.stats.automatic}</div>
             </div>
             <div class="stat-item">
-                <div class="stat-label">HAProxy</div>
-                <div class="stat-value">${this.stats.by_type?.haproxy_server?.active || 0}</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-label">Eureka</div>
-                <div class="stat-value">${this.stats.by_type?.eureka_instance?.active || 0}</div>
+                <div class="stat-label">Не назначено</div>
+                <div class="stat-value ${unmappedClass}">${unmappedTotal}</div>
             </div>
         `;
     }
@@ -112,45 +109,131 @@ class MappingsManagement {
             return;
         }
 
+        // Определяем тип таблицы по фильтру или данным
+        const entityType = this.filters.entityType;
+
         let html = '<div class="mappings-table-container"><table class="mappings-table"><thead><tr>';
-        html += '<th>Приложение</th>';
-        html += '<th>Тип</th>';
-        html += '<th>ID сущности</th>';
-        html += '<th>Маппинг</th>';
-        html += '<th>Создан</th>';
-        html += '<th>Действия</th>';
+
+        if (entityType === 'haproxy_server') {
+            // Таблица для HAProxy
+            html += '<th style="width: 180px; min-width: 180px;">Приложение</th>';
+            html += '<th>Имя сервера (HAProxy)</th>';
+            html += '<th>Адрес (HAProxy)</th>';
+            html += '<th>Маппинг</th>';
+            html += '<th>Создан</th>';
+            html += '<th>Действия</th>';
+        } else if (entityType === 'eureka_instance') {
+            // Таблица для Eureka
+            html += '<th>Instance ID</th>';
+            html += '<th style="width: 180px; min-width: 180px;">Приложение</th>';
+            html += '<th>Адрес</th>';
+            html += '<th>Маппинг</th>';
+            html += '<th>Создан</th>';
+            html += '<th>Действия</th>';
+        } else {
+            // Общая таблица (когда не выбран фильтр)
+            html += '<th style="width: 41px; min-width: 41px;">Тип</th>';
+            html += '<th style="width: 180px; min-width: 180px;">Приложение</th>';
+            html += '<th>Адрес</th>';
+            html += '<th>Маппинг</th>';
+            html += '<th>Создан</th>';
+            html += '<th>Действия</th>';
+        }
+
         html += '</tr></thead><tbody>';
 
         this.mappings.slice(0, 50).forEach(mapping => {
-            const typeIcon = mapping.entity_type === 'haproxy_server' ? '🔄' : '🌐';
             const manualBadge = mapping.is_manual
                 ? '<span class="badge badge-manual">Ручной</span>'
                 : '<span class="badge badge-auto">Авто</span>';
 
-            const appName = mapping.application?.instance_name || `ID: ${mapping.application_id}`;
             const mappedAt = mapping.mapped_at
                 ? new Date(mapping.mapped_at).toLocaleDateString()
                 : '-';
 
-            html += `
-                <tr class="${!mapping.is_active ? 'inactive' : ''}">
-                    <td>${appName}</td>
-                    <td>${typeIcon} ${mapping.entity_type}</td>
-                    <td>${mapping.entity_id}</td>
-                    <td>${manualBadge}</td>
-                    <td>${mappedAt}</td>
-                    <td>
-                        <button class="btn-small btn-info" onclick="mappingsManagement.showHistory(${mapping.id})">
-                            📋
-                        </button>
-                        ${mapping.is_active ? `
-                            <button class="btn-small btn-danger" onclick="mappingsManagement.deactivateMapping(${mapping.id})">
-                                ❌
+            // Формируем имя приложения: {короткий hostname}_{instance_name}
+            let appDisplay = mapping.application?.instance_name || `ID: ${mapping.application_id}`;
+            if (mapping.application?.server_name) {
+                const shortHostname = mapping.application.server_name.split('.')[0];
+                appDisplay = `${shortHostname}_${mapping.application.instance_name}`;
+            }
+
+            if (entityType === 'haproxy_server') {
+                // Строка для HAProxy
+                const serverName = mapping.metadata?.server_name || '-';
+                const address = mapping.metadata?.address || '-';
+
+                html += `
+                    <tr class="${!mapping.is_active ? 'inactive' : ''}">
+                        <td>${appDisplay}</td>
+                        <td>${serverName}</td>
+                        <td><code>${address}</code></td>
+                        <td>${manualBadge}</td>
+                        <td>${mappedAt}</td>
+                        <td>
+                            <button class="btn-small btn-info" onclick="mappingsManagement.showHistory(${mapping.id})" title="История">
+                                📋
                             </button>
-                        ` : ''}
-                    </td>
-                </tr>
-            `;
+                            ${mapping.is_active ? `
+                                <button class="mapping-btn-unmap" onclick="mappingsManagement.deactivateMapping(${mapping.id})" title="Удалить маппинг">
+                                    ✖
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            } else if (entityType === 'eureka_instance') {
+                // Строка для Eureka
+                const instanceId = mapping.metadata?.instance_id || '-';
+                const address = mapping.metadata?.eureka_url || '-';
+
+                html += `
+                    <tr class="${!mapping.is_active ? 'inactive' : ''}">
+                        <td><code>${instanceId}</code></td>
+                        <td>${appDisplay}</td>
+                        <td><code>${address}</code></td>
+                        <td>${manualBadge}</td>
+                        <td>${mappedAt}</td>
+                        <td>
+                            <button class="btn-small btn-info" onclick="mappingsManagement.showHistory(${mapping.id})" title="История">
+                                📋
+                            </button>
+                            ${mapping.is_active ? `
+                                <button class="mapping-btn-unmap" onclick="mappingsManagement.deactivateMapping(${mapping.id})" title="Удалить маппинг">
+                                    ✖
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            } else {
+                // Общая строка
+                const typeLabel = mapping.entity_type === 'haproxy_server' ? 'H' : 'E';
+                const typeTitle = mapping.entity_type === 'haproxy_server' ? 'HAProxy' : 'Eureka';
+                const address = mapping.entity_type === 'haproxy_server'
+                    ? (mapping.metadata?.address || '-')
+                    : (mapping.metadata?.eureka_url || '-');
+
+                html += `
+                    <tr class="${!mapping.is_active ? 'inactive' : ''}">
+                        <td><span class="type-badge type-${mapping.entity_type === 'haproxy_server' ? 'haproxy' : 'eureka'}" title="${typeTitle}">${typeLabel}</span></td>
+                        <td>${appDisplay}</td>
+                        <td><code>${address}</code></td>
+                        <td>${manualBadge}</td>
+                        <td>${mappedAt}</td>
+                        <td>
+                            <button class="btn-small btn-info" onclick="mappingsManagement.showHistory(${mapping.id})" title="История">
+                                📋
+                            </button>
+                            ${mapping.is_active ? `
+                                <button class="mapping-btn-unmap" onclick="mappingsManagement.deactivateMapping(${mapping.id})" title="Удалить маппинг">
+                                    ✖
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            }
         });
 
         html += '</tbody></table></div>';
