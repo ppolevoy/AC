@@ -26,6 +26,25 @@ class MappingsManagement {
     }
 
     /**
+     * Обновление индикатора статуса
+     */
+    updateStatusIndicator(success = true, message = null) {
+        const indicator = document.getElementById('mappings-status-indicator');
+        if (!indicator) return;
+
+        const dot = indicator.querySelector('.status-dot');
+        const text = indicator.querySelector('.status-text');
+
+        if (success) {
+            dot.className = 'status-dot connected';
+            text.textContent = message || `${this.stats?.active || 0} маппингов`;
+        } else {
+            dot.className = 'status-dot error';
+            text.textContent = message || 'Ошибка';
+        }
+    }
+
+    /**
      * Загрузка статистики маппингов
      */
     async loadStats() {
@@ -36,9 +55,13 @@ class MappingsManagement {
             if (data.success) {
                 this.stats = data.stats;
                 this.renderStats();
+                this.updateStatusIndicator(true);
+            } else {
+                this.updateStatusIndicator(false, 'Ошибка загрузки');
             }
         } catch (error) {
             console.error('Error loading mapping stats:', error);
+            this.updateStatusIndicator(false, 'Ошибка');
         }
     }
 

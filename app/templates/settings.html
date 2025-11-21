@@ -1591,15 +1591,21 @@ document.addEventListener('DOMContentLoaded', function() {
     let mappingsExpanded = false;
 
     if (mappingsStatusLine) {
+        // Загружаем статистику сразу для отображения в индикаторе
+        if (window.mappingsManagement) {
+            mappingsManagement.loadStats();
+        }
+
         mappingsStatusLine.addEventListener('click', function() {
             mappingsExpanded = !mappingsExpanded;
 
             if (mappingsExpanded) {
                 mappingsDetails.style.display = 'block';
                 mappingsExpandArrow.classList.add('expanded');
-                // Загружаем данные при раскрытии
+                // Загружаем полные данные при раскрытии
                 if (window.mappingsManagement) {
-                    mappingsManagement.init();
+                    mappingsManagement.loadMappings();
+                    mappingsManagement.setupEventHandlers();
                 }
             } else {
                 mappingsDetails.style.display = 'none';
