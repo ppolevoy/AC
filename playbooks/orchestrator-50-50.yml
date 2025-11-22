@@ -6,17 +6,19 @@
 #   ansible-playbook orchestrator-50-50.yml -e "app_instances=node-1::business_2,node-1::business_3,node-2::business_2 distr_url=http://example.com/app.tar.gz drain_delay=300"
 #
 # required_params:
-#   app_instances  - Список составных имен server::app (например: node-1::business_2,node-2::business_3)
-#   distr_url      - URL дистрибутива для установки
-#   drain_delay    - Время ожидания после drain (в секундах)
-#   update_playbook - Имя playbook для обновления (например: update_multiple_instances_v1_9-latest.yaml)
+#   app_instances    - Список составных имен server::app::haproxy_server (например: node-1::business_2::srv1_business_2)
+#   distr_url        - URL дистрибутива для установки
+#   drain_delay      - Время ожидания после drain (в секундах)
+#   update_playbook  - Имя playbook для обновления (например: update_multiple_instances_v1_9-latest.yaml)
+#   haproxy_backend  - Имя backend в HAProxy
+#   haproxy_api_url  - URL HAProxy API (например: http://10.0.0.1:5000/haproxy/default)
 #
 # optional_params:
 #   wait_after_update - Время ожидания после обновления (по умолчанию 1800 сек = 30 мин)
 #
 # Требования:
 #   - Указанный playbook для обновления должен находиться в той же директории
-#   - app_instances использует разделитель :: между сервером и приложением
+#   - app_instances использует разделитель :: между сервером, приложением и HAProxy сервером
 #
 # Версия 2.0 - с поддержкой составных имен
 
@@ -68,16 +70,12 @@
         - distr_url
         - drain_delay
         - update_playbook
-      delegate_to: localhost
-
-    - name: Load application mapping
-      include_vars:
-        file: app_mapping.yml
-        name: app_mapping
+        - haproxy_backend
+        - haproxy_api_url
       delegate_to: localhost
 
     # ============================================
-    # БЛОК 2: Парсинг составных имен
+    # БЛОК 2: Парсинг составных имен с поддержкой HAProxy
     # ============================================
 
     - name: Parse composite names into list
@@ -85,13 +83,41 @@
         instances_list: "{{ app_instances.split(',') | map('trim') | list }}"
       delegate_to: localhost
 
-    - name: Log parsed instances
+    - name: Initialize parsed instances list
+      set_fact:
+        parsed_instances: []
+      delegate_to: localhost
+
+    - name: Parse each instance with HAProxy support
+      set_fact:
+        parsed_instances: "{{ parsed_instances + [parsed_item] }}"
+      vars:
+        parts: "{{ item.split('::') }}"
+        parsed_item:
+          full_name: "{{ item }}"
+          server: "{{ parts[0] }}"
+          app: "{{ parts[1] }}"
+          haproxy_server: "{{ parts[2] if (parts | length) > 2 else parts[0] + '_' + parts[1] }}"
+          has_explicit_mapping: "{{ (parts | length) > 2 }}"
+      loop: "{{ instances_list }}"
+      loop_control:
+        label: "Parsing: {{ item }}"
+      delegate_to: localhost
+
+    - name: Log parsed instances with mapping info
       shell: |
-        echo "Parsed {{ instances_list | length }} instances:" >> {{ log_file }}
-        {% for inst in instances_list %}
-        echo "  [{{ loop.index0 }}] {{ inst }}" >> {{ log_file }}
+        echo "Parsed {{ parsed_instances | length }} instances:" >> {{ log_file }}
+        echo "Format: {{ 'Extended (with HAProxy mapping)' if (parsed_instances | selectattr('has_explicit_mapping', 'equalto', true) | list | length) > 0 else 'Standard' }}" >> {{ log_file }}
+        {% for inst in parsed_instances %}
+        echo "" >> {{ log_file }}
+        echo "  [{{ loop.index0 }}] {{ inst.full_name }}" >> {{ log_file }}
+        echo "      Server: {{ inst.server }}" >> {{ log_file }}
+        echo "      Application: {{ inst.app }}" >> {{ log_file }}
+        echo "      HAProxy Server: {{ inst.haproxy_server }}" >> {{ log_file }}
+        echo "      Explicit Mapping: {{ inst.has_explicit_mapping }}" >> {{ log_file }}
         {% endfor %}
         echo "" >> {{ log_file }}
+        echo "===========================================" >> {{ log_file }}
       delegate_to: localhost
 
     # ============================================
@@ -177,35 +203,55 @@
             base_app_name: "{{ sample_app_name | regex_replace('_\\d+$', '') }}"
           delegate_to: localhost
 
-        - name: Verify application exists in mapping
-          fail:
-            msg: "Application '{{ base_app_name }}' not found in app_mapping.yml"
-          when: base_app_name not in app_mapping.applications
+        # Используем параметры напрямую (backend и api_url передаются из Flask)
+        - name: Set backend configuration from parameters
+          set_fact:
+            backend_name: "{{ haproxy_backend }}"
           delegate_to: localhost
 
-        - name: Get backend name for application
-          set_fact:
-            backend_name: "{{ app_mapping.applications[base_app_name].backend }}"
-            haproxy_api_url: "{{ app_mapping.haproxy_api.base_url }}"
+        - name: Log backend configuration
+          shell: |
+            echo "HAProxy Backend Configuration:" >> {{ log_file }}
+            echo "  Backend Name: {{ backend_name }}" >> {{ log_file }}
+            echo "  API URL: {{ haproxy_api_url }}" >> {{ log_file }}
+            echo "  Using Extended Format: {{ (parsed_instances | selectattr('has_explicit_mapping', 'equalto', true) | list | length) > 0 }}" >> {{ log_file }}
+            echo "" >> {{ log_file }}
           delegate_to: localhost
 
         # Шаг 1: Drain всех экземпляров батча 1
-        - name: "Batch 1: Parse composite names for DRAIN"
+        - name: "Batch 1: Build drain targets from parsed data"
           set_fact:
             drain_batch1_targets: []
           delegate_to: localhost
 
-        - name: "Batch 1: Build drain targets"
+        - name: "Batch 1: Prepare drain targets"
           set_fact:
-            drain_batch1_targets: "{{ drain_batch1_targets + [{'server': item.split('::')[0], 'app': item.split('::')[1]}] }}"
+            drain_batch1_targets: "{{ drain_batch1_targets + [target] }}"
+          vars:
+            inst: "{{ parsed_instances | selectattr('full_name', 'equalto', item) | first }}"
+            target:
+              server: "{{ inst.server }}"
+              app: "{{ inst.app }}"
+              haproxy_name: "{{ inst.haproxy_server }}"
+              has_mapping: "{{ inst.has_explicit_mapping }}"
+              full_name: "{{ inst.full_name }}"
           loop: "{{ first_batch }}"
           loop_control:
             label: "{{ item }}"
           delegate_to: localhost
 
+        - name: "Batch 1: Log drain targets"
+          shell: |
+            echo "Batch 1 - Drain targets:" >> {{ log_file }}
+            {% for target in drain_batch1_targets %}
+            echo "  {{ target.haproxy_name }} (explicit: {{ target.has_mapping }})" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
         - name: "Batch 1: Set instances to DRAIN via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/drain"
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/drain"
             method: GET
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
@@ -213,7 +259,7 @@
           register: drain_batch1_result
           failed_when: false
           loop_control:
-            label: "{{ item.server }}_{{ item.app }}"
+            label: "DRAIN: {{ item.haproxy_name }} (mapped: {{ item.has_mapping }})"
           delegate_to: localhost
 
         - name: Check for DRAIN failures in Batch 1
@@ -227,7 +273,12 @@
           shell: |
             echo "Batch 1 - DRAIN commands executed:" >> {{ log_file }}
             {% for result in drain_batch1_result.results %}
-            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            echo "  - {{ result.item.haproxy_name }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% if result.item.has_mapping %}
+            echo "    (Using explicit HAProxy mapping)" >> {{ log_file }}
+            {% else %}
+            echo "    (Using default naming convention)" >> {{ log_file }}
+            {% endif %}
             {% endfor %}
             echo "" >> {{ log_file }}
           delegate_to: localhost
@@ -295,7 +346,7 @@
         # Шаг 6: Возврат в READY
         - name: "Batch 1: Set instances to READY via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/ready"
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/ready"
             method: GET
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
@@ -303,7 +354,7 @@
           register: ready_batch1_result
           failed_when: false
           loop_control:
-            label: "{{ item.server }}_{{ item.app }}"
+            label: "READY: {{ item.haproxy_name }}"
           delegate_to: localhost
 
         - name: Check for READY failures in Batch 1
@@ -317,7 +368,7 @@
           shell: |
             echo "Batch 1 - READY commands executed:" >> {{ log_file }}
             {% for result in ready_batch1_result.results %}
-            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            echo "  - {{ result.item.haproxy_name }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
             {% endfor %}
             echo "" >> {{ log_file }}
           delegate_to: localhost
@@ -346,22 +397,39 @@
           delegate_to: localhost
 
         # Шаг 1: Drain всех экземпляров батча 2
-        - name: "Batch 2: Parse composite names for DRAIN"
+        - name: "Batch 2: Build drain targets from parsed data"
           set_fact:
             drain_batch2_targets: []
           delegate_to: localhost
 
-        - name: "Batch 2: Build drain targets"
+        - name: "Batch 2: Prepare drain targets"
           set_fact:
-            drain_batch2_targets: "{{ drain_batch2_targets + [{'server': item.split('::')[0], 'app': item.split('::')[1]}] }}"
+            drain_batch2_targets: "{{ drain_batch2_targets + [target] }}"
+          vars:
+            inst: "{{ parsed_instances | selectattr('full_name', 'equalto', item) | first }}"
+            target:
+              server: "{{ inst.server }}"
+              app: "{{ inst.app }}"
+              haproxy_name: "{{ inst.haproxy_server }}"
+              has_mapping: "{{ inst.has_explicit_mapping }}"
+              full_name: "{{ inst.full_name }}"
           loop: "{{ second_batch }}"
           loop_control:
             label: "{{ item }}"
           delegate_to: localhost
 
+        - name: "Batch 2: Log drain targets"
+          shell: |
+            echo "Batch 2 - Drain targets:" >> {{ log_file }}
+            {% for target in drain_batch2_targets %}
+            echo "  {{ target.haproxy_name }} (explicit: {{ target.has_mapping }})" >> {{ log_file }}
+            {% endfor %}
+            echo "" >> {{ log_file }}
+          delegate_to: localhost
+
         - name: "Batch 2: Set instances to DRAIN via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/drain"
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/drain"
             method: GET
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
@@ -369,7 +437,7 @@
           register: drain_batch2_result
           failed_when: false
           loop_control:
-            label: "{{ item.server }}_{{ item.app }}"
+            label: "DRAIN: {{ item.haproxy_name }} (mapped: {{ item.has_mapping }})"
           delegate_to: localhost
 
         - name: Check for DRAIN failures in Batch 2
@@ -383,7 +451,12 @@
           shell: |
             echo "Batch 2 - DRAIN commands executed:" >> {{ log_file }}
             {% for result in drain_batch2_result.results %}
-            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            echo "  - {{ result.item.haproxy_name }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            {% if result.item.has_mapping %}
+            echo "    (Using explicit HAProxy mapping)" >> {{ log_file }}
+            {% else %}
+            echo "    (Using default naming convention)" >> {{ log_file }}
+            {% endif %}
             {% endfor %}
             echo "" >> {{ log_file }}
           delegate_to: localhost
@@ -451,7 +524,7 @@
         # Шаг 6: Возврат в READY
         - name: "Batch 2: Set instances to READY via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.server }}_{{ item.app }}/ready"
+            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/ready"
             method: GET
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
@@ -459,7 +532,7 @@
           register: ready_batch2_result
           failed_when: false
           loop_control:
-            label: "{{ item.server }}_{{ item.app }}"
+            label: "READY: {{ item.haproxy_name }}"
           delegate_to: localhost
 
         - name: Check for READY failures in Batch 2
@@ -473,7 +546,7 @@
           shell: |
             echo "Batch 2 - READY commands executed:" >> {{ log_file }}
             {% for result in ready_batch2_result.results %}
-            echo "  - {{ result.item.server }}_{{ result.item.app }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
+            echo "  - {{ result.item.haproxy_name }}: {% if result.status == 200 %}SUCCESS{% else %}FAILED ({{ result.status | default('N/A') }}){% endif %}" >> {{ log_file }}
             {% endfor %}
             echo "" >> {{ log_file }}
           delegate_to: localhost
@@ -502,6 +575,10 @@
         echo "Application: {{ base_app_name }}" >> {{ log_file }}
         echo "Backend: {{ backend_name }}" >> {{ log_file }}
         echo "Total instances: {{ instances_list | length }}" >> {{ log_file }}
+        echo "" >> {{ log_file }}
+        echo "HAProxy Mapping Statistics:" >> {{ log_file }}
+        echo "  Explicitly mapped: {{ parsed_instances | selectattr('has_explicit_mapping', 'equalto', true) | list | length }}" >> {{ log_file }}
+        echo "  Using fallback: {{ parsed_instances | selectattr('has_explicit_mapping', 'equalto', false) | list | length }}" >> {{ log_file }}
         echo "" >> {{ log_file }}
         echo "Batch 1 ({{ first_batch_name }}): {{ first_batch | length }} instances" >> {{ log_file }}
         echo "Batch 2 ({{ second_batch_name }}): {{ second_batch | length }} instances" >> {{ log_file }}

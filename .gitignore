@@ -55,3 +55,8 @@ migrations/apply_haproxy_sql_migration.py
 integrations/EUREKA_CONTROL_API.md
 TODO_MAPPING_UI.md
 .gitignore
+docs/haproxy_orchestrator_integration_plan.md
+docs/implementation_summary.md
+docs/phase1_backend_changes.md
+docs/phase2_playbook_changes.md
+docs/phase3_testing.md

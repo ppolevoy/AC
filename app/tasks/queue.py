@@ -586,6 +586,87 @@ class TaskQueue:
             # Закрываем event loop
             loop.close()
     
+    def _prepare_orchestrator_instances_with_haproxy(self, apps):
+        """
+        Формирует список instances с HAProxy маппингом.
+
+        Args:
+            apps: Список объектов ApplicationInstance для обновления
+
+        Returns:
+            tuple: (instances_list, backend_info, haproxy_api_url)
+            - instances_list: Список строк вида "server::app::haproxy_server"
+            - backend_info: Словарь с информацией о backends
+            - haproxy_api_url: URL для HAProxy API (или None)
+        """
+        from app.models.application_mapping import ApplicationMapping
+        from app.models.haproxy import HAProxyServer, HAProxyBackend, HAProxyInstance
+        from app.models.server import Server
+        from flask import current_app
+
+        instances = []
+        backend_info = {}
+        haproxy_api_url = None
+        unmapped_count = 0
+
+        for app in apps:
+            server = Server.query.get(app.server_id)
+            if not server:
+                logger.warning(f"Server not found for app {app.instance_name}")
+                continue
+
+            # Извлекаем короткое имя из FQDN
+            short_name = server.name.split('.')[0] if '.' in server.name else server.name
+
+            # Получаем HAProxy маппинг из таблицы ApplicationMapping
+            mapping = ApplicationMapping.query.filter_by(
+                application_id=app.id,
+                service_type='haproxy'
+            ).first()
+
+            if mapping and mapping.external_server_id:
+                # Есть маппинг - используем его
+                haproxy_server = HAProxyServer.query.get(mapping.external_server_id)
+                if haproxy_server:
+                    instance = f"{short_name}::{app.instance_name}::{haproxy_server.server_name}"
+
+                    # Собираем информацию о backend
+                    if haproxy_server.backend_id:
+                        backend = HAProxyBackend.query.get(haproxy_server.backend_id)
+                        if backend:
+                            backend_info[backend.backend_name] = {
+                                'name': backend.backend_name,
+                                'instance_id': backend.haproxy_instance_id
+                            }
+
+                            # Получаем API URL из HAProxy Instance
+                            if not haproxy_api_url and backend.haproxy_instance_id:
+                                haproxy_instance = HAProxyInstance.query.get(backend.haproxy_instance_id)
+                                if haproxy_instance and haproxy_instance.server:
+                                    # Формируем URL: http://{server_ip}:{agent_port}/haproxy/{instance_name}
+                                    agent_port = current_app.config.get('FAGENT_PORT', 5000)
+                                    haproxy_api_url = f"http://{haproxy_instance.server.ip_address}:{agent_port}/haproxy/{haproxy_instance.name}"
+                                    logger.info(f"HAProxy API URL: {haproxy_api_url}")
+
+                    logger.info(f"App {app.instance_name} mapped to HAProxy server {haproxy_server.server_name}")
+                else:
+                    # Маппинг есть, но HAProxy сервер не найден
+                    instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
+                    unmapped_count += 1
+                    logger.warning(f"HAProxy server {mapping.external_server_id} not found for app {app.instance_name}")
+            else:
+                # Нет маппинга - используем стандартное именование
+                instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
+                unmapped_count += 1
+                logger.info(f"No HAProxy mapping for app {app.instance_name}, using default naming")
+
+            instances.append(instance)
+
+        if unmapped_count > 0:
+            logger.warning(f"Total unmapped applications: {unmapped_count} of {len(apps)}")
+
+        return instances, backend_info, haproxy_api_url
+
     def _process_update_task(self, task):
         """
         Обработка задачи обновления приложения через SSH Ansible сервис.
@@ -690,32 +771,33 @@ class TaskQueue:
                 # Сохраняем оригинальный playbook для передачи в orchestrator
                 original_playbook_path = playbook_path
 
-                # Формируем составные имена server::app для передачи в orchestrator
-                # Используем разделитель :: для связывания сервера и приложения
-                composite_names = []
-                servers_apps_map = {}  # для логирования
+                # Формируем составные имена server::app::haproxy_server для передачи в orchestrator
+                # Используем расширенный формат с HAProxy маппингом
+                composite_names, haproxy_backend_info, haproxy_api_url = self._prepare_orchestrator_instances_with_haproxy(apps)
 
-                for app in apps:
-                    srv = Server.query.get(app.server_id)
-                    if srv:
-                        # Извлекаем короткое имя из FQDN (до первой точки)
-                        short_name = srv.name.split('.')[0] if '.' in srv.name else srv.name
-                        # Формируем составное имя с разделителем ::
-                        composite_name = f"{short_name}::{app.instance_name}"
-                        composite_names.append(composite_name)
+                # Формируем servers_apps_map для логирования
+                servers_apps_map = {}
+                for comp in composite_names:
+                    parts = comp.split('::')
+                    short_name = parts[0]
+                    app_name = parts[1]
+                    if short_name not in servers_apps_map:
+                        servers_apps_map[short_name] = []
+                    servers_apps_map[short_name].append(app_name)
 
-                        # Сохраняем mapping для логирования
-                        if short_name not in servers_apps_map:
-                            servers_apps_map[short_name] = []
-                        servers_apps_map[short_name].append(app.instance_name)
-
-                logger.info(f"Сформированы составные имена для orchestrator:")
+                logger.info(f"Сформированы составные имена для orchestrator (расширенный формат с HAProxy):")
                 for comp in composite_names:
                     logger.info(f"  {comp}")
 
                 logger.info(f"Mapping серверов и приложений:")
                 for server, app_list in sorted(servers_apps_map.items()):
                     logger.info(f"  {server}: {', '.join(app_list)}")
+
+                # Логируем информацию о HAProxy backends
+                if haproxy_backend_info:
+                    logger.info(f"HAProxy backends: {', '.join(haproxy_backend_info.keys())}")
+                else:
+                    logger.warning("No HAProxy backend information available, will use app_mapping.yml")
 
                 # Формируем строку для передачи в orchestrator
                 app_instances_list = ','.join(composite_names)
@@ -729,6 +811,12 @@ class TaskQueue:
                 playbook_filename = original_playbook_path.split('/')[-1]
                 update_playbook_name = re.sub(r'\s*\{[^}]+\}', '', playbook_filename).strip()
 
+                # Определяем backend (берем первый, если несколько)
+                haproxy_backend = None
+                if haproxy_backend_info:
+                    haproxy_backend = next(iter(haproxy_backend_info.keys()))
+                    logger.info(f"Using HAProxy backend '{haproxy_backend}' from database mapping")
+
                 # Формируем словарь значений параметров
                 param_values = {
                     'app_instances': app_instances_list,  # Новый параметр вместо app_name и target_servers
@@ -736,6 +824,16 @@ class TaskQueue:
                     'update_playbook': update_playbook_name,
                     'distr_url': distr_url
                 }
+
+                # Добавляем haproxy_backend если он определен
+                if haproxy_backend:
+                    param_values['haproxy_backend'] = haproxy_backend
+
+                # Добавляем haproxy_api_url если он определен
+                if haproxy_api_url:
+                    param_values['haproxy_api_url'] = haproxy_api_url
+                else:
+                    logger.warning("HAProxy API URL not found in database mappings")
 
                 # Формируем список параметров для playbook на основе required_params из БД
                 # Структура в БД:

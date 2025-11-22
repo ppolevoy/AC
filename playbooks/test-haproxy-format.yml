@@ -1,0 +1,171 @@
+---
+# Тест парсинга расширенного формата HAProxy
+# Запуск: ansible-playbook playbooks/test-haproxy-format.yml
+#
+# Примечание: Этот тест проверяет только парсинг формата.
+# Для полного теста orchestrator-50-50.yml требуются параметры:
+#   - haproxy_backend
+#   - haproxy_api_url
+
+- name: Test HAProxy Extended Format Parsing
+  hosts: localhost
+  gather_facts: no
+  vars:
+    test_cases:
+      # Случай 1: Полный формат с HAProxy маппингом
+      - input: "node-1::business_1::srv1_business_1"
+        expected:
+          server: "node-1"
+          app: "business_1"
+          haproxy: "srv1_business_1"
+          has_mapping: true
+        description: "Full format with HAProxy mapping"
+
+      # Случай 2: Старый формат без HAProxy маппинга
+      - input: "node-2::business_2"
+        expected:
+          server: "node-2"
+          app: "business_2"
+          haproxy: "node-2_business_2"
+          has_mapping: false
+        description: "Legacy format without mapping"
+
+      # Случай 3: Проверка специальных символов
+      - input: "prod-node-01::app_service_v2::haproxy-prod-01_app_service_v2"
+        expected:
+          server: "prod-node-01"
+          app: "app_service_v2"
+          haproxy: "haproxy-prod-01_app_service_v2"
+          has_mapping: true
+        description: "Complex names with special characters"
+
+      # Случай 4: Числовые суффиксы
+      - input: "node-1::business_10::srv1_business_10"
+        expected:
+          server: "node-1"
+          app: "business_10"
+          haproxy: "srv1_business_10"
+          has_mapping: true
+        description: "Numeric suffixes handling"
+
+  tasks:
+    - name: Display test header
+      debug:
+        msg: "Testing HAProxy Extended Format Parsing - {{ test_cases | length }} test cases"
+
+    - name: Test parsing for each case
+      block:
+        - name: "Test Case: {{ item.description }}"
+          debug:
+            msg: "Testing input: {{ item.input }}"
+
+        - name: Parse test case
+          set_fact:
+            parts: "{{ item.input.split('::') }}"
+
+        - name: Extract components
+          set_fact:
+            parsed_server: "{{ parts[0] }}"
+            parsed_app: "{{ parts[1] }}"
+            parsed_haproxy: "{{ parts[2] if (parts | length) > 2 else parts[0] + '_' + parts[1] }}"
+            parsed_has_mapping: "{{ (parts | length) > 2 }}"
+
+        - name: Verify server parsing
+          assert:
+            that:
+              - parsed_server == item.expected.server
+            msg: "Server parsing failed. Expected {{ item.expected.server }}, got {{ parsed_server }}"
+
+        - name: Verify app parsing
+          assert:
+            that:
+              - parsed_app == item.expected.app
+            msg: "App parsing failed. Expected {{ item.expected.app }}, got {{ parsed_app }}"
+
+        - name: Verify HAProxy server parsing
+          assert:
+            that:
+              - parsed_haproxy == item.expected.haproxy
+            msg: "HAProxy parsing failed. Expected {{ item.expected.haproxy }}, got {{ parsed_haproxy }}"
+
+        - name: Verify mapping flag
+          assert:
+            that:
+              - parsed_has_mapping == item.expected.has_mapping
+            msg: "Mapping flag failed. Expected {{ item.expected.has_mapping }}, got {{ parsed_has_mapping }}"
+
+        - name: Display success for test case
+          debug:
+            msg: |
+              ✓ Test passed: {{ item.description }}
+              Input: {{ item.input }}
+              Parsed correctly:
+                Server: {{ parsed_server }}
+                App: {{ parsed_app }}
+                HAProxy: {{ parsed_haproxy }}
+                Has explicit mapping: {{ parsed_has_mapping }}
+
+      loop: "{{ test_cases }}"
+      loop_control:
+        label: "{{ item.description }}"
+
+    - name: Test batch processing
+      block:
+        - name: Test multiple instances parsing
+          set_fact:
+            multi_input: "node-1::business_1::srv1_business_1,node-2::business_2,node-3::business_3::srv3_business_3"
+
+        - name: Parse multiple instances
+          set_fact:
+            instances_list: "{{ multi_input.split(',') | map('trim') | list }}"
+
+        - name: Verify instance count
+          assert:
+            that:
+              - instances_list | length == 3
+            msg: "Instance count mismatch. Expected 3, got {{ instances_list | length }}"
+
+        - name: Initialize parsed instances
+          set_fact:
+            parsed_instances: []
+
+        - name: Parse all instances
+          set_fact:
+            parsed_instances: "{{ parsed_instances + [parsed_item] }}"
+          vars:
+            parts: "{{ item.split('::') }}"
+            parsed_item:
+              full_name: "{{ item }}"
+              server: "{{ parts[0] }}"
+              app: "{{ parts[1] }}"
+              haproxy_server: "{{ parts[2] if (parts | length) > 2 else parts[0] + '_' + parts[1] }}"
+              has_explicit_mapping: "{{ (parts | length) > 2 }}"
+          loop: "{{ instances_list }}"
+
+        - name: Verify parsed instances
+          assert:
+            that:
+              - parsed_instances | length == 3
+              - parsed_instances[0].haproxy_server == 'srv1_business_1'
+              - parsed_instances[1].haproxy_server == 'node-2_business_2'
+              - parsed_instances[2].haproxy_server == 'srv3_business_3'
+            msg: "Batch parsing failed"
+
+        - name: Display batch processing result
+          debug:
+            msg: |
+              ✓ Batch processing test passed
+              Input: {{ multi_input }}
+              Parsed {{ parsed_instances | length }} instances successfully
+
+    - name: Display final summary
+      debug:
+        msg: |
+          ========================================
+          ALL TESTS PASSED SUCCESSFULLY
+          ========================================
+          Total test cases: {{ test_cases | length }}
+          Batch processing: ✓
+          Legacy compatibility: ✓
+          Extended format: ✓
+          ========================================

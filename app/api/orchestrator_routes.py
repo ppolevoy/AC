@@ -13,6 +13,10 @@ from app.services.orchestrator_scanner import (
     get_orchestrator_by_id,
     toggle_orchestrator_status
 )
+from app.models.application_instance import ApplicationInstance
+from app.models.application_mapping import ApplicationMapping
+from app.models.haproxy import HAProxyServer, HAProxyBackend
+from app.models.server import Server
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +154,107 @@ def toggle_orchestrator(orchestrator_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@bp.route('/orchestrators/validate-haproxy-mapping', methods=['POST'])
+def validate_haproxy_mapping():
+    """
+    Проверяет HAProxy маппинг для списка приложений.
+    Используется перед запуском оркестратора для валидации конфигурации.
+
+    Request body:
+    {
+        "application_ids": [1, 2, 3]
+    }
+
+    Response:
+    {
+        "total": 3,
+        "mapped": 2,
+        "unmapped": 1,
+        "backends": ["backend1", "backend2"],
+        "details": [...]
+    }
+    """
+    try:
+        data = request.get_json()
+        app_ids = data.get('application_ids', [])
+
+        if not app_ids:
+            return jsonify({'error': 'No application IDs provided'}), 400
+
+        result = {
+            'total': len(app_ids),
+            'mapped': 0,
+            'unmapped': 0,
+            'backends': set(),
+            'details': []
+        }
+
+        for app_id in app_ids:
+            app = ApplicationInstance.query.get(app_id)
+            if not app:
+                result['details'].append({
+                    'app_id': app_id,
+                    'error': 'Application not found'
+                })
+                continue
+
+            server = Server.query.get(app.server_id)
+            short_name = server.name.split('.')[0] if server and '.' in server.name else (server.name if server else 'unknown')
+
+            # Проверяем маппинг
+            mapping = ApplicationMapping.query.filter_by(
+                application_id=app_id,
+                service_type='haproxy'
+            ).first()
+
+            detail = {
+                'app_id': app_id,
+                'app_name': app.instance_name,
+                'server': short_name,
+                'mapped': False,
+                'haproxy_server': None,
+                'backend': None,
+                'instance_string': None
+            }
+
+            if mapping and mapping.external_server_id:
+                haproxy_server = HAProxyServer.query.get(mapping.external_server_id)
+                if haproxy_server:
+                    detail['mapped'] = True
+                    detail['haproxy_server'] = haproxy_server.name
+
+                    if haproxy_server.backend_id:
+                        backend = HAProxyBackend.query.get(haproxy_server.backend_id)
+                        if backend:
+                            detail['backend'] = backend.name
+                            result['backends'].add(backend.name)
+
+                    detail['instance_string'] = f"{short_name}::{app.instance_name}::{haproxy_server.name}"
+                    result['mapped'] += 1
+                else:
+                    detail['error'] = f"HAProxy server {mapping.external_server_id} not found"
+                    detail['instance_string'] = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
+                    result['unmapped'] += 1
+            else:
+                detail['instance_string'] = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
+                result['unmapped'] += 1
+
+            result['details'].append(detail)
+
+        # Преобразуем set в list для JSON
+        result['backends'] = list(result['backends'])
+
+        # Добавляем предупреждения
+        if result['unmapped'] > 0:
+            result['warning'] = f"{result['unmapped']} applications will use fallback naming"
+
+        if len(result['backends']) > 1:
+            result['warning'] = f"Multiple backends detected: {', '.join(result['backends'])}"
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error validating HAProxy mapping: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
