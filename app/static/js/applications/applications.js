@@ -111,7 +111,10 @@
             sortColumn: 'name',
             sortDirection: 'asc',
             searchQuery: '',
-            groupingEnabled: false
+            groupingEnabled: false,
+            selectedTags: [],
+            tagOperator: 'OR',
+            availableTags: []
         },
 
         // Кэш артефактов
@@ -201,6 +204,17 @@
             } catch (error) {
                 console.error('Ошибка загрузки приложений:', error);
                 showError('Не удалось загрузить список приложений');
+                return [];
+            }
+        },
+
+        async loadTags() {
+            try {
+                const response = await fetch('/api/tags');
+                const data = await response.json();
+                return data.success ? data.tags : [];
+            } catch (error) {
+                console.error('Ошибка загрузки тегов:', error);
                 return [];
             }
         },
@@ -540,6 +554,102 @@
             tbody.appendChild(wrapperRow);
         },
 
+        // Рендеринг тегов с унаследованными
+        renderTagsWithInherited(ownTags, groupTags) {
+            const allTags = [];
+            const ownTagIds = new Set((ownTags || []).map(t => t.id));
+
+            // Добавляем собственные теги
+            (ownTags || []).forEach(tag => {
+                allTags.push({ ...tag, inherited: false });
+            });
+
+            // Добавляем унаследованные теги (если их нет в собственных)
+            (groupTags || []).forEach(tag => {
+                if (!ownTagIds.has(tag.id)) {
+                    allTags.push({ ...tag, inherited: true });
+                }
+            });
+
+            if (allTags.length === 0) {
+                return '<span class="no-tags">—</span>';
+            }
+
+            const container = document.createElement('div');
+            container.className = 'table-tags-container';
+
+            const maxVisible = 3;
+            const visibleTags = allTags.slice(0, maxVisible);
+            const hiddenCount = allTags.length - maxVisible;
+
+            visibleTags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = `tag ${tag.css_class || ''}${tag.inherited ? ' tag-inherited' : ''}`;
+                span.title = tag.inherited ? 'Унаследован от группы' : '';
+
+                const icon = document.createElement('span');
+                icon.className = 'tag-icon';
+                icon.textContent = tag.icon || '';
+
+                const text = document.createTextNode(' ' + (tag.display_name || tag.name));
+
+                span.appendChild(icon);
+                span.appendChild(text);
+                container.appendChild(span);
+            });
+
+            if (hiddenCount > 0) {
+                const more = document.createElement('span');
+                more.className = 'tags-more';
+                more.textContent = `+${hiddenCount}`;
+                more.title = allTags.slice(maxVisible).map(t => t.display_name || t.name).join(', ');
+                more.setAttribute('onclick', 'event.stopPropagation()');
+                container.appendChild(more);
+            }
+
+            return container.outerHTML;
+        },
+
+        // Рендеринг тегов
+        renderTags(tags) {
+            if (!tags || tags.length === 0) {
+                return '<span class="no-tags">—</span>';
+            }
+
+            const container = document.createElement('div');
+            container.className = 'table-tags-container';
+
+            const maxVisible = 3;
+            const visibleTags = tags.slice(0, maxVisible);
+            const hiddenCount = tags.length - maxVisible;
+
+            visibleTags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = `tag ${tag.css_class || ''}`;
+
+                const icon = document.createElement('span');
+                icon.className = 'tag-icon';
+                icon.textContent = tag.icon || '';
+
+                const text = document.createTextNode(' ' + (tag.display_name || tag.name));
+
+                span.appendChild(icon);
+                span.appendChild(text);
+                container.appendChild(span);
+            });
+
+            if (hiddenCount > 0) {
+                const more = document.createElement('span');
+                more.className = 'tags-more';
+                more.textContent = `+${hiddenCount}`;
+                more.title = tags.slice(maxVisible).map(t => t.display_name || t.name).join(', ');
+                more.setAttribute('onclick', 'event.stopPropagation()');
+                container.appendChild(more);
+            }
+
+            return container.outerHTML;
+        },
+
         createApplicationRow(app, isChild) {
             const row = document.createElement('tr');
             row.className = isChild ? 'app-row child-row' : 'app-row';
@@ -547,56 +657,60 @@
             row.setAttribute('data-app-name', (app.name || '').toLowerCase());
 
             // Создаем ячейки безопасно
-            
+
             // 1. Чекбокс
             const checkboxTd = document.createElement('td');
             const checkboxContainer = document.createElement('div');
             checkboxContainer.className = 'checkbox-container';
-            
+
             const checkboxLabel = document.createElement('label');
             checkboxLabel.className = 'custom-checkbox';
-            
+
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'app-checkbox';
             checkbox.setAttribute('data-app-id', app.id);
-            
+
             const checkmark = document.createElement('span');
             checkmark.className = 'checkmark';
-            
+
             checkboxLabel.appendChild(checkbox);
             checkboxLabel.appendChild(checkmark);
             checkboxContainer.appendChild(checkboxLabel);
             checkboxTd.appendChild(checkboxContainer);
-            
-            // 2. Имя сервиса 
+
+            // 2. Имя сервиса
             const nameTd = document.createElement('td');
             nameTd.className = isChild ? 'service-name child-indent' : 'service-name';
-            
+
             const nameText = document.createTextNode(app.name || '');
             nameTd.appendChild(nameText);
-            
+
             const details = document.createElement('div');
             details.className = 'dist-details';
-            
+
             const startTimeDiv = document.createElement('div');
             startTimeDiv.textContent = `Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}`;
-            
+
             const pathDiv = document.createElement('div');
             pathDiv.textContent = `Путь приложения: ${app.path || 'Н/Д'}`;
-            
+
             details.appendChild(startTimeDiv);
             details.appendChild(pathDiv);
             nameTd.appendChild(details);
-            
-            // 3. Версия (безопасно через textContent)
+
+            // 3. Теги (свои + унаследованные от группы)
+            const tagsTd = document.createElement('td');
+            tagsTd.innerHTML = this.renderTagsWithInherited(app.tags || [], app.group_tags || []);
+
+            // 4. Версия (безопасно через textContent)
             const versionTd = document.createElement('td');
             versionTd.textContent = app.version || 'Н/Д';
-            
-            // 4. Статус (иконка безопасна, текст через textContent)
+
+            // 5. Статус (иконка безопасна, текст через textContent)
             const statusTd = document.createElement('td');
             const statusDot = document.createElement('span');
-            
+
             let statusText;
             if (app.status === 'no_data' || app.status === 'unknown') {
                 statusDot.className = 'service-dot no-data';
@@ -608,28 +722,29 @@
                 statusDot.className = 'service-dot offline';
                 statusText = app.status || 'offline';
             }
-            
+
             statusTd.appendChild(statusDot);
             const statusTextNode = document.createTextNode(` ${statusText}`);
             statusTd.appendChild(statusTextNode);
-            
-            // 5. Сервер (безопасно через textContent)
+
+            // 6. Сервер (безопасно через textContent)
             const serverTd = document.createElement('td');
             serverTd.textContent = app.server_name || 'Н/Д';
-            
-            // 6. Действия (временно используем innerHTML для меню, но без пользовательских данных)
+
+            // 7. Действия (временно используем innerHTML для меню, но без пользовательских данных)
             const actionsTd = document.createElement('td');
             // createActionsMenu должен возвращать безопасный HTML без пользовательских данных
             actionsTd.innerHTML = this.createActionsMenu(app);
-            
+
             // Собираем строку
             row.appendChild(checkboxTd);
             row.appendChild(nameTd);
+            row.appendChild(tagsTd);
             row.appendChild(versionTd);
             row.appendChild(statusTd);
             row.appendChild(serverTd);
             row.appendChild(actionsTd);
-            
+
             return row;
         },
 
@@ -670,6 +785,11 @@
             nameContainer.appendChild(nameSpan);
             nameTd.appendChild(nameContainer);
 
+            // Теги группы (берем из первого приложения, т.к. они одинаковые для всей группы)
+            const tagsTd = document.createElement('td');
+            const groupTags = apps[0]?.group_tags || [];
+            tagsTd.innerHTML = this.renderTags(groupTags);
+
             // Версии
             const versionTd = document.createElement('td');
             const versions = new Set(apps.map(app => app.version || 'Н/Д'));
@@ -684,7 +804,7 @@
             const hasOffline = apps.some(app => app.status === 'offline');
             const hasNoData = apps.some(app => app.status === 'no_data' || app.status === 'unknown');
             const hasProblems = hasOffline || hasNoData;
-            
+
             const statusDot = SecurityUtils.createSafeElement('span', {
                 className: hasProblems ? 'service-dot warning' : 'service-dot'  // warning для оранжевой точки
             });
@@ -701,6 +821,7 @@
             // Собираем строку
             row.appendChild(checkboxTd);
             row.appendChild(nameTd);
+            row.appendChild(tagsTd);
             row.appendChild(versionTd);
             row.appendChild(statusTd);
             row.appendChild(serverTd);
@@ -744,6 +865,7 @@
                         <div>Путь приложения: ${app.path || 'Н/Д'}</div>
                     </div>
                 </td>
+                <td>${this.renderTagsWithInherited(app.tags || [], app.group_tags || [])}</td>
                 <td>${app.version || 'Н/Д'}</td>
                 <td>${statusDot} ${statusText}</td>
                 <td>${app.server_name || 'Н/Д'}</td>
@@ -1978,6 +2100,7 @@
             this.initPagination();
             this.initTableActions();
             this.initRefreshButton();
+            this.initTagFilter();
         },
 
         initRefreshButton() {
@@ -1985,6 +2108,67 @@
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', function() {
                     EventHandlers.loadApplications();
+                });
+            }
+        },
+
+        async initTagFilter() {
+            const toggleBtn = document.getElementById('tag-filter-toggle');
+            const filterSection = document.getElementById('tag-filter-section');
+            const checkboxesContainer = document.getElementById('tag-filter-checkboxes');
+            const applyBtn = document.getElementById('apply-tag-filter');
+            const clearBtn = document.getElementById('clear-tag-filter');
+
+            if (!toggleBtn || !filterSection) return;
+
+            // Загрузка тегов
+            const tags = await ApiService.loadTags();
+            StateManager.state.availableTags = tags;
+
+            // Создаем чекбоксы для тегов
+            if (checkboxesContainer && tags.length > 0) {
+                checkboxesContainer.innerHTML = tags.map(tag => `
+                    <label class="tag-checkbox-label">
+                        <input type="checkbox" value="${tag.name}" class="tag-filter-checkbox">
+                        <span class="tag ${tag.css_class || ''}">${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                    </label>
+                `).join('');
+            } else if (checkboxesContainer) {
+                checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
+            }
+
+            // Переключение панели фильтра
+            toggleBtn.addEventListener('click', () => {
+                const isVisible = filterSection.style.display !== 'none';
+                filterSection.style.display = isVisible ? 'none' : 'block';
+                toggleBtn.classList.toggle('active', !isVisible);
+            });
+
+            // Применение фильтра
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    const selectedCheckboxes = checkboxesContainer.querySelectorAll('.tag-filter-checkbox:checked');
+                    StateManager.state.selectedTags = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+                    const operatorRadio = document.querySelector('input[name="tag-operator"]:checked');
+                    StateManager.state.tagOperator = operatorRadio ? operatorRadio.value : 'OR';
+
+                    StateManager.state.currentPage = 1;
+                    this.filterAndDisplayApplications();
+
+                    // Обновляем визуальное состояние кнопки
+                    toggleBtn.classList.toggle('active', StateManager.state.selectedTags.length > 0);
+                });
+            }
+
+            // Очистка фильтра
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    checkboxesContainer.querySelectorAll('.tag-filter-checkbox').forEach(cb => cb.checked = false);
+                    StateManager.state.selectedTags = [];
+                    StateManager.state.currentPage = 1;
+                    this.filterAndDisplayApplications();
+                    toggleBtn.classList.remove('active');
                 });
             }
         },
@@ -2273,13 +2457,90 @@
                             showError('Не выбрано ни одного приложения');
                             return;
                         }
-                        
+
                         if (action === 'update') {
                             ModalManager.showUpdateModal(selectedIds);
                         } else {
                             this.handleBatchAction(selectedIds, action);
                         }
                     });
+                }
+            });
+
+            // Batch tags button handler
+            const batchTagsBtn = document.getElementById('batch-tags-btn');
+            if (batchTagsBtn) {
+                batchTagsBtn.addEventListener('click', () => {
+                    const selectedIds = StateManager.getSelectedAppIds();
+                    if (selectedIds.length === 0) {
+                        showError('Не выбрано ни одного приложения');
+                        return;
+                    }
+                    this.showBatchTagsModal(selectedIds);
+                });
+            }
+        },
+
+        async showBatchTagsModal(appIds) {
+            const template = document.getElementById('batch-tags-modal-template');
+            if (!template) return;
+
+            const content = template.content.cloneNode(true);
+
+            // Set selected count
+            content.querySelector('.selected-count').textContent = appIds.length;
+
+            // Load tags for checkboxes
+            const tags = await ApiService.loadTags();
+            const checkboxesContainer = content.querySelector('.batch-tags-checkboxes');
+
+            if (tags.length > 0) {
+                checkboxesContainer.innerHTML = tags.map(tag => `
+                    <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
+                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox">
+                        <span class="tag ${tag.css_class || ''}">${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                    </label>
+                `).join('');
+            } else {
+                checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
+            }
+
+            // Show modal
+            window.showModal('Управление тегами', content);
+
+            // Apply button handler
+            document.getElementById('apply-batch-tags').addEventListener('click', async () => {
+                const operation = document.querySelector('input[name="tag-operation"]:checked').value;
+                const selectedTags = Array.from(document.querySelectorAll('.batch-tag-checkbox:checked')).map(cb => cb.value);
+
+                if (selectedTags.length === 0) {
+                    showError('Выберите хотя бы один тег');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/tags/bulk-assign', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            app_ids: appIds,
+                            tag_names: selectedTags,
+                            action: operation
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showNotification(`Теги успешно ${operation === 'add' ? 'добавлены' : 'удалены'}`);
+                        closeModal();
+                        await this.loadApplications();
+                    } else {
+                        showError(data.error || 'Ошибка операции с тегами');
+                    }
+                } catch (error) {
+                    console.error('Error in batch tags operation:', error);
+                    showError('Ошибка операции с тегами');
                 }
             });
         },
@@ -2394,14 +2655,26 @@
 
         getFilteredApplications() {
             let filtered = [...StateManager.state.allApplications];
-            
+
             // Применяем поиск
             if (StateManager.state.searchQuery) {
-                filtered = filtered.filter(app => 
+                filtered = filtered.filter(app =>
                     app.name.toLowerCase().includes(StateManager.state.searchQuery) ||
                     app.status?.toLowerCase().includes(StateManager.state.searchQuery) ||
                     app.server_name?.toLowerCase().includes(StateManager.state.searchQuery)
                 );
+            }
+
+            // Применяем фильтр по тегам
+            if (StateManager.state.selectedTags.length > 0) {
+                filtered = filtered.filter(app => {
+                    const appTagNames = (app.tags || []).map(t => t.name);
+                    if (StateManager.state.tagOperator === 'AND') {
+                        return StateManager.state.selectedTags.every(tagName => appTagNames.includes(tagName));
+                    } else {
+                        return StateManager.state.selectedTags.some(tagName => appTagNames.includes(tagName));
+                    }
+                });
             }
             
             // Применяем сортировку

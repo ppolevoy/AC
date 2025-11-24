@@ -22,10 +22,34 @@
         <span class="search-icon">🔍</span>
     </div>
     <div class="controls-container">
+        <button id="tag-filter-toggle" class="group-btn" title="Фильтр по тегам">
+            🏷️ Теги
+        </button>
         <button id="group-toggle-btn" class="group-btn active" title="Группировать">
             <span id="group-icon"></span> Группировать
         </button>
         <button id="refresh-btn" class="refresh-btn" title="Обновить">⟳</button>
+    </div>
+</div>
+
+<!-- Панель фильтрации по тегам -->
+<div class="tag-filter-section" id="tag-filter-section" style="display: none;">
+    <div class="tag-filter-controls" style="margin-bottom: 10px;">
+        <label style="margin-right: 15px;">
+            <input type="radio" name="tag-operator" value="OR" checked>
+            Любой из выбранных
+        </label>
+        <label>
+            <input type="radio" name="tag-operator" value="AND">
+            Все выбранные
+        </label>
+    </div>
+    <div id="tag-filter-checkboxes" class="tags-container">
+        <!-- Чекбоксы тегов будут загружены динамически -->
+    </div>
+    <div class="tag-filter-actions">
+        <button class="action-btn" id="apply-tag-filter">Применить</button>
+        <button class="action-btn" id="clear-tag-filter" style="background: #666;">Очистить</button>
     </div>
 </div>
     
@@ -35,6 +59,7 @@
         <button class="action-btn stop" id="stop-btn">Остановить</button>
         <button class="action-btn" id="update-btn">Обновить</button>
         <button class="action-btn" id="unload-btn">Снять нагрузку</button>
+        <button class="action-btn" id="batch-tags-btn" title="Управление тегами">🏷️ Теги</button>
     </div>
     
     <div class="table-container">
@@ -50,6 +75,7 @@
                         </div>
                     </th>
                     <th class="sortable" data-sort="name">Имя сервиса</th>
+                    <th>Теги</th>
                     <th>Версия</th>
                     <th class="sortable" data-sort="state">Статус</th>
                     <th>Сервер</th>
@@ -114,6 +140,31 @@
     <div class="form-actions">
         <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
         <button type="button" class="confirm-btn">Подтвердить</button>
+    </div>
+</template>
+
+<template id="batch-tags-modal-template">
+    <div class="batch-tags-container">
+        <p class="batch-tags-info">Выбрано приложений: <span class="selected-count"></span></p>
+        <div class="form-group">
+            <label>Операция:</label>
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="tag-operation" value="add" checked> Добавить теги
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="tag-operation" value="remove"> Удалить теги
+                </label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Выберите теги:</label>
+            <div class="batch-tags-checkboxes"></div>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
+            <button type="button" class="submit-btn" id="apply-batch-tags">Применить</button>
+        </div>
     </div>
 </template>
 

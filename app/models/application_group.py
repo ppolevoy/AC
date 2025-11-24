@@ -31,6 +31,9 @@ class ApplicationGroup(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Кэш тегов для быстрой фильтрации
+    tags_cache = db.Column(db.String(512), nullable=True)
+
     # Relationships
     catalog = db.relationship('ApplicationCatalog', back_populates='groups')
     instances = db.relationship('ApplicationInstance', back_populates='group', lazy='dynamic', cascade="all, delete-orphan")

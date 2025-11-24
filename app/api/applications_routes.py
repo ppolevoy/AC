@@ -39,6 +39,14 @@ def get_applications():
         for app in applications:
             server = Server.query.get(app.server_id)
 
+            # Получаем теги приложения
+            tags = [t.to_dict() for t in app.tags.all()] if hasattr(app, 'tags') else []
+
+            # Получаем теги группы
+            group_tags = []
+            if hasattr(app, 'group') and app.group and hasattr(app.group, 'tags'):
+                group_tags = [t.to_dict() for t in app.group.tags.all()]
+
             result.append({
                 'id': app.id,
                 'name': app.name,
@@ -50,7 +58,9 @@ def get_applications():
                 'path': app.path,
                 'group_name': app.group_name,
                 'instance_number': app.instance_number,
-                'start_time': app.start_time.isoformat() if app.start_time else None
+                'start_time': app.start_time.isoformat() if app.start_time else None,
+                'tags': tags,
+                'group_tags': group_tags
             })
 
         return jsonify({

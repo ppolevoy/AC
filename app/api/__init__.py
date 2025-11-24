@@ -18,3 +18,4 @@ from app.api import orchestrator_routes
 from app.api import haproxy_routes
 from app.api import eureka_routes
 from app.api import mappings_routes
+from app.api import tags_routes

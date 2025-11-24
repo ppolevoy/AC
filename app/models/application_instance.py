@@ -67,6 +67,9 @@ class ApplicationInstance(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     deleted_at = db.Column(db.DateTime, nullable=True)  # Soft delete
 
+    # Кэш тегов для быстрой фильтрации
+    tags_cache = db.Column(db.String(512), nullable=True)
+
     # Relationships
     catalog = db.relationship('ApplicationCatalog', back_populates='instances')
     group = db.relationship('ApplicationGroup', back_populates='instances')
@@ -221,7 +224,67 @@ class ApplicationInstance(db.Model):
         self.custom_artifact_url = None
         self.custom_artifact_extension = None
 
-    def to_dict(self, include_group=False, include_settings=False):
+    def add_tag(self, tag_name, user=None):
+        """Добавить тег к экземпляру"""
+        from app.models.tag import Tag, TagHistory
+
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if not tag:
+            tag = Tag(name=tag_name, display_name=tag_name.title())
+            db.session.add(tag)
+
+        if tag not in self.tags.all():
+            self.tags.append(tag)
+            self._update_tags_cache()
+
+            # Запись в историю
+            history = TagHistory(
+                entity_type='instance',
+                entity_id=self.id,
+                tag_id=tag.id,
+                action='assigned',
+                changed_by=user,
+                details={'tag_name': tag_name}
+            )
+            db.session.add(history)
+
+        return tag
+
+    def remove_tag(self, tag_name, user=None):
+        """Удалить тег у экземпляра"""
+        from app.models.tag import Tag, TagHistory
+
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if tag and tag in self.tags.all():
+            self.tags.remove(tag)
+            self._update_tags_cache()
+
+            # Запись в историю
+            history = TagHistory(
+                entity_type='instance',
+                entity_id=self.id,
+                tag_id=tag.id,
+                action='removed',
+                changed_by=user
+            )
+            db.session.add(history)
+
+        return tag
+
+    def get_tag_names(self):
+        """Получить список имен тегов"""
+        return [t.name for t in self.tags.all()]
+
+    def has_tags(self, tag_names):
+        """Проверить наличие всех указанных тегов"""
+        my_tags = set(self.get_tag_names())
+        return all(t in my_tags for t in tag_names)
+
+    def _update_tags_cache(self):
+        """Обновить кэш тегов"""
+        self.tags_cache = ','.join(sorted(self.get_tag_names()))
+
+    def to_dict(self, include_group=False, include_settings=False, include_tags=False):
         """
         Преобразование в словарь для API.
 
@@ -282,6 +345,9 @@ class ApplicationInstance(db.Model):
                 'custom_artifact_url': self.custom_artifact_url,
                 'custom_artifact_extension': self.custom_artifact_extension
             }
+
+        if include_tags:
+            result['tags'] = [t.to_dict() for t in self.tags.all()]
 
         return result
 
