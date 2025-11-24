@@ -587,6 +587,14 @@
                 span.className = `tag ${tag.css_class || ''}${tag.inherited ? ' tag-inherited' : ''}`;
                 span.title = tag.inherited ? 'Унаследован от группы' : '';
 
+                // Применяем цвета из настроек тега
+                if (tag.border_color) {
+                    span.style.borderColor = tag.border_color;
+                }
+                if (tag.text_color) {
+                    span.style.color = tag.text_color;
+                }
+
                 const icon = document.createElement('span');
                 icon.className = 'tag-icon';
                 icon.textContent = tag.icon || '';
@@ -626,6 +634,14 @@
             visibleTags.forEach(tag => {
                 const span = document.createElement('span');
                 span.className = `tag ${tag.css_class || ''}`;
+
+                // Применяем цвета из настроек тега
+                if (tag.border_color) {
+                    span.style.borderColor = tag.border_color;
+                }
+                if (tag.text_color) {
+                    span.style.color = tag.text_color;
+                }
 
                 const icon = document.createElement('span');
                 icon.className = 'tag-icon';
@@ -683,8 +699,21 @@
             const nameTd = document.createElement('td');
             nameTd.className = isChild ? 'service-name child-indent' : 'service-name';
 
-            const nameText = document.createTextNode(app.name || '');
-            nameTd.appendChild(nameText);
+            // Контейнер для имени и тегов
+            const nameContainer = document.createElement('div');
+            nameContainer.className = 'name-with-tags';
+
+            const nameText = document.createElement('span');
+            nameText.textContent = app.name || '';
+            nameContainer.appendChild(nameText);
+
+            // Теги рядом с именем
+            const tagsContainer = document.createElement('span');
+            tagsContainer.className = 'inline-tags';
+            tagsContainer.innerHTML = this.renderTagsWithInherited(app.tags || [], app.group_tags || []);
+            nameContainer.appendChild(tagsContainer);
+
+            nameTd.appendChild(nameContainer);
 
             const details = document.createElement('div');
             details.className = 'dist-details';
@@ -699,11 +728,7 @@
             details.appendChild(pathDiv);
             nameTd.appendChild(details);
 
-            // 3. Теги (свои + унаследованные от группы)
-            const tagsTd = document.createElement('td');
-            tagsTd.innerHTML = this.renderTagsWithInherited(app.tags || [], app.group_tags || []);
-
-            // 4. Версия (безопасно через textContent)
+            // 3. Версия (безопасно через textContent)
             const versionTd = document.createElement('td');
             versionTd.textContent = app.version || 'Н/Д';
 
@@ -739,7 +764,6 @@
             // Собираем строку
             row.appendChild(checkboxTd);
             row.appendChild(nameTd);
-            row.appendChild(tagsTd);
             row.appendChild(versionTd);
             row.appendChild(statusTd);
             row.appendChild(serverTd);
@@ -783,12 +807,17 @@
             nameSpan.textContent = `${groupName} (${apps.length})`;
             nameContainer.appendChild(toggle);
             nameContainer.appendChild(nameSpan);
-            nameTd.appendChild(nameContainer);
 
-            // Теги группы (берем из первого приложения, т.к. они одинаковые для всей группы)
-            const tagsTd = document.createElement('td');
+            // Теги группы рядом с именем
             const groupTags = apps[0]?.group_tags || [];
-            tagsTd.innerHTML = this.renderTags(groupTags);
+            if (groupTags.length > 0) {
+                const tagsContainer = document.createElement('span');
+                tagsContainer.className = 'inline-tags';
+                tagsContainer.innerHTML = this.renderTags(groupTags);
+                nameContainer.appendChild(tagsContainer);
+            }
+
+            nameTd.appendChild(nameContainer);
 
             // Версии
             const versionTd = document.createElement('td');
@@ -821,7 +850,6 @@
             // Собираем строку
             row.appendChild(checkboxTd);
             row.appendChild(nameTd);
-            row.appendChild(tagsTd);
             row.appendChild(versionTd);
             row.appendChild(statusTd);
             row.appendChild(serverTd);
@@ -859,13 +887,15 @@
                     </div>
                 </td>
                 <td class="service-name">
-                    ${app.name}
+                    <div class="name-with-tags">
+                        <span>${app.name}</span>
+                        <span class="inline-tags">${this.renderTagsWithInherited(app.tags || [], app.group_tags || [])}</span>
+                    </div>
                     <div class="dist-details">
                         <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
                         <div>Путь приложения: ${app.path || 'Н/Д'}</div>
                     </div>
                 </td>
-                <td>${this.renderTagsWithInherited(app.tags || [], app.group_tags || [])}</td>
                 <td>${app.version || 'Н/Д'}</td>
                 <td>${statusDot} ${statusText}</td>
                 <td>${app.server_name || 'Н/Д'}</td>
@@ -2127,12 +2157,18 @@
 
             // Создаем чекбоксы для тегов
             if (checkboxesContainer && tags.length > 0) {
-                checkboxesContainer.innerHTML = tags.map(tag => `
+                checkboxesContainer.innerHTML = tags.map(tag => {
+                    const tagStyle = [];
+                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
+                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+                    const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+                    return `
                     <label class="tag-checkbox-label">
                         <input type="checkbox" value="${tag.name}" class="tag-filter-checkbox">
-                        <span class="tag ${tag.css_class || ''}">${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
                     </label>
-                `).join('');
+                `;
+                }).join('');
             } else if (checkboxesContainer) {
                 checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
             }
@@ -2495,12 +2531,18 @@
             const checkboxesContainer = content.querySelector('.batch-tags-checkboxes');
 
             if (tags.length > 0) {
-                checkboxesContainer.innerHTML = tags.map(tag => `
+                checkboxesContainer.innerHTML = tags.map(tag => {
+                    const tagStyle = [];
+                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
+                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+                    const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+                    return `
                     <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
                         <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox">
-                        <span class="tag ${tag.css_class || ''}">${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
                     </label>
-                `).join('');
+                `;
+                }).join('');
             } else {
                 checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
             }

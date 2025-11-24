@@ -469,6 +469,16 @@
                                             <input type="text" id="new-tag-icon" class="form-control" placeholder="🏷️">
                                         </div>
                                     </div>
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label for="new-tag-border-color">Цвет границы:</label>
+                                            <input type="color" id="new-tag-border-color" class="form-control" value="#3498db">
+                                        </div>
+                                        <div class="form-group" style="flex: 1;">
+                                            <label for="new-tag-text-color">Цвет текста:</label>
+                                            <input type="color" id="new-tag-text-color" class="form-control" value="#3498db">
+                                        </div>
+                                    </div>
                                     <button id="create-tag-btn" class="action-btn">Создать тег</button>
                                 </div>
                             </div>
@@ -1863,10 +1873,15 @@ const tagsManagement = {
 
         let html = '';
         tags.forEach(tag => {
+            const tagStyle = [];
+            if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
+            if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+            const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+
             html += `
                 <div class="tag-management-item" data-tag-id="${tag.id}">
                     <div class="tag-info">
-                        <span class="tag ${tag.css_class || ''}">${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
                         <span class="tag-type-label">${tag.tag_type || 'custom'}</span>
                     </div>
                     <div class="tag-actions">
@@ -1926,6 +1941,8 @@ const tagsManagement = {
         const displayName = document.getElementById('new-tag-display').value.trim();
         const tagType = document.getElementById('new-tag-type').value;
         const icon = document.getElementById('new-tag-icon').value.trim();
+        const borderColor = document.getElementById('new-tag-border-color').value;
+        const textColor = document.getElementById('new-tag-text-color').value;
 
         if (!name) {
             showError('Введите имя тега');
@@ -1940,7 +1957,9 @@ const tagsManagement = {
                     name: name,
                     display_name: displayName || name,
                     tag_type: tagType,
-                    icon: icon
+                    icon: icon,
+                    border_color: borderColor,
+                    text_color: textColor
                 })
             });
 
@@ -1952,6 +1971,8 @@ const tagsManagement = {
                 document.getElementById('new-tag-name').value = '';
                 document.getElementById('new-tag-display').value = '';
                 document.getElementById('new-tag-icon').value = '';
+                document.getElementById('new-tag-border-color').value = '#3498db';
+                document.getElementById('new-tag-text-color').value = '#3498db';
                 // Перезагрузка списка
                 tagsManagement.loadTags();
                 tagsManagement.loadStats();
