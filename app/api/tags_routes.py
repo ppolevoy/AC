@@ -387,6 +387,77 @@ def bulk_assign_tags():
     })
 
 
+@bp.route('/tags/sync', methods=['PUT'])
+def sync_tags():
+    """Синхронизация тегов приложений - устанавливает желаемое состояние"""
+    data = request.json
+
+    app_ids = data.get('app_ids', [])
+    desired_tags = data.get('desired_tags', [])  # список имён тегов
+    user = data.get('user')
+
+    if not app_ids:
+        return jsonify({'success': False, 'error': 'app_ids required'}), 400
+
+    # Получаем все нужные теги по именам
+    desired_tag_objects = Tag.query.filter(Tag.name.in_(desired_tags)).all() if desired_tags else []
+    desired_tag_names = set(t.name for t in desired_tag_objects)
+
+    # Получаем приложения
+    instances = ApplicationInstance.query.filter(ApplicationInstance.id.in_(app_ids)).all()
+
+    added_count = 0
+    removed_count = 0
+
+    for instance in instances:
+        current_tags = set(t.name for t in instance.tags.all())
+
+        # Теги для добавления
+        to_add = desired_tag_names - current_tags
+        # Теги для удаления
+        to_remove = current_tags - desired_tag_names
+
+        # Добавляем новые теги
+        for tag in desired_tag_objects:
+            if tag.name in to_add:
+                instance.tags.append(tag)
+                added_count += 1
+                history = TagHistory(
+                    entity_type='instance',
+                    entity_id=instance.id,
+                    tag_id=tag.id,
+                    action='assigned',
+                    changed_by=user,
+                    details={'sync': True}
+                )
+                db.session.add(history)
+
+        # Удаляем лишние теги (создаём копию списка, т.к. модифицируем коллекцию)
+        for tag in list(instance.tags.all()):
+            if tag.name in to_remove:
+                instance.tags.remove(tag)
+                removed_count += 1
+                history = TagHistory(
+                    entity_type='instance',
+                    entity_id=instance.id,
+                    tag_id=tag.id,
+                    action='removed',
+                    changed_by=user,
+                    details={'sync': True}
+                )
+                db.session.add(history)
+
+        instance._update_tags_cache()
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'added': added_count,
+        'removed': removed_count
+    })
+
+
 # ========== Statistics ==========
 
 @bp.route('/tags/statistics', methods=['GET'])

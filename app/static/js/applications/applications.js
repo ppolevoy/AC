@@ -595,14 +595,7 @@
                     span.style.color = tag.text_color;
                 }
 
-                const icon = document.createElement('span');
-                icon.className = 'tag-icon';
-                icon.textContent = tag.icon || '';
-
-                const text = document.createTextNode(' ' + (tag.display_name || tag.name));
-
-                span.appendChild(icon);
-                span.appendChild(text);
+                span.textContent = tag.display_name || tag.name;
                 container.appendChild(span);
             });
 
@@ -643,14 +636,7 @@
                     span.style.color = tag.text_color;
                 }
 
-                const icon = document.createElement('span');
-                icon.className = 'tag-icon';
-                icon.textContent = tag.icon || '';
-
-                const text = document.createTextNode(' ' + (tag.display_name || tag.name));
-
-                span.appendChild(icon);
-                span.appendChild(text);
+                span.textContent = tag.display_name || tag.name;
                 container.appendChild(span);
             });
 
@@ -925,12 +911,14 @@
         createGroupActionsMenu(groupName, apps) {
             const hasOnline = apps.some(app => app.status === 'online');
             const hasOffline = apps.some(app => app.status !== 'online');
-            
+            const groupId = apps[0]?.group_id || '';
+
             return `
                 <div class="actions-menu">
                     <button class="actions-button">...</button>
                     <div class="actions-dropdown">
                         <a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
+                        <a href="#" class="group-tags-btn" data-group="${groupName}" data-group-id="${groupId}">Теги</a>
                         <a href="#" class="group-start-btn ${!hasOffline ? 'disabled' : ''}" data-group="${groupName}">Запустить все</a>
                         <a href="#" class="group-stop-btn ${!hasOnline ? 'disabled' : ''}" data-group="${groupName}">Остановить все</a>
                         <a href="#" class="group-restart-btn ${!hasOnline ? 'disabled' : ''}" data-group="${groupName}">Перезапустить все</a>
@@ -2165,7 +2153,7 @@
                     return `
                     <label class="tag-checkbox-label">
                         <input type="checkbox" value="${tag.name}" class="tag-filter-checkbox">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
                     </label>
                 `;
                 }).join('');
@@ -2530,19 +2518,54 @@
             const tags = await ApiService.loadTags();
             const checkboxesContainer = content.querySelector('.batch-tags-checkboxes');
 
+            // Получаем данные о тегах выбранных приложений
+            const selectedApps = appIds.map(id => StateManager.getAppById(id)).filter(app => app);
+
+            // Собираем теги: собственные и унаследованные
+            const ownTagCounts = {};  // tag_name -> count of apps having it
+            const inheritedTags = new Set();  // tags inherited from groups
+
+            selectedApps.forEach(app => {
+                (app.tags || []).forEach(tag => {
+                    ownTagCounts[tag.name] = (ownTagCounts[tag.name] || 0) + 1;
+                });
+                (app.group_tags || []).forEach(tag => {
+                    inheritedTags.add(tag.name);
+                });
+            });
+
+            // Собираем унаследованные теги для исключения из sync
+            const inheritedTagNames = [...inheritedTags];
+
             if (tags.length > 0) {
                 checkboxesContainer.innerHTML = tags.map(tag => {
                     const tagStyle = [];
                     if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
                     if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
                     const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+
+                    // Проверяем состояние тега
+                    const count = ownTagCounts[tag.name] || 0;
+                    const isOwned = count === selectedApps.length;
+                    const isPartial = count > 0 && count < selectedApps.length;
+                    const isInherited = inheritedTags.has(tag.name);
+                    const checked = isOwned || isInherited ? 'checked' : '';
+                    const disabled = isInherited ? 'disabled' : '';
+                    const inheritedLabel = isInherited ? ' <span style="color: #888; font-size: 10px;">(от группы)</span>' : '';
+                    const partialLabel = isPartial && !isInherited ? ` <span style="color: #888; font-size: 10px;">(${count}/${selectedApps.length})</span>` : '';
+
                     return `
-                    <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
-                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                    <label class="tag-checkbox-label" style="display: block; margin: 5px 0; ${isInherited ? 'opacity: 0.7;' : ''}">
+                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled} data-partial="${isPartial}">
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
                     </label>
                 `;
                 }).join('');
+
+                // Устанавливаем indeterminate состояние для частичных тегов
+                checkboxesContainer.querySelectorAll('.batch-tag-checkbox[data-partial="true"]').forEach(cb => {
+                    cb.indeterminate = true;
+                });
             } else {
                 checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
             }
@@ -2552,37 +2575,48 @@
 
             // Apply button handler
             document.getElementById('apply-batch-tags').addEventListener('click', async () => {
-                const operation = document.querySelector('input[name="tag-operation"]:checked').value;
-                const selectedTags = Array.from(document.querySelectorAll('.batch-tag-checkbox:checked')).map(cb => cb.value);
-
-                if (selectedTags.length === 0) {
-                    showError('Выберите хотя бы один тег');
-                    return;
-                }
+                // Получаем выбранные теги (не disabled) - это желаемое состояние
+                const desiredTags = Array.from(
+                    document.querySelectorAll('.batch-tag-checkbox:checked:not(:disabled)')
+                ).map(cb => cb.value);
 
                 try {
-                    const response = await fetch('/api/tags/bulk-assign', {
-                        method: 'POST',
+                    // Отправляем желаемое состояние на бэкенд для синхронизации
+                    const response = await fetch('/api/tags/sync', {
+                        method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             app_ids: appIds,
-                            tag_names: selectedTags,
-                            action: operation
+                            desired_tags: desiredTags
                         })
                     });
 
-                    const data = await response.json();
+                    const result = await response.json();
 
-                    if (data.success) {
-                        showNotification(`Теги успешно ${operation === 'add' ? 'добавлены' : 'удалены'}`);
-                        closeModal();
-                        await this.loadApplications();
+                    if (result.success) {
+                        if (result.added > 0 || result.removed > 0) {
+                            showNotification(`Теги обновлены (добавлено: ${result.added}, удалено: ${result.removed})`);
+                        } else {
+                            showNotification('Изменений не было');
+                        }
                     } else {
-                        showError(data.error || 'Ошибка операции с тегами');
+                        throw new Error(result.error || 'Ошибка синхронизации тегов');
                     }
+
+                    closeModal();
+
+                    // Снимаем выделение с приложений
+                    StateManager.clearSelection();
+                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
+                        checkbox.checked = false;
+                    });
+                    const selectAllCheckbox = document.getElementById('select-all');
+                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
+                    await this.loadApplications();
                 } catch (error) {
                     console.error('Error in batch tags operation:', error);
-                    showError('Ошибка операции с тегами');
+                    showError(error.message || 'Ошибка операции с тегами');
                 }
             });
         },
@@ -2772,6 +2806,17 @@
                     const groupName = e.target.dataset.group;
                     this.handleGroupUpdate(groupName);
                 }
+
+                if (e.target.classList.contains('group-tags-btn')) {
+                    e.preventDefault();
+                    const groupId = e.target.dataset.groupId;
+                    const groupName = e.target.dataset.group;
+                    if (groupId) {
+                        this.showGroupTagsModal(groupId, groupName);
+                    } else {
+                        showError('Группа не найдена');
+                    }
+                }
                 
                 // Другие действия
                 ['start', 'stop', 'restart'].forEach(action => {
@@ -2814,9 +2859,100 @@
             document.querySelectorAll(`.child-wrapper[data-group="${groupName}"] .app-checkbox`).forEach(checkbox => {
                 appIds.push(checkbox.dataset.appId);
             });
-            
+
             if (appIds.length > 0) {
                 this.handleBatchAction(appIds, action);
+            }
+        },
+
+        async showGroupTagsModal(groupId, groupName) {
+            // Загружаем все теги и текущие теги группы
+            const [allTags, groupTagsResponse] = await Promise.all([
+                ApiService.loadTags(),
+                fetch(`/api/app-groups/${groupId}/tags`).then(r => r.json())
+            ]);
+
+            const groupTags = groupTagsResponse.success ? groupTagsResponse.tags : [];
+            const groupTagNames = new Set(groupTags.map(t => t.name));
+
+            // Создаем map имя -> id для удаления
+            const tagNameToId = {};
+            allTags.forEach(t => tagNameToId[t.name] = t.id);
+            groupTags.forEach(t => tagNameToId[t.name] = t.id);
+
+            // Создаем контент модального окна
+            const content = document.createElement('div');
+            content.className = 'group-tags-container';
+
+            if (allTags.length === 0) {
+                content.innerHTML = '<p style="color: #999;">Нет доступных тегов. Создайте теги в настройках.</p>';
+            } else {
+                let checkboxesHtml = allTags.map(tag => {
+                    const tagStyle = [];
+                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
+                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+                    const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+                    const checked = groupTagNames.has(tag.name) ? 'checked' : '';
+                    return `
+                        <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
+                            <input type="checkbox" value="${tag.name}" class="group-tag-checkbox" data-tag-id="${tag.id}" ${checked}>
+                            <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
+                        </label>
+                    `;
+                }).join('');
+
+                content.innerHTML = `
+                    <div class="form-group">
+                        <div class="group-tags-checkboxes">${checkboxesHtml}</div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
+                        <button type="button" class="submit-btn" id="save-group-tags">Сохранить</button>
+                    </div>
+                `;
+            }
+
+            // Показываем модальное окно
+            window.showModal(`Теги группы: ${groupName}`, content);
+
+            // Обработчик сохранения
+            const saveBtn = document.getElementById('save-group-tags');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async () => {
+                    const selectedTagNames = Array.from(document.querySelectorAll('.group-tag-checkbox:checked')).map(cb => cb.value);
+
+                    try {
+                        // Определяем какие теги добавить и какие удалить
+                        const toAdd = selectedTagNames.filter(name => !groupTagNames.has(name));
+                        const toRemove = [...groupTagNames].filter(name => !selectedTagNames.includes(name));
+
+                        // Добавляем новые теги
+                        for (const tagName of toAdd) {
+                            await fetch(`/api/app-groups/${groupId}/tags`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tag_name: tagName })
+                            });
+                        }
+
+                        // Удаляем снятые теги
+                        for (const tagName of toRemove) {
+                            const tagId = tagNameToId[tagName];
+                            if (tagId) {
+                                await fetch(`/api/app-groups/${groupId}/tags/${tagId}`, {
+                                    method: 'DELETE'
+                                });
+                            }
+                        }
+
+                        showNotification('Теги группы обновлены');
+                        closeModal();
+                        this.loadApplications();
+                    } catch (error) {
+                        console.error('Error updating group tags:', error);
+                        showError('Ошибка обновления тегов');
+                    }
+                });
             }
         },
 

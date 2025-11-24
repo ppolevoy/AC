@@ -3881,7 +3881,7 @@ body.light-theme .dist-details div:nth-child(2) {
     letter-spacing: 0.2px;
     white-space: nowrap;
     background: transparent;
-    border: 1.5px solid #3498db;
+    border: 2px solid #3498db;
     color: #3498db;
     transition: all 0.2s;
     cursor: default;

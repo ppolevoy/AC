@@ -23,7 +23,7 @@
     </div>
     <div class="controls-container">
         <button id="tag-filter-toggle" class="group-btn" title="Фильтр по тегам">
-            🏷️ Теги
+            🏷️ Фильтр по тегам
         </button>
         <button id="group-toggle-btn" class="group-btn active" title="Группировать">
             <span id="group-icon"></span> Группировать
@@ -59,7 +59,7 @@
         <button class="action-btn stop" id="stop-btn">Остановить</button>
         <button class="action-btn" id="update-btn">Обновить</button>
         <button class="action-btn" id="unload-btn">Снять нагрузку</button>
-        <button class="action-btn" id="batch-tags-btn" title="Управление тегами">🏷️ Теги</button>
+        <button class="action-btn" id="batch-tags-btn" title="Управление тегами">🏷️ Управление тегами</button>
     </div>
     
     <div class="table-container">
@@ -146,23 +146,12 @@
     <div class="batch-tags-container">
         <p class="batch-tags-info">Выбрано приложений: <span class="selected-count"></span></p>
         <div class="form-group">
-            <label>Операция:</label>
-            <div class="radio-group">
-                <label class="radio-label">
-                    <input type="radio" name="tag-operation" value="add" checked> Добавить теги
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="tag-operation" value="remove"> Удалить теги
-                </label>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Выберите теги:</label>
+            <label>Теги:</label>
             <div class="batch-tags-checkboxes"></div>
         </div>
         <div class="form-actions">
             <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
-            <button type="button" class="submit-btn" id="apply-batch-tags">Применить</button>
+            <button type="button" class="submit-btn" id="apply-batch-tags">Сохранить</button>
         </div>
     </div>
 </template>

@@ -453,7 +453,7 @@
                                             <input type="text" id="new-tag-display" class="form-control" placeholder="Production">
                                         </div>
                                     </div>
-                                    <div class="form-row">
+                                    <div class="form-row" style="align-items: center;">
                                         <div class="form-group" style="flex: 1;">
                                             <label for="new-tag-type">Тип:</label>
                                             <select id="new-tag-type" class="form-control">
@@ -465,18 +465,22 @@
                                             </select>
                                         </div>
                                         <div class="form-group" style="flex: 1;">
-                                            <label for="new-tag-icon">Иконка:</label>
-                                            <input type="text" id="new-tag-icon" class="form-control" placeholder="🏷️">
-                                        </div>
-                                    </div>
-                                    <div class="form-row">
-                                        <div class="form-group" style="flex: 1;">
-                                            <label for="new-tag-border-color">Цвет границы:</label>
-                                            <input type="color" id="new-tag-border-color" class="form-control" value="#3498db">
-                                        </div>
-                                        <div class="form-group" style="flex: 1;">
-                                            <label for="new-tag-text-color">Цвет текста:</label>
-                                            <input type="color" id="new-tag-text-color" class="form-control" value="#3498db">
+                                            <label>Предпросмотр:</label>
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <span id="tag-preview" class="tag" style="border-color: #3498db; color: #3498db;">
+                                                    <span id="tag-preview-text">Название</span>
+                                                </span>
+                                                <div style="display: flex; gap: 5px;">
+                                                    <label title="Цвет границы" style="cursor: pointer; position: relative;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 4px; border: 2px solid #3498db; background: transparent;" id="border-color-indicator"></span>
+                                                        <input type="color" id="new-tag-border-color" value="#3498db" style="position: absolute; opacity: 0; width: 24px; height: 24px; cursor: pointer;">
+                                                    </label>
+                                                    <label title="Цвет текста" style="cursor: pointer; position: relative;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 4px; background: #3498db;" id="text-color-indicator"></span>
+                                                        <input type="color" id="new-tag-text-color" value="#3498db" style="position: absolute; opacity: 0; width: 24px; height: 24px; cursor: pointer;">
+                                                    </label>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <button id="create-tag-btn" class="action-btn">Создать тег</button>
@@ -488,14 +492,6 @@
                                 <h5>Существующие теги</h5>
                                 <div id="tags-list-container" class="tags-list-container">
                                     <div class="info-loading">Загрузка тегов...</div>
-                                </div>
-                            </div>
-
-                            <!-- Статистика -->
-                            <div class="detail-section">
-                                <h5>Статистика использования</h5>
-                                <div id="tags-statistics" class="statistics-container">
-                                    <div class="info-loading">Загрузка статистики...</div>
                                 </div>
                             </div>
 
@@ -1822,8 +1818,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let tagsExpanded = false;
 
     if (tagsStatusLine) {
-        // Загружаем статистику для индикатора
-        tagsManagement.loadStats();
+        // Загрузка количества тегов для статуса
+        fetch('/api/tags').then(r => r.json()).then(data => {
+            const statusText = document.querySelector('#tags-status-indicator .status-text');
+            if (statusText && data.success) {
+                statusText.textContent = `${data.tags.length} тегов`;
+            }
+        }).catch(() => {});
 
         tagsStatusLine.addEventListener('click', function() {
             tagsExpanded = !tagsExpanded;
@@ -1832,7 +1833,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 tagsDetails.style.display = 'block';
                 tagsExpandArrow.classList.add('expanded');
                 tagsManagement.loadTags();
-                tagsManagement.loadStats();
             } else {
                 tagsDetails.style.display = 'none';
                 tagsExpandArrow.classList.remove('expanded');
@@ -1841,6 +1841,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Обработчик создания тега
         document.getElementById('create-tag-btn').addEventListener('click', tagsManagement.createTag);
+
+        // Обновление предпросмотра тега
+        const updateTagPreview = () => {
+            const preview = document.getElementById('tag-preview');
+            const previewText = document.getElementById('tag-preview-text');
+            const borderIndicator = document.getElementById('border-color-indicator');
+            const textIndicator = document.getElementById('text-color-indicator');
+
+            const displayName = document.getElementById('new-tag-display').value || document.getElementById('new-tag-name').value || 'Название';
+            const borderColor = document.getElementById('new-tag-border-color').value;
+            const textColor = document.getElementById('new-tag-text-color').value;
+
+            previewText.textContent = displayName;
+            preview.style.borderColor = borderColor;
+            preview.style.color = textColor;
+            borderIndicator.style.borderColor = borderColor;
+            textIndicator.style.background = textColor;
+        };
+
+        document.getElementById('new-tag-display').addEventListener('input', updateTagPreview);
+        document.getElementById('new-tag-name').addEventListener('input', updateTagPreview);
+        document.getElementById('new-tag-border-color').addEventListener('input', updateTagPreview);
+        document.getElementById('new-tag-text-color').addEventListener('input', updateTagPreview);
     }
 });
 
@@ -1848,18 +1871,24 @@ document.addEventListener('DOMContentLoaded', function() {
 const tagsManagement = {
     async loadTags() {
         const container = document.getElementById('tags-list-container');
+        const statusText = document.querySelector('#tags-status-indicator .status-text');
         try {
             const response = await fetch('/api/tags');
             const data = await response.json();
 
             if (data.success && data.tags) {
                 this.renderTagsList(data.tags);
+                if (statusText) {
+                    statusText.textContent = `${data.tags.length} тегов`;
+                }
             } else {
                 container.innerHTML = '<div class="info-loading">Ошибка загрузки тегов</div>';
+                if (statusText) statusText.textContent = 'Ошибка';
             }
         } catch (error) {
             console.error('Error loading tags:', error);
             container.innerHTML = '<div class="info-loading">Ошибка загрузки</div>';
+            if (statusText) statusText.textContent = 'Ошибка';
         }
     },
 
@@ -1881,7 +1910,7 @@ const tagsManagement = {
             html += `
                 <div class="tag-management-item" data-tag-id="${tag.id}">
                     <div class="tag-info">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.icon || ''} ${tag.display_name || tag.name}</span>
+                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
                         <span class="tag-type-label">${tag.tag_type || 'custom'}</span>
                     </div>
                     <div class="tag-actions">
@@ -1895,52 +1924,10 @@ const tagsManagement = {
         container.innerHTML = html;
     },
 
-    async loadStats() {
-        const statsContainer = document.getElementById('tags-statistics');
-        const statusText = document.querySelector('#tags-status-indicator .status-text');
-
-        try {
-            const response = await fetch('/api/tags/statistics');
-            const data = await response.json();
-
-            if (data.success) {
-                const total = data.statistics.total_tags || 0;
-                const used = data.statistics.used_tags || 0;
-
-                if (statusText) {
-                    statusText.textContent = `${total} тегов`;
-                }
-
-                if (statsContainer) {
-                    statsContainer.innerHTML = `
-                        <div class="stat-item">
-                            <div class="stat-label">Всего тегов</div>
-                            <div class="stat-value">${total}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Используется</div>
-                            <div class="stat-value">${used}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Не используется</div>
-                            <div class="stat-value">${total - used}</div>
-                        </div>
-                    `;
-                }
-            }
-        } catch (error) {
-            console.error('Error loading tags stats:', error);
-            if (statusText) {
-                statusText.textContent = 'Ошибка';
-            }
-        }
-    },
-
     async createTag() {
         const name = document.getElementById('new-tag-name').value.trim();
         const displayName = document.getElementById('new-tag-display').value.trim();
         const tagType = document.getElementById('new-tag-type').value;
-        const icon = document.getElementById('new-tag-icon').value.trim();
         const borderColor = document.getElementById('new-tag-border-color').value;
         const textColor = document.getElementById('new-tag-text-color').value;
 
@@ -1957,7 +1944,6 @@ const tagsManagement = {
                     name: name,
                     display_name: displayName || name,
                     tag_type: tagType,
-                    icon: icon,
                     border_color: borderColor,
                     text_color: textColor
                 })
@@ -1970,12 +1956,16 @@ const tagsManagement = {
                 // Очистка формы
                 document.getElementById('new-tag-name').value = '';
                 document.getElementById('new-tag-display').value = '';
-                document.getElementById('new-tag-icon').value = '';
                 document.getElementById('new-tag-border-color').value = '#3498db';
                 document.getElementById('new-tag-text-color').value = '#3498db';
+                // Сброс предпросмотра
+                document.getElementById('tag-preview').style.borderColor = '#3498db';
+                document.getElementById('tag-preview').style.color = '#3498db';
+                document.getElementById('tag-preview-text').textContent = 'Название';
+                document.getElementById('border-color-indicator').style.borderColor = '#3498db';
+                document.getElementById('text-color-indicator').style.background = '#3498db';
                 // Перезагрузка списка
                 tagsManagement.loadTags();
-                tagsManagement.loadStats();
             } else {
                 showError(data.error || 'Ошибка создания тега');
             }
@@ -2025,7 +2015,6 @@ const tagsManagement = {
             if (data.success) {
                 showNotification('Тег удален');
                 this.loadTags();
-                this.loadStats();
             } else {
                 showError(data.error || 'Ошибка удаления');
             }
