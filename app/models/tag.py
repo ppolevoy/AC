@@ -117,3 +117,45 @@ class TagHistory(db.Model):
 @event.listens_for(Tag, 'before_update')
 def update_tag_timestamp(mapper, connection, target):
     target.updated_at = datetime.utcnow()
+
+
+# ========== Event listeners для автообновления tags_cache ==========
+
+@event.listens_for(db.session, 'after_flush')
+def update_tags_cache_after_flush(session, flush_context):
+    """
+    Автоматически обновлять tags_cache при изменении связей тегов.
+    Срабатывает после flush сессии.
+    """
+    # Собираем ID изменённых instances и groups
+    instance_ids = set()
+    group_ids = set()
+
+    # Проверяем новые и удалённые объекты в junction таблицах
+    for obj in session.new:
+        if isinstance(obj, ApplicationInstanceTag):
+            instance_ids.add(obj.application_id)
+        elif isinstance(obj, ApplicationGroupTag):
+            group_ids.add(obj.group_id)
+
+    for obj in session.deleted:
+        if isinstance(obj, ApplicationInstanceTag):
+            instance_ids.add(obj.application_id)
+        elif isinstance(obj, ApplicationGroupTag):
+            group_ids.add(obj.group_id)
+
+    # Обновляем кэш для затронутых instances
+    if instance_ids:
+        from app.models.application_instance import ApplicationInstance
+        for instance in session.query(ApplicationInstance).filter(
+            ApplicationInstance.id.in_(instance_ids)
+        ):
+            instance.tags_cache = ','.join(sorted([t.name for t in instance.tags]))
+
+    # Обновляем кэш для затронутых groups
+    if group_ids:
+        from app.models.application_group import ApplicationGroup
+        for group in session.query(ApplicationGroup).filter(
+            ApplicationGroup.id.in_(group_ids)
+        ):
+            group.tags_cache = ','.join(sorted([t.name for t in group.tags]))

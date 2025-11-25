@@ -1768,6 +1768,19 @@
 // Глобальный объект с доступными переменными
 let AVAILABLE_VARIABLES = null;
 
+// Функция экранирования HTML для защиты от XSS
+function escapeHtml(text) {
+    if (text == null) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, char => map[char]);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Загружаем статус SSH при загрузке страницы
     loadSSHStatus();
@@ -1922,9 +1935,15 @@ const tagsManagement = {
 
         let html = '';
         tags.forEach(tag => {
+            // Экранируем все данные от XSS
+            const safeName = escapeHtml(tag.name);
+            const safeDisplayName = escapeHtml(tag.display_name || tag.name);
+            const safeCssClass = escapeHtml(tag.css_class || '');
+            const safeTagType = escapeHtml(tag.tag_type || 'custom');
+
             const tagStyle = [];
-            if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-            if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+            if (tag.border_color) tagStyle.push(`border-color: ${escapeHtml(tag.border_color)}`);
+            if (tag.text_color) tagStyle.push(`color: ${escapeHtml(tag.text_color)}`);
             const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
 
             // Сокращаем описание до 50 символов
@@ -1938,13 +1957,18 @@ const tagsManagement = {
             html += `
                 <div class="tag-management-item" data-tag-id="${tag.id}">
                     <div class="tag-info">
+<<<<<<< HEAD
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
                         <span class="tag-type-label">${tag.tag_type || 'custom'}</span>
                         ${descriptionHtml}
+=======
+                        <span class="tag ${safeCssClass}" ${styleAttr}>${safeDisplayName}</span>
+                        <span class="tag-type-label">${safeTagType}</span>
+>>>>>>> facaddd (Оптимизации)
                     </div>
                     <div class="tag-actions">
                         <button class="btn-edit-tag" onclick="tagsManagement.editTag(${tag.id})">✏️</button>
-                        <button class="btn-delete-tag" onclick="tagsManagement.deleteTag(${tag.id}, '${tag.name}')">🗑️</button>
+                        <button class="btn-delete-tag" onclick="tagsManagement.deleteTag(${tag.id}, '${safeName}')">🗑️</button>
                     </div>
                 </div>
             `;

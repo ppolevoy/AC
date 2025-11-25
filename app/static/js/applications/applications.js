@@ -2452,9 +2452,14 @@
 
             if (tags.length > 0) {
                 checkboxesContainer.innerHTML = tags.map(tag => {
+                    // Экранируем все данные от XSS
+                    const safeName = SecurityUtils.escapeHtml(tag.name);
+                    const safeDisplayName = SecurityUtils.escapeHtml(tag.display_name || tag.name);
+                    const safeCssClass = SecurityUtils.escapeHtml(tag.css_class || '');
+
                     const tagStyle = [];
-                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+                    if (tag.border_color) tagStyle.push(`border-color: ${SecurityUtils.escapeHtml(tag.border_color)}`);
+                    if (tag.text_color) tagStyle.push(`color: ${SecurityUtils.escapeHtml(tag.text_color)}`);
                     const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
 
                     // Проверяем состояние тега
@@ -2477,10 +2482,16 @@
                         : '';
 
                     return `
+<<<<<<< HEAD
                     <label class="tag-checkbox-label">
                         <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled} data-partial="${isPartial}">
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
                         ${descriptionHtml}
+=======
+                    <label class="tag-checkbox-label" style="display: block; margin: 5px 0; ${isInherited ? 'opacity: 0.7;' : ''}">
+                        <input type="checkbox" value="${safeName}" class="batch-tag-checkbox" ${checked} ${disabled} data-partial="${isPartial}">
+                        <span class="tag ${safeCssClass}" ${styleAttr}>${safeDisplayName}</span>${inheritedLabel}${partialLabel}
+>>>>>>> facaddd (Оптимизации)
                     </label>
                 `;
                 }).join('');
@@ -2664,12 +2675,22 @@
                 );
             }
 
+<<<<<<< HEAD
             // Применяем фильтр по тегам (включая унаследованные от группы)
             if (StateManager.state.selectedTags.length > 0) {
                 filtered = filtered.filter(app => {
                     const ownTagNames = (app.tags || []).map(t => t.name);
                     const groupTagNames = (app.group_tags || []).map(t => t.name);
                     const allTagNames = [...ownTagNames, ...groupTagNames];
+=======
+            // Применяем фильтр по тегам (включая теги группы)
+            if (StateManager.state.selectedTags.length > 0) {
+                filtered = filtered.filter(app => {
+                    // Объединяем теги приложения и теги группы
+                    const appTagNames = (app.tags || []).map(t => t.name);
+                    const groupTagNames = (app.group_tags || []).map(t => t.name);
+                    const allTagNames = [...new Set([...appTagNames, ...groupTagNames])];
+>>>>>>> facaddd (Оптимизации)
 
                     if (StateManager.state.tagOperator === 'AND') {
                         return StateManager.state.selectedTags.every(tagName => allTagNames.includes(tagName));
