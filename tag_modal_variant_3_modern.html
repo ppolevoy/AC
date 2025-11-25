@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вариант 3: Современный интерактивный дизайн</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .demo-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 32px 36px;
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 26px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .search-input:focus {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 12px 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .modal-body {
+            padding: 32px 36px;
+            overflow-y: auto;
+            flex: 1;
+            background: #fafafa;
+        }
+
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .action-btn:hover {
+            background: #e5e7eb;
+            transform: translateY(-1px);
+        }
+
+        .action-btn.primary {
+            background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+            color: white;
+        }
+
+        .action-btn.primary:hover {
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            background: #f3f4f6;
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .view-btn {
+            padding: 6px 12px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 18px;
+        }
+
+        .view-btn.active {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .tags-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        .tag-item {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tag-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--tag-color, #ccc), var(--tag-color, #ccc));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .tag-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .tag-item.selected {
+            border-color: var(--tag-color);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .tag-item.selected::before {
+            opacity: 1;
+        }
+
+        .tag-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .tag-visual {
+            flex: 1;
+        }
+
+        .tag-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .tag-color-preview {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 2px solid;
+            border-color: var(--tag-color);
+            color: var(--tag-color);
+        }
+
+        .tag-select {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #d1d5db;
+            background: white;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .tag-item.selected .tag-select {
+            background: var(--tag-color);
+            border-color: var(--tag-color);
+        }
+
+        .tag-item.selected .tag-select::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .tag-stats {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #f3f4f6;
+        }
+
+        .tag-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .tag-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: #fef3c7;
+            color: #92400e;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .modal-footer {
+            padding: 24px 36px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+        }
+
+        .selected-summary {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .summary-badge {
+            background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .footer-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            outline: none;
+        }
+
+        .btn-cancel {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .btn-cancel:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-save:hover {
+            box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+            color: #6b7280;
+        }
+
+        /* Список вариант */
+        .tags-list-view {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .tags-list-view.active {
+            display: flex;
+        }
+
+        .tags-container.list-mode {
+            display: none;
+        }
+
+        .tag-list-item {
+            background: white;
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .tag-list-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .tag-list-item.selected {
+            border-color: var(--tag-color);
+            background: #fafafa;
+        }
+
+        .tag-list-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--tag-color);
+        }
+
+        .tag-list-info {
+            flex: 1;
+        }
+
+        .tag-list-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+        }
+
+        .tag-list-meta {
+            font-size: 13px;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="modal-header">
+            <div class="header-top">
+                <div class="modal-title">
+                    🏷️ Управление тегами
+                </div>
+                <button class="close-btn">×</button>
+            </div>
+
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="search-input" placeholder="Поиск тегов..." id="search-tags">
+            </div>
+
+            <div class="header-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Приложений</div>
+                    <div class="stat-value">5</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Выбрано</div>
+                    <div class="stat-value" id="selected-count">2</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-body">
+            <div class="action-bar">
+                <div class="action-buttons">
+                    <button class="action-btn" id="select-all-btn">
+                        <span>✓</span> Выбрать все
+                    </button>
+                    <button class="action-btn" id="clear-all-btn">
+                        <span>✗</span> Очистить
+                    </button>
+                    <button class="action-btn primary">
+                        <span>+</span> Создать тег
+                    </button>
+                </div>
+
+                <div class="view-toggle">
+                    <button class="view-btn active" data-view="grid">⊞</button>
+                    <button class="view-btn" data-view="list">☰</button>
+                </div>
+            </div>
+
+            <div class="tags-container" id="tags-grid">
+                <div class="tag-item selected" style="--tag-color: #ef4444;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">Production</div>
+                            <div class="tag-color-preview">Production</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📦</span>
+                            <span>5 приложений</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tag-item selected" style="--tag-color: #3b82f6;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">Backend</div>
+                            <div class="tag-color-preview">Backend</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📦</span>
+                            <span>3 приложения</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tag-item" style="--tag-color: #f59e0b;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">Critical</div>
+                            <div class="tag-color-preview">Critical</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📦</span>
+                            <span>1 приложение</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tag-item" style="--tag-color: #10b981;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">Monitoring</div>
+                            <div class="tag-color-preview">Monitoring</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📦</span>
+                            <span>Не применен</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tag-item" style="--tag-color: #8b5cf6;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">Development</div>
+                            <div class="tag-color-preview">Development</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-badge">
+                        🔗 Унаследован
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📋</span>
+                            <span>От группы "Main Apps"</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tag-item" style="--tag-color: #06b6d4;">
+                    <div class="tag-header">
+                        <div class="tag-visual">
+                            <div class="tag-name">API Service</div>
+                            <div class="tag-color-preview">API Service</div>
+                        </div>
+                        <div class="tag-select"></div>
+                    </div>
+                    <div class="tag-stats">
+                        <div class="tag-stat">
+                            <span>📦</span>
+                            <span>2 приложения</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tags-list-view" id="tags-list">
+                <div class="tag-list-item selected" style="--tag-color: #ef4444;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">Production</div>
+                        <div class="tag-list-meta">Применен к 5 приложениям</div>
+                    </div>
+                </div>
+
+                <div class="tag-list-item selected" style="--tag-color: #3b82f6;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">Backend</div>
+                        <div class="tag-list-meta">Применен к 3 приложениям</div>
+                    </div>
+                </div>
+
+                <div class="tag-list-item" style="--tag-color: #f59e0b;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">Critical</div>
+                        <div class="tag-list-meta">Применен к 1 приложению</div>
+                    </div>
+                </div>
+
+                <div class="tag-list-item" style="--tag-color: #10b981;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">Monitoring</div>
+                        <div class="tag-list-meta">Не применен</div>
+                    </div>
+                </div>
+
+                <div class="tag-list-item" style="--tag-color: #8b5cf6;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">Development</div>
+                        <div class="tag-list-meta">🔗 Унаследован от группы "Main Apps"</div>
+                    </div>
+                </div>
+
+                <div class="tag-list-item" style="--tag-color: #06b6d4;">
+                    <div class="tag-select"></div>
+                    <div class="tag-list-color"></div>
+                    <div class="tag-list-info">
+                        <div class="tag-list-name">API Service</div>
+                        <div class="tag-list-meta">Применен к 2 приложениям</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <div class="selected-summary">
+                <div class="summary-item">
+                    <span>Выбрано тегов:</span>
+                    <span class="summary-badge" id="footer-count">2</span>
+                </div>
+                <div class="summary-item">
+                    <span>Затронуто приложений:</span>
+                    <span>5</span>
+                </div>
+            </div>
+
+            <div class="footer-actions">
+                <button class="btn btn-cancel">Отмена</button>
+                <button class="btn btn-save">Применить изменения</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Переключение представлений
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const view = btn.dataset.view;
+
+                document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                if (view === 'grid') {
+                    document.getElementById('tags-grid').style.display = 'grid';
+                    document.getElementById('tags-list').classList.remove('active');
+                } else {
+                    document.getElementById('tags-grid').style.display = 'none';
+                    document.getElementById('tags-list').classList.add('active');
+                }
+            });
+        });
+
+        // Выбор тегов (сетка)
+        document.querySelectorAll('#tags-grid .tag-item').forEach(item => {
+            item.addEventListener('click', () => {
+                item.classList.toggle('selected');
+                updateSelectedCount();
+            });
+        });
+
+        // Выбор тегов (список)
+        document.querySelectorAll('#tags-list .tag-list-item').forEach(item => {
+            item.addEventListener('click', () => {
+                item.classList.toggle('selected');
+                updateSelectedCount();
+            });
+        });
+
+        // Выбрать все
+        document.getElementById('select-all-btn').addEventListener('click', () => {
+            document.querySelectorAll('.tag-item, .tag-list-item').forEach(item => {
+                item.classList.add('selected');
+            });
+            updateSelectedCount();
+        });
+
+        // Очистить все
+        document.getElementById('clear-all-btn').addEventListener('click', () => {
+            document.querySelectorAll('.tag-item, .tag-list-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            updateSelectedCount();
+        });
+
+        // Поиск
+        document.getElementById('search-tags').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+
+            document.querySelectorAll('.tag-item').forEach(item => {
+                const name = item.querySelector('.tag-name').textContent.toLowerCase();
+                item.style.display = name.includes(query) ? 'block' : 'none';
+            });
+
+            document.querySelectorAll('.tag-list-item').forEach(item => {
+                const name = item.querySelector('.tag-list-name').textContent.toLowerCase();
+                item.style.display = name.includes(query) ? 'flex' : 'none';
+            });
+        });
+
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.tag-item.selected, .tag-list-item.selected').length / 2; // Делим на 2, так как элементы дублируются
+            document.getElementById('selected-count').textContent = count;
+            document.getElementById('footer-count').textContent = count;
+        }
+
+        // Закрытие модального окна
+        document.querySelector('.close-btn').addEventListener('click', () => {
+            alert('Модальное окно закрыто');
+        });
+    </script>
+</body>
+</html>

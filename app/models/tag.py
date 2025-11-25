@@ -15,7 +15,7 @@ class Tag(db.Model):
     display_name = db.Column(db.String(64))
     description = db.Column(db.Text)
     icon = db.Column(db.String(20))
-    tag_type = db.Column(db.String(20))  # status, env, version, special, custom
+    tag_type = db.Column(db.String(20))  # status, env, version, system, custom
     css_class = db.Column(db.String(50))
     border_color = db.Column(db.String(7))
     text_color = db.Column(db.String(7))

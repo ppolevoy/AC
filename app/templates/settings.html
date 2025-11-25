@@ -461,7 +461,7 @@
                                                 <option value="status">Статус</option>
                                                 <option value="env">Окружение</option>
                                                 <option value="version">Версия</option>
-                                                <option value="special">Специальный</option>
+                                                <option value="system">Системный</option>
                                             </select>
                                         </div>
                                         <div class="form-group" style="flex: 1;">
@@ -481,6 +481,12 @@
                                                     </label>
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label for="new-tag-description">Описание:</label>
+                                            <input type="text" id="new-tag-description" class="form-control" placeholder="Краткое описание тега">
                                         </div>
                                     </div>
                                     <button id="create-tag-btn" class="action-btn">Создать тег</button>
@@ -1742,6 +1748,20 @@
     .btn-delete-tag:hover {
         background: rgba(244, 67, 54, 0.3);
     }
+
+    .tag-description {
+        font-size: 12px;
+        color: #888;
+        margin-left: 8px;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.light-theme .tag-description {
+        color: #666;
+    }
 </style>
 
 <script>
@@ -1907,11 +1927,20 @@ const tagsManagement = {
             if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
             const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
 
+            // Сокращаем описание до 50 символов
+            const shortDescription = tag.description
+                ? (tag.description.length > 50 ? tag.description.substring(0, 50) + '...' : tag.description)
+                : '';
+            const descriptionHtml = shortDescription
+                ? `<span class="tag-description" title="${tag.description || ''}">${shortDescription}</span>`
+                : '';
+
             html += `
                 <div class="tag-management-item" data-tag-id="${tag.id}">
                     <div class="tag-info">
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
                         <span class="tag-type-label">${tag.tag_type || 'custom'}</span>
+                        ${descriptionHtml}
                     </div>
                     <div class="tag-actions">
                         <button class="btn-edit-tag" onclick="tagsManagement.editTag(${tag.id})">✏️</button>
@@ -1930,6 +1959,7 @@ const tagsManagement = {
         const tagType = document.getElementById('new-tag-type').value;
         const borderColor = document.getElementById('new-tag-border-color').value;
         const textColor = document.getElementById('new-tag-text-color').value;
+        const description = document.getElementById('new-tag-description').value.trim();
 
         if (!name) {
             showError('Введите имя тега');
@@ -1945,7 +1975,8 @@ const tagsManagement = {
                     display_name: displayName || name,
                     tag_type: tagType,
                     border_color: borderColor,
-                    text_color: textColor
+                    text_color: textColor,
+                    description: description || null
                 })
             });
 
@@ -1956,6 +1987,7 @@ const tagsManagement = {
                 // Очистка формы
                 document.getElementById('new-tag-name').value = '';
                 document.getElementById('new-tag-display').value = '';
+                document.getElementById('new-tag-description').value = '';
                 document.getElementById('new-tag-border-color').value = '#3498db';
                 document.getElementById('new-tag-text-color').value = '#3498db';
                 // Сброс предпросмотра

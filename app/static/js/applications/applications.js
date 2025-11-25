@@ -564,7 +564,7 @@
             const container = document.createElement('div');
             container.className = 'table-tags-container';
 
-            const maxVisible = 3;
+            const maxVisible = 4;
             const visibleTags = allTags.slice(0, maxVisible);
             const hiddenCount = allTags.length - maxVisible;
 
@@ -606,7 +606,7 @@
             const container = document.createElement('div');
             container.className = 'table-tags-container';
 
-            const maxVisible = 3;
+            const maxVisible = 4;
             const visibleTags = tags.slice(0, maxVisible);
             const hiddenCount = tags.length - maxVisible;
 
@@ -2462,15 +2462,25 @@
                     const isOwned = count === selectedApps.length;
                     const isPartial = count > 0 && count < selectedApps.length;
                     const isInherited = inheritedTags.has(tag.name);
-                    const checked = isOwned || isInherited ? 'checked' : '';
+                    // Частичные теги тоже должны быть checked, чтобы сохранить существующее состояние
+                    const checked = isOwned || isPartial || isInherited ? 'checked' : '';
                     const disabled = isInherited ? 'disabled' : '';
-                    const inheritedLabel = isInherited ? ' <span style="color: #888; font-size: 10px;">(от группы)</span>' : '';
-                    const partialLabel = isPartial && !isInherited ? ` <span style="color: #888; font-size: 10px;">(${count}/${selectedApps.length})</span>` : '';
+                    const inheritedLabel = isInherited ? ' <span>(от группы)</span>' : '';
+                    const partialLabel = isPartial && !isInherited ? ` <span>(${count}/${selectedApps.length})</span>` : '';
+
+                    // Сокращаем описание до 40 символов
+                    const shortDescription = tag.description
+                        ? (tag.description.length > 40 ? tag.description.substring(0, 40) + '...' : tag.description)
+                        : '';
+                    const descriptionHtml = shortDescription
+                        ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
+                        : '';
 
                     return `
-                    <label class="tag-checkbox-label" style="display: block; margin: 5px 0; ${isInherited ? 'opacity: 0.7;' : ''}">
+                    <label class="tag-checkbox-label">
                         <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled} data-partial="${isPartial}">
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
+                        ${descriptionHtml}
                     </label>
                 `;
                 }).join('');
@@ -2480,7 +2490,7 @@
                     cb.indeterminate = true;
                 });
             } else {
-                checkboxesContainer.innerHTML = '<span style="color: #999;">Нет доступных тегов</span>';
+                checkboxesContainer.innerHTML = '';
             }
 
             // Show modal
@@ -2654,14 +2664,17 @@
                 );
             }
 
-            // Применяем фильтр по тегам
+            // Применяем фильтр по тегам (включая унаследованные от группы)
             if (StateManager.state.selectedTags.length > 0) {
                 filtered = filtered.filter(app => {
-                    const appTagNames = (app.tags || []).map(t => t.name);
+                    const ownTagNames = (app.tags || []).map(t => t.name);
+                    const groupTagNames = (app.group_tags || []).map(t => t.name);
+                    const allTagNames = [...ownTagNames, ...groupTagNames];
+
                     if (StateManager.state.tagOperator === 'AND') {
-                        return StateManager.state.selectedTags.every(tagName => appTagNames.includes(tagName));
+                        return StateManager.state.selectedTags.every(tagName => allTagNames.includes(tagName));
                     } else {
-                        return StateManager.state.selectedTags.some(tagName => appTagNames.includes(tagName));
+                        return StateManager.state.selectedTags.some(tagName => allTagNames.includes(tagName));
                     }
                 });
             }

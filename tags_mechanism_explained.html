@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Объяснение механизма управления тегами</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e3a8a;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 16px;
+        }
+
+        .bug-badge {
+            display: inline-block;
+            background: #ef4444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .fixed-badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .section {
+            margin-bottom: 50px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #7c3aed;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .comparison-item {
+            background: #f8fafc;
+            padding: 24px;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .comparison-item.wrong {
+            border-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .comparison-item.correct {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .comparison-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .code-comment {
+            color: #94a3b8;
+        }
+
+        .code-keyword {
+            color: #f472b6;
+        }
+
+        .code-string {
+            color: #34d399;
+        }
+
+        .highlight {
+            background: #fef3c7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .highlight.red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .highlight.green {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+            color: white;
+            padding: 14px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 14px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .emoji {
+            font-size: 20px;
+        }
+
+        .scenario {
+            background: #eff6ff;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .scenario-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e40af;
+            margin-bottom: 12px;
+        }
+
+        .scenario-steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+
+        .scenario-steps li {
+            counter-increment: step-counter;
+            margin: 10px 0;
+            padding-left: 40px;
+            position: relative;
+        }
+
+        .scenario-steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: #3b82f6;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .result {
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .result.wrong {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .result.correct {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .flow-step {
+            background: white;
+            padding: 16px 20px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            position: relative;
+        }
+
+        .flow-step::after {
+            content: '↓';
+            position: absolute;
+            bottom: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            color: #7c3aed;
+        }
+
+        .flow-step:last-child::after {
+            display: none;
+        }
+
+        .flow-step.highlight-red {
+            border-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .flow-step-title {
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏷️ Механизм управления тегами</h1>
+        <p class="subtitle">Объяснение бага и его исправления</p>
+
+        <!-- ПРОБЛЕМА -->
+        <div class="section">
+            <div class="section-title">🐛 Проблема</div>
+
+            <div class="scenario">
+                <div class="scenario-title">Сценарий воспроизведения бага:</div>
+                <ol class="scenario-steps">
+                    <li>Выбрано <strong>5 приложений</strong></li>
+                    <li>Тег <strong>"API"</strong> есть у <strong>3 из них</strong> (частичный тег)</li>
+                    <li>Открыто модальное окно управления тегами</li>
+                    <li>Пользователь <strong>НЕ трогает</strong> чекбокс "API" (indeterminate)</li>
+                    <li>Нажата кнопка <strong>"Сохранить"</strong></li>
+                </ol>
+                <div class="result wrong">
+                    ❌ БЫЛО: Тег "API" удалялся у всех 3 приложений!
+                </div>
+            </div>
+        </div>
+
+        <!-- ПРИЧИНА -->
+        <div class="section">
+            <div class="section-title">🔍 Причина бага</div>
+
+            <div class="comparison">
+                <div class="comparison-item wrong">
+                    <div class="comparison-header">
+                        <span class="bug-badge">БАГ</span>
+                        <span>Старый код</span>
+                    </div>
+                    <div class="code-block">
+<span class="code-comment">// Частичные теги НЕ отмечались</span>
+<span class="code-keyword">const</span> checked = isOwned || isInherited
+    ? <span class="code-string">'checked'</span> : <span class="code-string">''</span>;
+                    </div>
+                    <p style="margin-top: 12px; color: #991b1b;">
+                        Частичные теги оставались <span class="highlight red">unchecked</span>,
+                        только устанавливалось визуальное состояние indeterminate.
+                    </p>
+                </div>
+
+                <div class="comparison-item correct">
+                    <div class="comparison-header">
+                        <span class="fixed-badge">ИСПРАВЛЕНО</span>
+                        <span>Новый код</span>
+                    </div>
+                    <div class="code-block">
+<span class="code-comment">// Частичные теги теперь checked</span>
+<span class="code-keyword">const</span> checked = isOwned || <span class="highlight green">isPartial</span> || isInherited
+    ? <span class="code-string">'checked'</span> : <span class="code-string">''</span>;
+                    </div>
+                    <p style="margin-top: 12px; color: #065f46;">
+                        Частичные теги отмечаются как <span class="highlight green">checked</span>,
+                        что сохраняет их при отправке на сервер.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ПОТОК ВЫПОЛНЕНИЯ -->
+        <div class="section">
+            <div class="section-title">📊 Поток выполнения (БЫЛ БАГ)</div>
+
+            <div class="flow-diagram">
+                <div class="flow-step">
+                    <div class="flow-step-title">1. Открытие модального окна</div>
+                    Тег "API" у 3 из 5 приложений → isPartial = true
+                </div>
+
+                <div class="flow-step highlight-red">
+                    <div class="flow-step-title">2. Установка состояния чекбокса ❌</div>
+                    checked = <strong>false</strong> (не isOwned, не isInherited)<br>
+                    indeterminate = <strong>true</strong> (визуально)
+                </div>
+
+                <div class="flow-step">
+                    <div class="flow-step-title">3. Пользователь не трогает чекбокс</div>
+                    Чекбокс остается: checked = <strong>false</strong>, indeterminate = <strong>true</strong>
+                </div>
+
+                <div class="flow-step highlight-red">
+                    <div class="flow-step-title">4. Сбор выбранных тегов ❌</div>
+                    <code>querySelectorAll('.batch-tag-checkbox:checked')</code><br>
+                    Тег "API" <strong>НЕ попадает</strong> в список (unchecked)
+                </div>
+
+                <div class="flow-step highlight-red">
+                    <div class="flow-step-title">5. Отправка на сервер ❌</div>
+                    desiredTags = ["Production", "Backend"] <strong>(без "API")</strong>
+                </div>
+
+                <div class="flow-step highlight-red">
+                    <div class="flow-step-title">6. Бэкенд синхронизация ❌</div>
+                    <code>to_remove = current_tags - desired_tags</code><br>
+                    Тег "API" в to_remove → <strong>удаляется у всех 3 приложений</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- ТАБЛИЦА СОСТОЯНИЙ -->
+        <div class="section">
+            <div class="section-title">📋 Состояния тегов (ПОСЛЕ ИСПРАВЛЕНИЯ)</div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Состояние тега</th>
+                            <th>Тег у всех</th>
+                            <th>Checked</th>
+                            <th>Indeterminate</th>
+                            <th>Disabled</th>
+                            <th>Поведение</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>У всех</strong> (5/5)</td>
+                            <td><span class="emoji">✅</span></td>
+                            <td><span class="emoji">✅</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td>Можно снять → удалится у всех</td>
+                        </tr>
+                        <tr style="background: #fef3c7 !important;">
+                            <td><strong>Частичный</strong> (3/5)</td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">✅</span></td>
+                            <td><span class="emoji">✅</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><strong>Сохраняется у 3; можно снять → удалится у всех</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Ни у кого</strong> (0/5)</td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td>Можно добавить → добавится ко всем</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Унаследован</strong></td>
+                            <td>От группы</td>
+                            <td><span class="emoji">✅</span></td>
+                            <td><span class="emoji">❌</span></td>
+                            <td><span class="emoji">✅</span></td>
+                            <td>Нельзя изменить</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ТЕСТОВЫЕ СЦЕНАРИИ -->
+        <div class="section">
+            <div class="section-title">🧪 Тестовые сценарии</div>
+
+            <div class="scenario">
+                <div class="scenario-title">Сценарий 1: Частичный тег НЕ трогаем</div>
+                <ol class="scenario-steps">
+                    <li>Выбрать 5 приложений, тег "Test" есть у 3 из них</li>
+                    <li>Открыть модальное окно → тег "Test" <strong>checked + indeterminate</strong></li>
+                    <li>Нажать "Сохранить" <strong>БЕЗ изменений</strong></li>
+                </ol>
+                <div class="result correct">
+                    ✅ ОЖИДАНИЕ: Тег остается у 3 приложений (сохраняет состояние)
+                </div>
+            </div>
+
+            <div class="scenario">
+                <div class="scenario-title">Сценарий 2: Частичный тег СНИМАЕМ</div>
+                <ol class="scenario-steps">
+                    <li>Выбрать 5 приложений, тег "Test" есть у 3 из них</li>
+                    <li>Открыть модальное окно</li>
+                    <li><strong>СНЯТЬ</strong> галочку с "Test"</li>
+                    <li>Нажать "Сохранить"</li>
+                </ol>
+                <div class="result correct">
+                    ✅ ОЖИДАНИЕ: Тег удаляется у всех 3 приложений
+                </div>
+            </div>
+
+            <div class="scenario">
+                <div class="scenario-title">Сценарий 3: Частичный тег → Полный</div>
+                <ol class="scenario-steps">
+                    <li>Выбрать 5 приложений, тег "Test" есть у 3 из них</li>
+                    <li>Открыть модальное окно</li>
+                    <li><strong>КЛИКНУТЬ</strong> на чекбокс "Test" (indeterminate → полностью checked)</li>
+                    <li>Нажать "Сохранить"</li>
+                </ol>
+                <div class="result correct">
+                    ✅ ОЖИДАНИЕ: Тег добавляется к оставшимся 2 приложениям (теперь у всех 5)
+                </div>
+            </div>
+        </div>
+
+        <!-- ИТОГ -->
+        <div class="section">
+            <div class="section-title">✨ Итоговое решение</div>
+
+            <div style="background: #f0fdf4; padding: 24px; border-radius: 12px; border-left: 4px solid #10b981;">
+                <h3 style="color: #065f46; margin-bottom: 16px;">Одна строка кода исправила критический баг:</h3>
+                <div class="code-block">
+<span class="code-comment">// Добавлен isPartial в условие</span>
+<span class="code-keyword">const</span> checked = isOwned || <span style="background: #d1fae5; padding: 2px 6px; border-radius: 4px;">isPartial</span> || isInherited ? <span class="code-string">'checked'</span> : <span class="code-string">''</span>;
+                </div>
+                <ul style="margin-top: 20px; line-height: 1.8; color: #065f46;">
+                    <li>✅ Сохранение текущего состояния тегов</li>
+                    <li>✅ Интуитивное поведение интерфейса</li>
+                    <li>✅ Соответствие стандартным UI паттернам</li>
+                    <li>✅ Явное управление - нет неожиданных удалений</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
