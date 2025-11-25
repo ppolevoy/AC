@@ -1,0 +1,582 @@
+/**
+ * apps-list.css - Изолированные стили для списка приложений
+ * Замена table-based верстки на CSS Grid
+ */
+
+/* ========================================
+   ОСНОВНОЙ КОНТЕЙНЕР
+   ======================================== */
+
+.apps-list-container {
+    margin-bottom: 20px;
+}
+
+.apps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ========================================
+   СЕТКА КОЛОНОК (общая для header, group, row)
+   ======================================== */
+
+.apps-header,
+.apps-group-header,
+.apps-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 120px 100px 150px 80px;
+    align-items: start;
+    gap: 0;
+}
+
+/* ========================================
+   КОЛОНКИ
+   ======================================== */
+
+.apps-col {
+    padding: 15px;
+    background-color: #2a2a2b;
+    min-height: 61px;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.3s ease;
+}
+
+/* Скругления для первой и последней колонки */
+.apps-col:first-child {
+    border-radius: 10px 0 0 10px;
+}
+
+.apps-col:last-child {
+    border-radius: 0 10px 10px 0;
+}
+
+/* Колонка чекбокса */
+.apps-col-checkbox {
+    width: 60px;
+    justify-content: center;
+}
+
+/* Колонка имени */
+.apps-col-name {
+    flex-direction: column;
+    align-items: flex-start;
+    color: #3498db;
+    position: relative;
+    overflow: visible;
+}
+
+/* Колонка версии */
+.apps-col-version {
+    justify-content: flex-start;
+}
+
+/* Колонка статуса */
+.apps-col-status {
+    justify-content: flex-start;
+}
+
+/* Колонка сервера */
+.apps-col-server {
+    justify-content: flex-start;
+}
+
+/* Колонка действий */
+.apps-col-actions {
+    justify-content: center;
+}
+
+/* ========================================
+   ЗАГОЛОВОК ТАБЛИЦЫ
+   ======================================== */
+
+.apps-header {
+    margin-bottom: 0;
+}
+
+.apps-header .apps-col {
+    background: transparent;
+    color: #aaa;
+    font-weight: normal;
+    min-height: auto;
+    padding: 15px;
+    cursor: default;
+}
+
+.apps-header .apps-col-name {
+    color: #aaa;
+}
+
+/* Сортируемые колонки */
+.apps-header .apps-col.sortable {
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.apps-header .apps-col.sortable:hover {
+    color: #5ca5e1;
+}
+
+.apps-header .apps-col.sortable::after {
+    content: "\21C5";
+    margin-left: 5px;
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+.apps-header .apps-col.sorted-asc::after {
+    content: "\2191";
+    opacity: 1;
+}
+
+.apps-header .apps-col.sorted-desc::after {
+    content: "\2193";
+    opacity: 1;
+}
+
+/* ========================================
+   ГРУППА (АККОРДЕОН)
+   ======================================== */
+
+.apps-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.apps-group-header {
+    cursor: pointer;
+}
+
+.apps-group-header .apps-col {
+    background-color: #2a2a2d;
+    font-weight: bold;
+}
+
+.apps-group-header:hover .apps-col {
+    background-color: #2e2e30;
+}
+
+/* Контейнер имени группы */
+.apps-group-name-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+/* Иконка раскрытия */
+.apps-group-toggle {
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.3s ease;
+    font-size: 14px;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    color: #888;
+    flex-shrink: 0;
+}
+
+.apps-group.expanded .apps-group-toggle {
+    transform: rotate(90deg);
+}
+
+/* Имя группы */
+.apps-group-name {
+    font-weight: bold;
+    color: #3498db;
+}
+
+/* Индикатор различных версий */
+.apps-version-different {
+    color: #e74c3c;
+}
+
+/* ========================================
+   ДОЧЕРНИЕ ЭЛЕМЕНТЫ ГРУППЫ
+   ======================================== */
+
+.apps-group-children {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    margin-left: 30px;
+    margin-top: 8px;
+}
+
+.apps-group.expanded .apps-group-children {
+    display: flex;
+}
+
+/* ========================================
+   СТРОКА ПРИЛОЖЕНИЯ
+   ======================================== */
+
+.apps-row {
+    cursor: pointer;
+}
+
+.apps-row:hover .apps-col {
+    background-color: #2e2e30;
+}
+
+/* Контейнер имени и тегов */
+.apps-name-with-tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+}
+
+/* Теги рядом с именем */
+.apps-inline-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    margin-left: 12px;
+}
+
+.apps-inline-tags .table-tags-container {
+    display: inline-flex;
+    gap: 4px;
+}
+
+/* Детали приложения (сворачиваемые) - внутри колонки имени */
+.apps-col-name .apps-details {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    background-color: #333336;
+    border-radius: 5px;
+    padding: 0;
+    font-size: 14px;
+    color: #aaa;
+}
+
+.apps-row.expanded .apps-col-name .apps-details {
+    max-height: 100px;
+    padding: 10px;
+}
+
+/* Отступ для строки когда details раскрыт */
+.apps-row.expanded {
+    margin-bottom: 65px;
+}
+
+.apps-details div + div {
+    margin-top: 8px;
+}
+
+/* ========================================
+   СТАТУС ИНДИКАТОРЫ
+   ======================================== */
+
+.apps-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #08d419;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.apps-status-dot.offline {
+    background-color: #e74c3c;
+}
+
+.apps-status-dot.warning {
+    background-color: #f39c12;
+}
+
+.apps-status-dot.no-data {
+    background-color: #95a5a6;
+}
+
+/* ========================================
+   ЧЕКБОКСЫ
+   ======================================== */
+
+.apps-checkbox-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.apps-custom-checkbox {
+    width: 16px;
+    height: 16px;
+    background-color: #59616c;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+}
+
+.apps-custom-checkbox input {
+    opacity: 0;
+    position: absolute;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+
+.apps-checkmark {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    background-color: #5ca5e1;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.apps-custom-checkbox input:checked ~ .apps-checkmark {
+    opacity: 1;
+}
+
+/* Состояние indeterminate для группового чекбокса */
+.apps-custom-checkbox input:indeterminate ~ .apps-checkmark {
+    opacity: 1;
+    background-color: #7f8c8d;
+}
+
+/* ========================================
+   МЕНЮ ДЕЙСТВИЙ
+   ======================================== */
+
+.apps-actions-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.apps-actions-button {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.apps-actions-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ebe4da;
+}
+
+.apps-actions-button.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ebe4da;
+}
+
+.apps-actions-dropdown {
+    position: fixed;
+    z-index: 1000;
+    min-width: 150px;
+    display: none;
+    background-color: #2a2a2b;
+    border: 1px solid #333336;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.apps-actions-dropdown.show {
+    display: block;
+    animation: appsDropdownFadeIn 0.2s ease-out;
+}
+
+@keyframes appsDropdownFadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.apps-actions-dropdown a {
+    color: #ebe4da;
+    padding: 12px 15px;
+    text-decoration: none;
+    display: block;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.apps-actions-dropdown a:hover {
+    background-color: #3a3a3c;
+}
+
+.apps-actions-dropdown a.disabled {
+    color: #666;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* ========================================
+   ТЕГИ
+   ======================================== */
+
+.apps-tags-container {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.apps-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid;
+    white-space: nowrap;
+}
+
+.apps-tag.tag-inherited {
+    opacity: 0.7;
+}
+
+.apps-tags-more {
+    color: #888;
+    font-size: 11px;
+    cursor: help;
+    padding: 2px 4px;
+}
+
+/* ========================================
+   ПУСТОЕ СОСТОЯНИЕ
+   ======================================== */
+
+.apps-list-empty {
+    text-align: center;
+    padding: 40px;
+    color: #888;
+    font-size: 16px;
+    background-color: #2a2a2b;
+    border-radius: 10px;
+}
+
+/* ========================================
+   ЗАГРУЗКА
+   ======================================== */
+
+.apps-list-loading {
+    text-align: center;
+    padding: 40px;
+    color: #888;
+    font-size: 16px;
+}
+
+/* ========================================
+   СВЕТЛАЯ ТЕМА
+   ======================================== */
+
+body.light-theme .apps-col {
+    background-color: #f9f9f9;
+}
+
+body.light-theme .apps-header .apps-col {
+    background: transparent;
+    color: #666;
+}
+
+body.light-theme .apps-col-name,
+body.light-theme .apps-group-name {
+    color: #2980b9;
+}
+
+body.light-theme .apps-group-header .apps-col {
+    background-color: #f0f0f0;
+}
+
+body.light-theme .apps-group-header:hover .apps-col,
+body.light-theme .apps-row:hover .apps-col {
+    background-color: #f5f5f5;
+}
+
+body.light-theme .apps-details {
+    background-color: #f0f0f0;
+    color: #666;
+}
+
+body.light-theme .apps-custom-checkbox {
+    background-color: #e0e0e0;
+}
+
+body.light-theme .apps-actions-button {
+    color: #666;
+}
+
+body.light-theme .apps-actions-button:hover,
+body.light-theme .apps-actions-button.active {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+body.light-theme .apps-actions-dropdown {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .apps-actions-dropdown a {
+    color: #333;
+}
+
+body.light-theme .apps-actions-dropdown a:hover {
+    background-color: #e9e9e9;
+}
+
+body.light-theme .apps-list-empty {
+    background-color: #f9f9f9;
+    color: #666;
+}
+
+/* ========================================
+   КНОПКА ГРУППИРОВКИ (перенесена из styles.css)
+   ======================================== */
+
+.apps-group-btn {
+    background-color: #333336;
+    border: none;
+    color: #888;
+    border-radius: 4px;
+    width: auto;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+
+.apps-group-btn:hover {
+    background-color: #45454a;
+}
+
+.apps-group-btn.active {
+    background-color: #3498db;
+    color: #fff;
+}
+
+body.light-theme .apps-group-btn {
+    background-color: #e8e8e8;
+    color: #666;
+}
+
+body.light-theme .apps-group-btn:hover {
+    background-color: #ddd;
+}
+
+body.light-theme .apps-group-btn.active {
+    background-color: #3498db;
+    color: #fff;
+}

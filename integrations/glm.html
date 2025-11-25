@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Control</title>
+    <style>
+        /* --- ОБЩИЕ СТИЛИ И ПЕРЕМЕННЫЕ --- */
+        :root {
+            --page-bg: #f4f6f8;          /* Фон страницы */
+            --card-bg: #ffffff;          /* Фон карточки сервиса */
+            --border-color: #e9ecef;     /* Цвет рамок */
+            --text-primary: #212529;     /* Основной текст */
+            --text-secondary: #6c757d;   /* Вторичный текст (версия, детали) */
+            --hover-bg: #f8f9fa;         /* Фон при наведении */
+            --accordion-bg: #f1f3f5;     /* Фон раскрытого аккордеона */
+            
+            --status-active-text: #198754; /* Цвет текста для статуса "Активно" */
+            --status-active-bg: #d1e7dd;   /* Фон для статуса "Активно" */
+            --status-stopped-text: #dc3545;/* Цвет текста для статуса "Остановлен" */
+            --status-stopped-bg: #f8d7da;  /* Фон для статуса "Остановлен" */
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: var(--page-bg);
+            color: var(--text-primary);
+            padding: 2rem;
+        }
+
+        /* --- КОНТЕЙНЕР СО СПИСКОМ СЕРВИСОВ --- */
+        .services-container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* --- СТИЛИ КАРТОЧКИ СЕРВИСА --- */
+        .service-item {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        }
+
+        /* Строка с информацией о сервисе (заголовок аккордеона) */
+        .service-info {
+            display: grid;
+            grid-template-columns: 1fr 120px 120px; /* Имя, Версия, Статус */
+            align-items: center;
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .service-info:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .service-name {
+            font-weight: 600;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+        }
+        /* Стрелочка для аккордеона */
+        .service-name::before {
+            content: '►';
+            display: inline-block;
+            margin-right: 12px;
+            font-size: 0.7em;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+        /* Поворот стрелочки при открытии аккордеона */
+        .service-item.active .service-name::before {
+            transform: rotate(90deg);
+        }
+
+        .version {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .status {
+            font-weight: 600;
+            font-size: 0.85rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .status.active {
+            color: var(--status-active-text);
+            background-color: var(--status-active-bg);
+        }
+        .status.stopped {
+            color: var(--status-stopped-text);
+            background-color: var(--status-stopped-bg);
+        }
+
+        /* Контейнер для экземпляров (тело аккордеона) */
+        .instances-accordion {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+            background-color: var(--accordion-bg);
+        }
+        .service-item.active .instances-accordion {
+            max-height: 2000px; /* Значение должно быть больше, чем максимальная высота контента */
+            transition: max-height 0.5s ease-in;
+        }
+        
+        .instances-list {
+            padding: 1rem 1.5rem;
+        }
+
+        /* --- СТИЛИ ЭКЗЕМПЛЯРОВ ПРИЛОЖЕНИЙ --- */
+        .instance-item {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 0.75rem;
+            overflow: hidden; /* Для скругления углов у details */
+        }
+        .instance-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .instance-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1.5fr 100px 40px; /* Имя, Версия, Сервер, Статус, Кнопка */
+            align-items: center;
+            padding: 0.75rem 1.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            gap: 1rem;
+        }
+        .instance-header:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .instance-name {
+            font-weight: 500;
+        }
+        
+        .instance-version, .instance-server {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .instance-status {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        .instance-status.running { color: var(--status-active-text); }
+        .instance-status.stopped { color: var(--status-stopped-text); }
+
+        .instance-actions-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .instance-actions-btn:hover {
+            background-color: #e9ecef;
+        }
+
+        .instance-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            padding: 0 1.25rem;
+        }
+        .instance-item.active .instance-details {
+            padding: 0.75rem 1.25rem;
+            max-height: 200px; /* Достаточно для отображения деталей */
+            transition: max-height 0.4s ease-in, padding 0.4s ease-in;
+        }
+        .instance-details p {
+            margin: 0.4rem 0;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .instance-details strong {
+            color: var(--text-primary);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="services-container">
+        <!-- Сервис 1 -->
+        <div class="service-item">
+            <div class="service-info">
+                <div class="service-name">business</div>
+                <div class="version">v1.10.0</div>
+                <div class="status active">Активно</div>
+            </div>
+            <div class="instances-accordion">
+                <div class="instances-list">
+                    <div class="instance-item">
+                        <div class="instance-header">
+                            <span class="instance-name">business-instance-01</span>
+                            <span class="instance-version">v1.10.0</span>
+                            <span class="instance-server">srv-business-01.internal</span>
+                            <span class="instance-status running">Running</span>
+                            <button class="instance-actions-btn">⋯</button>
+                        </div>
+                        <div class="instance-details">
+                            <p><strong>Время запуска:</strong> 2023-10-27 10:00:00</p>
+                            <p><strong>Каталог приложения:</strong> /opt/services/business</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сервис 2 (раскрыт по умолчанию) -->
+        <div class="service-item active">
+            <div class="service-info">
+                <div class="service-name">deposit-loan-api</div>
+                <div class="version">v1.2.1</div>
+                <div class="status active">Активно</div>
+            </div>
+            <div class="instances-accordion">
+                <div class="instances-list">
+                    <div class="instance-item active">
+                        <div class="instance-header">
+                            <span class="instance-name">deposit-loan-api-instance-01</span>
+                            <span class="instance-version">v1.2.1</span>
+                            <span class="instance-server">srv-api-01.internal</span>
+                            <span class="instance-status running">Running</span>
+                            <button class="instance-actions-btn">⋯</button>
+                        </div>
+                        <div class="instance-details">
+                            <p><strong>Время запуска:</strong> 2023-10-27 09:45:00</p>
+                            <p><strong>Каталог приложения:</strong> /var/www/deposit-loan-api</p>
+                        </div>
+                    </div>
+                    <div class="instance-item">
+                        <div class="instance-header">
+                            <span class="instance-name">deposit-loan-api-instance-02</span>
+                            <span class="instance-version">v1.2.1</span>
+                            <span class="instance-server">srv-api-02.internal</span>
+                            <span class="instance-status running">Running</span>
+                            <button class="instance-actions-btn">⋯</button>
+                        </div>
+                        <div class="instance-details">
+                            <p><strong>Время запуска:</strong> 2023-10-27 09:46:00</p>
+                            <p><strong>Каталог приложения:</strong> /var/www/deposit-loan-api</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Сервис 3 -->
+        <div class="service-item">
+            <div class="service-info">
+                <div class="service-name">notification-service</div>
+                <div class="version">v2.0.5</div>
+                <div class="status stopped">Остановлен</div>
+            </div>
+            <div class="instances-accordion">
+                <div class="instances-list">
+                    <div class="instance-item">
+                        <div class="instance-header">
+                            <span class="instance-name">notification-svc-01</span>
+                            <span class="instance-version">v2.0.5</span>
+                            <span class="instance-server">srv-notif-01.internal</span>
+                            <span class="instance-status stopped">Stopped</span>
+                            <button class="instance-actions-btn">⋯</button>
+                        </div>
+                        <div class="instance-details">
+                            <p><strong>Время остановки:</strong> 2023-10-27 11:30:00</p>
+                            <p><strong>Каталог приложения:</strong> /opt/services/notification</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сервис 4 -->
+        <div class="service-item">
+            <div class="service-info">
+                <div class="service-name">payment-gateway</div>
+                <div class="version">v3.3.1</div>
+                <div class="status active">Активно</div>
+            </div>
+            <div class="instances-accordion">
+                <div class="instances-list">
+                     <!-- Экземпляры можно добавить по аналогии -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const servicesContainer = document.querySelector('.services-container');
+
+            servicesContainer.addEventListener('click', (event) => {
+                const clickedElement = event.target;
+
+                // --- Логика для аккордеона сервисов ---
+                const serviceInfo = clickedElement.closest('.service-info');
+                if (serviceInfo) {
+                    const serviceItem = serviceInfo.closest('.service-item');
+                    // Просто переключаем текущий сервис, не трогая другие
+                    serviceItem.classList.toggle('active');
+                }
+
+                // --- Логика для аккордеона деталей экземпляра ---
+                const instanceHeader = clickedElement.closest('.instance-header');
+                if (instanceHeader) {
+                    const instanceItem = instanceHeader.closest('.instance-item');
+                    instanceItem.classList.toggle('active');
+                    
+                    // Предотвращаем всплытие, чтобы клик по экземпляру не закрывал сервис
+                    event.stopPropagation();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
