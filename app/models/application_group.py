@@ -101,6 +101,66 @@ class ApplicationGroup(db.Model):
 
         return synced_count
 
+    # ========== Методы работы с тегами ==========
+
+    def add_tag(self, tag_name, user=None):
+        """Добавить тег к группе"""
+        from app.models.tag import Tag, TagHistory
+
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if not tag:
+            tag = Tag(name=tag_name, display_name=tag_name.title())
+            db.session.add(tag)
+
+        if tag not in self.tags.all():
+            self.tags.append(tag)
+            self._update_tags_cache()
+
+            history = TagHistory(
+                entity_type='group',
+                entity_id=self.id,
+                tag_id=tag.id,
+                action='assigned',
+                changed_by=user,
+                details={'tag_name': tag_name}
+            )
+            db.session.add(history)
+
+        return tag
+
+    def remove_tag(self, tag_name, user=None):
+        """Удалить тег у группы"""
+        from app.models.tag import Tag, TagHistory
+
+        tag = Tag.query.filter_by(name=tag_name).first()
+        if tag and tag in self.tags.all():
+            self.tags.remove(tag)
+            self._update_tags_cache()
+
+            history = TagHistory(
+                entity_type='group',
+                entity_id=self.id,
+                tag_id=tag.id,
+                action='removed',
+                changed_by=user
+            )
+            db.session.add(history)
+
+        return tag
+
+    def get_tag_names(self):
+        """Получить список имен тегов"""
+        return [t.name for t in self.tags.all()]
+
+    def has_tags(self, tag_names):
+        """Проверить наличие всех указанных тегов"""
+        my_tags = set(self.get_tag_names())
+        return all(t in my_tags for t in tag_names)
+
+    def _update_tags_cache(self):
+        """Обновить кэш тегов"""
+        self.tags_cache = ','.join(sorted(self.get_tag_names()))
+
     def __repr__(self):
         return f'<ApplicationGroup {self.name}>'
 

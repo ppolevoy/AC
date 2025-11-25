@@ -348,6 +348,11 @@ class ApplicationInstance(db.Model):
 
         if include_tags:
             result['tags'] = [t.to_dict() for t in self.tags.all()]
+            # Добавляем теги группы для фильтрации
+            if self.group:
+                result['group_tags'] = [t.to_dict() for t in self.group.tags.all()]
+            else:
+                result['group_tags'] = []
 
         return result
 

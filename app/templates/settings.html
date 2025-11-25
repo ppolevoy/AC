@@ -1887,6 +1887,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// Утилита для экранирования HTML (защита от XSS)
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Tags Management Object
 const tagsManagement = {
     async loadTags() {
@@ -1923,28 +1931,35 @@ const tagsManagement = {
         let html = '';
         tags.forEach(tag => {
             const tagStyle = [];
-            if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-            if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+            if (tag.border_color) tagStyle.push(`border-color: ${escapeHtml(tag.border_color)}`);
+            if (tag.text_color) tagStyle.push(`color: ${escapeHtml(tag.text_color)}`);
             const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+
+            // Экранируем данные для защиты от XSS
+            const safeName = escapeHtml(tag.name);
+            const safeDisplayName = escapeHtml(tag.display_name || tag.name);
+            const safeCssClass = escapeHtml(tag.css_class || '');
+            const safeTagType = escapeHtml(tag.tag_type || 'custom');
+            const safeDescription = escapeHtml(tag.description || '');
 
             // Сокращаем описание до 50 символов
             const shortDescription = tag.description
-                ? (tag.description.length > 50 ? tag.description.substring(0, 50) + '...' : tag.description)
+                ? (tag.description.length > 50 ? escapeHtml(tag.description.substring(0, 50)) + '...' : safeDescription)
                 : '';
             const descriptionHtml = shortDescription
-                ? `<span class="tag-description" title="${tag.description || ''}">${shortDescription}</span>`
+                ? `<span class="tag-description" title="${safeDescription}">${shortDescription}</span>`
                 : '';
 
             html += `
                 <div class="tag-management-item" data-tag-id="${tag.id}">
                     <div class="tag-info">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
-                        <span class="tag-type-label">${tag.tag_type || 'custom'}</span>
+                        <span class="tag ${safeCssClass}" ${styleAttr}>${safeDisplayName}</span>
+                        <span class="tag-type-label">${safeTagType}</span>
                         ${descriptionHtml}
                     </div>
                     <div class="tag-actions">
                         <button class="btn-edit-tag" onclick="tagsManagement.editTag(${tag.id})">✏️</button>
-                        <button class="btn-delete-tag" onclick="tagsManagement.deleteTag(${tag.id}, '${tag.name}')">🗑️</button>
+                        <button class="btn-delete-tag" onclick="tagsManagement.deleteTag(${tag.id}, '${safeName}')">🗑️</button>
                     </div>
                 </div>
             `;

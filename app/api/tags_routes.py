@@ -11,8 +11,29 @@ from app.models.application_group import ApplicationGroup
 
 @bp.route('/tags', methods=['GET'])
 def get_tags():
-    """Получить список всех тегов"""
-    tags = Tag.query.all()
+    """Получить список тегов с опциональной пагинацией"""
+    page = request.args.get('page', type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+
+    if per_page > 100:
+        per_page = 100
+
+    # Если page указан - используем пагинацию
+    if page is not None:
+        pagination = Tag.query.order_by(Tag.name).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        return jsonify({
+            'success': True,
+            'tags': [tag.to_dict() for tag in pagination.items],
+            'total': pagination.total,
+            'page': page,
+            'pages': pagination.pages,
+            'per_page': per_page
+        })
+
+    # Без page - возвращаем все (обратная совместимость)
+    tags = Tag.query.order_by(Tag.name).all()
     return jsonify({
         'success': True,
         'tags': [tag.to_dict() for tag in tags],
@@ -246,7 +267,10 @@ def remove_group_tag(group_id, tag_id):
 
 @bp.route('/applications/filter/by-tags', methods=['POST'])
 def filter_by_tags():
-    """Фильтрация приложений по тегам"""
+    """Фильтрация приложений по тегам (включая теги групп)"""
+    from sqlalchemy import or_
+    from app.models.tag import ApplicationInstanceTag, ApplicationGroupTag
+
     data = request.json
     tag_names = data.get('tags', [])
     operator = data.get('operator', 'OR')  # OR или AND
@@ -255,15 +279,42 @@ def filter_by_tags():
 
     if tag_names:
         if operator == 'AND':
-            # Все теги должны присутствовать
-            for tag_name in tag_names:
-                query = query.filter(
-                    ApplicationInstance.tags.any(Tag.name == tag_name)
-                )
+            # AND: все теги должны быть у приложения ИЛИ его группы (в сумме)
+            instances = query.options(
+                db.joinedload(ApplicationInstance.group)
+            ).all()
+
+            filtered = []
+            tag_names_set = set(tag_names)
+            for inst in instances:
+                all_tags = set(t.name for t in inst.tags.all())
+                if inst.group:
+                    all_tags.update(t.name for t in inst.group.tags.all())
+                if tag_names_set.issubset(all_tags):
+                    filtered.append(inst)
+
+            return jsonify({
+                'success': True,
+                'applications': [app.to_dict(include_tags=True) for app in filtered],
+                'total': len(filtered),
+                'filter': {'tags': tag_names, 'operator': operator}
+            })
         else:  # OR
-            # Хотя бы один тег
+            # Подзапрос для приложений с нужными тегами
+            instance_subq = db.session.query(
+                ApplicationInstanceTag.application_id
+            ).join(Tag).filter(Tag.name.in_(tag_names)).subquery()
+
+            # Подзапрос для групп с нужными тегами
+            group_subq = db.session.query(
+                ApplicationGroupTag.group_id
+            ).join(Tag).filter(Tag.name.in_(tag_names)).subquery()
+
             query = query.filter(
-                ApplicationInstance.tags.any(Tag.name.in_(tag_names))
+                or_(
+                    ApplicationInstance.id.in_(instance_subq),
+                    ApplicationInstance.group_id.in_(group_subq)
+                )
             )
 
     apps = query.all()
@@ -272,10 +323,7 @@ def filter_by_tags():
         'success': True,
         'applications': [app.to_dict(include_tags=True) for app in apps],
         'total': len(apps),
-        'filter': {
-            'tags': tag_names,
-            'operator': operator
-        }
+        'filter': {'tags': tag_names, 'operator': operator}
     })
 
 
@@ -314,11 +362,16 @@ def bulk_assign_tags():
 
     if target_type == 'instances':
         instances = ApplicationInstance.query.filter(ApplicationInstance.id.in_(target_ids)).all()
+        # Предзагружаем теги для избежания N+1
+        instance_tags = {inst.id: set(t.id for t in inst.tags) for inst in instances}
+
         for instance in instances:
+            current_tag_ids = instance_tags[instance.id]
             for tag in tags:
                 if action == 'add':
-                    if tag not in instance.tags.all():
+                    if tag.id not in current_tag_ids:
                         instance.tags.append(tag)
+                        current_tag_ids.add(tag.id)
                         count += 1
                         history = TagHistory(
                             entity_type='instance',
@@ -330,8 +383,9 @@ def bulk_assign_tags():
                         )
                         db.session.add(history)
                 elif action == 'remove':
-                    if tag in instance.tags.all():
+                    if tag.id in current_tag_ids:
                         instance.tags.remove(tag)
+                        current_tag_ids.discard(tag.id)
                         count += 1
                         history = TagHistory(
                             entity_type='instance',
@@ -343,15 +397,18 @@ def bulk_assign_tags():
                         )
                         db.session.add(history)
 
-            instance._update_tags_cache()
-
     elif target_type == 'groups':
         groups = ApplicationGroup.query.filter(ApplicationGroup.id.in_(target_ids)).all()
+        # Предзагружаем теги для избежания N+1
+        group_tags = {grp.id: set(t.id for t in grp.tags) for grp in groups}
+
         for group in groups:
+            current_tag_ids = group_tags[group.id]
             for tag in tags:
                 if action == 'add':
-                    if tag not in group.tags.all():
+                    if tag.id not in current_tag_ids:
                         group.tags.append(tag)
+                        current_tag_ids.add(tag.id)
                         count += 1
                         history = TagHistory(
                             entity_type='group',
@@ -363,8 +420,9 @@ def bulk_assign_tags():
                         )
                         db.session.add(history)
                 elif action == 'remove':
-                    if tag in group.tags.all():
+                    if tag.id in current_tag_ids:
                         group.tags.remove(tag)
+                        current_tag_ids.discard(tag.id)
                         count += 1
                         history = TagHistory(
                             entity_type='group',
@@ -406,16 +464,21 @@ def sync_tags():
     # Получаем приложения
     instances = ApplicationInstance.query.filter(ApplicationInstance.id.in_(app_ids)).all()
 
+    # Предзагружаем теги для избежания N+1
+    instance_current_tags = {
+        inst.id: {t.name: t for t in inst.tags}
+        for inst in instances
+    }
+
     added_count = 0
     removed_count = 0
 
     for instance in instances:
-        current_tags = set(t.name for t in instance.tags.all())
+        current_tags_dict = instance_current_tags[instance.id]
+        current_tag_names = set(current_tags_dict.keys())
 
-        # Теги для добавления
-        to_add = desired_tag_names - current_tags
-        # Теги для удаления
-        to_remove = current_tags - desired_tag_names
+        to_add = desired_tag_names - current_tag_names
+        to_remove = current_tag_names - desired_tag_names
 
         # Добавляем новые теги
         for tag in desired_tag_objects:
@@ -432,22 +495,20 @@ def sync_tags():
                 )
                 db.session.add(history)
 
-        # Удаляем лишние теги (создаём копию списка, т.к. модифицируем коллекцию)
-        for tag in list(instance.tags.all()):
-            if tag.name in to_remove:
-                instance.tags.remove(tag)
-                removed_count += 1
-                history = TagHistory(
-                    entity_type='instance',
-                    entity_id=instance.id,
-                    tag_id=tag.id,
-                    action='removed',
-                    changed_by=user,
-                    details={'sync': True}
-                )
-                db.session.add(history)
-
-        instance._update_tags_cache()
+        # Удаляем лишние теги
+        for tag_name in to_remove:
+            tag = current_tags_dict[tag_name]
+            instance.tags.remove(tag)
+            removed_count += 1
+            history = TagHistory(
+                entity_type='instance',
+                entity_id=instance.id,
+                tag_id=tag.id,
+                action='removed',
+                changed_by=user,
+                details={'sync': True}
+            )
+            db.session.add(history)
 
     db.session.commit()
 
@@ -462,22 +523,171 @@ def sync_tags():
 
 @bp.route('/tags/statistics', methods=['GET'])
 def get_tag_statistics():
-    """Статистика использования тегов"""
-    stats = []
+    """Статистика использования тегов (оптимизированная)"""
+    from sqlalchemy import func
+    from app.models.tag import ApplicationInstanceTag, ApplicationGroupTag
 
-    for tag in Tag.query.all():
+    # Подзапрос для подсчёта instances
+    instances_subq = db.session.query(
+        ApplicationInstanceTag.tag_id,
+        func.count(ApplicationInstanceTag.id).label('instances_count')
+    ).group_by(ApplicationInstanceTag.tag_id).subquery()
+
+    # Подзапрос для подсчёта groups
+    groups_subq = db.session.query(
+        ApplicationGroupTag.tag_id,
+        func.count(ApplicationGroupTag.id).label('groups_count')
+    ).group_by(ApplicationGroupTag.tag_id).subquery()
+
+    # Основной запрос с JOIN
+    results = db.session.query(
+        Tag,
+        func.coalesce(instances_subq.c.instances_count, 0).label('instances_count'),
+        func.coalesce(groups_subq.c.groups_count, 0).label('groups_count')
+    ).outerjoin(
+        instances_subq, Tag.id == instances_subq.c.tag_id
+    ).outerjoin(
+        groups_subq, Tag.id == groups_subq.c.tag_id
+    ).all()
+
+    stats = []
+    for tag, instances_count, groups_count in results:
+        total_usage = instances_count + groups_count
         stats.append({
             'tag': tag.to_dict(),
-            'instances_count': tag.instances.count(),
-            'groups_count': tag.groups.count(),
-            'total_usage': tag.get_usage_count()
+            'instances_count': instances_count,
+            'groups_count': groups_count,
+            'total_usage': total_usage
         })
 
-    # Сортируем по использованию
     stats.sort(key=lambda x: x['total_usage'], reverse=True)
 
     return jsonify({
         'success': True,
         'statistics': stats,
         'total_tags': len(stats)
+    })
+
+
+# ========== Tag History ==========
+
+@bp.route('/applications/<int:app_id>/tag-history', methods=['GET'])
+def get_application_tag_history(app_id):
+    """История тегов приложения"""
+    app = ApplicationInstance.query.get_or_404(app_id)
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 100)
+
+    pagination = TagHistory.query.filter_by(
+        entity_type='instance',
+        entity_id=app_id
+    ).order_by(TagHistory.changed_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    # Предзагружаем теги для истории
+    tag_ids = [h.tag_id for h in pagination.items if h.tag_id]
+    tags_dict = {t.id: t for t in Tag.query.filter(Tag.id.in_(tag_ids)).all()} if tag_ids else {}
+
+    history = []
+    for h in pagination.items:
+        tag = tags_dict.get(h.tag_id)
+        history.append({
+            'id': h.id,
+            'tag_id': h.tag_id,
+            'tag_name': tag.name if tag else None,
+            'tag_display_name': tag.display_name if tag else None,
+            'action': h.action,
+            'changed_by': h.changed_by,
+            'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+            'details': h.details
+        })
+
+    return jsonify({
+        'success': True,
+        'history': history,
+        'total': pagination.total,
+        'page': page,
+        'pages': pagination.pages
+    })
+
+
+@bp.route('/app-groups/<int:group_id>/tag-history', methods=['GET'])
+def get_group_tag_history(group_id):
+    """История тегов группы"""
+    group = ApplicationGroup.query.get_or_404(group_id)
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 100)
+
+    pagination = TagHistory.query.filter_by(
+        entity_type='group',
+        entity_id=group_id
+    ).order_by(TagHistory.changed_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    tag_ids = [h.tag_id for h in pagination.items if h.tag_id]
+    tags_dict = {t.id: t for t in Tag.query.filter(Tag.id.in_(tag_ids)).all()} if tag_ids else {}
+
+    history = []
+    for h in pagination.items:
+        tag = tags_dict.get(h.tag_id)
+        history.append({
+            'id': h.id,
+            'tag_id': h.tag_id,
+            'tag_name': tag.name if tag else None,
+            'tag_display_name': tag.display_name if tag else None,
+            'action': h.action,
+            'changed_by': h.changed_by,
+            'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+            'details': h.details
+        })
+
+    return jsonify({
+        'success': True,
+        'history': history,
+        'total': pagination.total,
+        'page': page,
+        'pages': pagination.pages
+    })
+
+
+@bp.route('/tags/<int:tag_id>/history', methods=['GET'])
+def get_tag_usage_history(tag_id):
+    """История использования конкретного тега"""
+    tag = Tag.query.get_or_404(tag_id)
+
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    per_page = min(per_page, 100)
+
+    pagination = TagHistory.query.filter_by(
+        tag_id=tag_id
+    ).order_by(TagHistory.changed_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    history = []
+    for h in pagination.items:
+        history.append({
+            'id': h.id,
+            'entity_type': h.entity_type,
+            'entity_id': h.entity_id,
+            'action': h.action,
+            'changed_by': h.changed_by,
+            'changed_at': h.changed_at.isoformat() if h.changed_at else None,
+            'details': h.details
+        })
+
+    return jsonify({
+        'success': True,
+        'tag': tag.to_dict(),
+        'history': history,
+        'total': pagination.total,
+        'page': page,
+        'pages': pagination.pages
     })

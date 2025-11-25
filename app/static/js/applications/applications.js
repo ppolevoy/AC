@@ -2447,8 +2447,8 @@
                 });
             });
 
-            // Собираем унаследованные теги для исключения из sync
-            const inheritedTagNames = [...inheritedTags];
+            // Сохраняем начальное состояние для отслеживания изменений
+            const initialState = {};  // tag_name -> 'all' | 'none' | 'partial'
 
             if (tags.length > 0) {
                 checkboxesContainer.innerHTML = tags.map(tag => {
@@ -2462,8 +2462,18 @@
                     const isOwned = count === selectedApps.length;
                     const isPartial = count > 0 && count < selectedApps.length;
                     const isInherited = inheritedTags.has(tag.name);
-                    // Частичные теги тоже должны быть checked, чтобы сохранить существующее состояние
-                    const checked = isOwned || isPartial || isInherited ? 'checked' : '';
+
+                    // Сохраняем начальное состояние
+                    if (isOwned) {
+                        initialState[tag.name] = 'all';
+                    } else if (isPartial) {
+                        initialState[tag.name] = 'partial';
+                    } else {
+                        initialState[tag.name] = 'none';
+                    }
+
+                    // Для отображения: owned и inherited - checked, partial - indeterminate
+                    const checked = isOwned || isInherited ? 'checked' : '';
                     const disabled = isInherited ? 'disabled' : '';
                     const inheritedLabel = isInherited ? ' <span>(от группы)</span>' : '';
                     const partialLabel = isPartial && !isInherited ? ` <span>(${count}/${selectedApps.length})</span>` : '';
@@ -2478,16 +2488,26 @@
 
                     return `
                     <label class="tag-checkbox-label">
-                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled} data-partial="${isPartial}">
+                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled}
+                               data-initial="${initialState[tag.name]}" data-changed="false">
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
                         ${descriptionHtml}
                     </label>
                 `;
                 }).join('');
 
-                // Устанавливаем indeterminate состояние для частичных тегов
-                checkboxesContainer.querySelectorAll('.batch-tag-checkbox[data-partial="true"]').forEach(cb => {
-                    cb.indeterminate = true;
+                // Устанавливаем indeterminate для частичных и добавляем отслеживание изменений
+                checkboxesContainer.querySelectorAll('.batch-tag-checkbox').forEach(cb => {
+                    const initial = cb.dataset.initial;
+                    if (initial === 'partial') {
+                        cb.indeterminate = true;
+                        cb.checked = false;  // Partial начинает как unchecked визуально
+                    }
+                    // Отслеживаем изменения
+                    cb.addEventListener('change', () => {
+                        cb.dataset.changed = 'true';
+                        cb.indeterminate = false;  // Снимаем indeterminate при любом изменении
+                    });
                 });
             } else {
                 checkboxesContainer.innerHTML = '';
@@ -2498,32 +2518,78 @@
 
             // Apply button handler
             document.getElementById('apply-batch-tags').addEventListener('click', async () => {
-                // Получаем выбранные теги (не disabled) - это желаемое состояние
-                const desiredTags = Array.from(
-                    document.querySelectorAll('.batch-tag-checkbox:checked:not(:disabled)')
-                ).map(cb => cb.value);
+                const tagsToAdd = [];
+                const tagsToRemove = [];
+
+                document.querySelectorAll('.batch-tag-checkbox:not(:disabled)').forEach(cb => {
+                    const tagName = cb.value;
+                    const initial = cb.dataset.initial;
+                    const changed = cb.dataset.changed === 'true';
+                    const isChecked = cb.checked;
+
+                    if (initial === 'partial') {
+                        // Частичный тег - меняем только если пользователь явно изменил
+                        if (changed) {
+                            if (isChecked) {
+                                tagsToAdd.push(tagName);  // Добавить всем
+                            } else {
+                                tagsToRemove.push(tagName);  // Удалить у всех
+                            }
+                        }
+                        // Если не changed - ничего не делаем, сохраняем как было
+                    } else if (initial === 'all') {
+                        // Был у всех - если сняли галочку, удаляем
+                        if (!isChecked) {
+                            tagsToRemove.push(tagName);
+                        }
+                    } else {  // initial === 'none'
+                        // Не было ни у кого - если поставили галочку, добавляем
+                        if (isChecked) {
+                            tagsToAdd.push(tagName);
+                        }
+                    }
+                });
 
                 try {
-                    // Отправляем желаемое состояние на бэкенд для синхронизации
-                    const response = await fetch('/api/tags/sync', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            app_ids: appIds,
-                            desired_tags: desiredTags
-                        })
-                    });
+                    let addedCount = 0;
+                    let removedCount = 0;
 
-                    const result = await response.json();
+                    // Добавляем теги
+                    if (tagsToAdd.length > 0) {
+                        const addResponse = await fetch('/api/tags/bulk-assign', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                tag_names: tagsToAdd,
+                                target_type: 'instances',
+                                target_ids: appIds,
+                                action: 'add'
+                            })
+                        });
+                        const addResult = await addResponse.json();
+                        if (addResult.success) addedCount = addResult.count;
+                    }
 
-                    if (result.success) {
-                        if (result.added > 0 || result.removed > 0) {
-                            showNotification(`Теги обновлены (добавлено: ${result.added}, удалено: ${result.removed})`);
-                        } else {
-                            showNotification('Изменений не было');
-                        }
+                    // Удаляем теги
+                    if (tagsToRemove.length > 0) {
+                        const removeResponse = await fetch('/api/tags/bulk-assign', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                tag_names: tagsToRemove,
+                                target_type: 'instances',
+                                target_ids: appIds,
+                                action: 'remove'
+                            })
+                        });
+                        const removeResult = await removeResponse.json();
+                        if (removeResult.success) removedCount = removeResult.count;
+                    }
+
+                    if (addedCount > 0 || removedCount > 0) {
+                        showNotification(`Теги обновлены (добавлено: ${addedCount}, удалено: ${removedCount})`);
                     } else {
-                        throw new Error(result.error || 'Ошибка синхронизации тегов');
+                        showNotification('Изменений не было');
                     }
 
                     closeModal();
