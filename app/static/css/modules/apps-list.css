@@ -26,7 +26,7 @@
 .apps-row-header {
     display: grid;
     grid-template-columns: 60px 1fr 120px 100px 150px 80px;
-    align-items: center;
+    align-items: stretch; /* Все колонки одинаковой высоты */
     gap: 0;
 }
 
