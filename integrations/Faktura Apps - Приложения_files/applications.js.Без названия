@@ -644,7 +644,6 @@
          * @param {string|null} groupName - имя группы (если приложение в группе)
          */
         createAppElement(app, groupName = null) {
-            // Контейнер строки
             const row = document.createElement('div');
             row.className = 'apps-row';
             row.setAttribute('data-app-id', app.id);
@@ -652,10 +651,6 @@
             if (groupName) {
                 row.setAttribute('data-parent', groupName);
             }
-
-            // Header (grid с колонками)
-            const header = document.createElement('div');
-            header.className = 'apps-row-header';
 
             // 1. Колонка чекбокса
             const checkboxCol = document.createElement('div');
@@ -693,6 +688,15 @@
             nameContainer.appendChild(tagsContainer);
             nameCol.appendChild(nameContainer);
 
+            // Детали (сворачиваемые) - внутри колонки имени
+            const details = document.createElement('div');
+            details.className = 'apps-details';
+            details.innerHTML = `
+                <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+            `;
+            nameCol.appendChild(details);
+
             // 3. Колонка версии
             const versionCol = document.createElement('div');
             versionCol.className = 'apps-col apps-col-version';
@@ -727,25 +731,13 @@
             actionsCol.className = 'apps-col apps-col-actions';
             actionsCol.innerHTML = this.createActionsMenu(app);
 
-            // Собираем header (grid)
-            header.appendChild(checkboxCol);
-            header.appendChild(nameCol);
-            header.appendChild(versionCol);
-            header.appendChild(statusCol);
-            header.appendChild(serverCol);
-            header.appendChild(actionsCol);
-
-            // Детали (сворачиваемые) - под header
-            const details = document.createElement('div');
-            details.className = 'apps-details';
-            details.innerHTML = `
-                <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-                <div>Путь приложения: ${app.path || 'Н/Д'}</div>
-            `;
-
-            // Собираем строку (контейнер)
-            row.appendChild(header);
-            row.appendChild(details);
+            // Собираем строку (grid)
+            row.appendChild(checkboxCol);
+            row.appendChild(nameCol);
+            row.appendChild(versionCol);
+            row.appendChild(statusCol);
+            row.appendChild(serverCol);
+            row.appendChild(actionsCol);
 
             return row;
         },

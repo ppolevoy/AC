@@ -4,6 +4,10 @@
 
 {% block page_title %}Приложения{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modules/apps-list.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="cluster-info">
     <div class="server-dropdown">
@@ -22,10 +26,10 @@
         <span class="search-icon">🔍</span>
     </div>
     <div class="controls-container">
-        <button id="tag-filter-toggle" class="group-btn" title="Фильтр по тегам">
+        <button id="tag-filter-toggle" class="apps-group-btn" title="Фильтр по тегам">
             🏷️ Фильтр по тегам
         </button>
-        <button id="group-toggle-btn" class="group-btn active" title="Группировать">
+        <button id="group-toggle-btn" class="apps-group-btn active" title="Группировать">
             <span id="group-icon"></span> Группировать
         </button>
         <button id="refresh-btn" class="refresh-btn" title="Обновить">⟳</button>
@@ -62,29 +66,28 @@
         <button class="action-btn" id="batch-tags-btn" title="Управление тегами">🏷️ Управление тегами</button>
     </div>
     
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>
-                        <div class="header-checkbox-container">
-                            <label class="custom-checkbox">
-                                <input type="checkbox" id="select-all">
-                                <span class="checkmark"></span>
-                            </label>
-                        </div>
-                    </th>
-                    <th class="sortable" data-sort="name">Имя сервиса</th>
-                    <th>Версия</th>
-                    <th class="sortable" data-sort="state">Статус</th>
-                    <th>Сервер</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="applications-table-body">
-                <!-- Список приложений будет загружен динамически -->
-            </tbody>
-        </table>
+    <div class="apps-list-container">
+        <!-- Заголовок списка -->
+        <div class="apps-header">
+            <div class="apps-col apps-col-checkbox">
+                <div class="apps-checkbox-container">
+                    <label class="apps-custom-checkbox">
+                        <input type="checkbox" id="select-all">
+                        <span class="apps-checkmark"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="apps-col apps-col-name sortable" data-sort="name">Имя сервиса</div>
+            <div class="apps-col apps-col-version">Версия</div>
+            <div class="apps-col apps-col-status sortable" data-sort="state">Статус</div>
+            <div class="apps-col apps-col-server">Сервер</div>
+            <div class="apps-col apps-col-actions">Действия</div>
+        </div>
+
+        <!-- Список приложений -->
+        <div class="apps-list" id="applications-list-body">
+            <!-- Список приложений будет загружен динамически -->
+        </div>
     </div>
     
     <div class="pagination">
