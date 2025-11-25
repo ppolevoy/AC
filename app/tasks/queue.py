@@ -621,12 +621,12 @@ class TaskQueue:
             # Получаем HAProxy маппинг из таблицы ApplicationMapping
             mapping = ApplicationMapping.query.filter_by(
                 application_id=app.id,
-                service_type='haproxy'
+                entity_type='haproxy_server'
             ).first()
 
-            if mapping and mapping.external_server_id:
+            if mapping and mapping.entity_id:
                 # Есть маппинг - используем его
-                haproxy_server = HAProxyServer.query.get(mapping.external_server_id)
+                haproxy_server = HAProxyServer.query.get(mapping.entity_id)
                 if haproxy_server:
                     instance = f"{short_name}::{app.instance_name}::{haproxy_server.server_name}"
 
@@ -645,7 +645,7 @@ class TaskQueue:
                                 if haproxy_instance and haproxy_instance.server:
                                     # Формируем URL: http://{server_ip}:{agent_port}/haproxy/{instance_name}
                                     agent_port = current_app.config.get('FAGENT_PORT', 5000)
-                                    haproxy_api_url = f"http://{haproxy_instance.server.ip_address}:{agent_port}/haproxy/{haproxy_instance.name}"
+                                    haproxy_api_url = f"http://{haproxy_instance.server.ip}:{agent_port}/haproxy/{haproxy_instance.name}"
                                     logger.info(f"HAProxy API URL: {haproxy_api_url}")
 
                     logger.info(f"App {app.instance_name} mapped to HAProxy server {haproxy_server.server_name}")
@@ -653,7 +653,7 @@ class TaskQueue:
                     # Маппинг есть, но HAProxy сервер не найден
                     instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
                     unmapped_count += 1
-                    logger.warning(f"HAProxy server {mapping.external_server_id} not found for app {app.instance_name}")
+                    logger.warning(f"HAProxy server {mapping.entity_id} not found for app {app.instance_name}")
             else:
                 # Нет маппинга - используем стандартное именование
                 instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
