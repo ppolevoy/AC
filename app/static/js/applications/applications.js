@@ -739,8 +739,10 @@
             const details = document.createElement('div');
             details.className = 'apps-details';
             details.innerHTML = `
-                <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-                <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                <div class="apps-details-content">
+                    <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
+                    <div>Путь приложения: ${app.path || 'Н/Д'}</div>
+                </div>
             `;
 
             // Собираем строку (контейнер)

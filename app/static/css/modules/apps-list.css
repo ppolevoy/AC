@@ -250,18 +250,29 @@
     overflow: hidden;
     transition: max-height 0.3s ease-out, padding 0.3s ease-out;
     padding: 0 15px 0 75px; /* Выравнивание по колонке имени */
+}
+
+.apps-row.expanded .apps-details {
+    max-height: 120px;
+    padding: 12px 15px 12px 75px;
+    transition: max-height 0.4s ease-in, padding 0.4s ease-in;
+}
+
+.apps-details-content {
+    background-color: #333336;
+    max-width: 680px;
+    padding: 12px 15px;
+    border-radius: 5px;
     font-size: 13px;
     color: #888;
 }
 
-.apps-row.expanded .apps-details {
-    max-height: 100px;
-    padding: 12px 15px 12px 75px;
-    background-color: #333336;
-    transition: max-height 0.4s ease-in, padding 0.4s ease-in;
+.apps-details-content div {
+    padding: 5px;
+    background-color: #29292b;
 }
 
-.apps-details div + div {
+.apps-details-content div + div {
     margin-top: 6px;
 }
 
@@ -496,9 +507,13 @@ body.light-theme .apps-group-header:hover .apps-col {
     background-color: #f5f5f5;
 }
 
-body.light-theme .apps-row.expanded .apps-details {
+body.light-theme .apps-details-content {
     background-color: #e8e8e8;
     color: #666;
+}
+
+body.light-theme .apps-details-content div {
+    background-color: #ddd;
 }
 
 body.light-theme .apps-custom-checkbox {
