@@ -1,0 +1,218 @@
+/**
+ * apps-animations.css
+ * Стили анимаций и UI элементов для страницы Applications
+ * Извлечено из applications.js для улучшения поддержки кода
+ */
+
+/* ===========================================
+   Базовые анимации
+   =========================================== */
+
+.rotating {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.animated-fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animated-slide-down {
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        max-height: 200px;
+        transform: translateY(0);
+    }
+}
+
+/* ===========================================
+   Анимация формы
+   =========================================== */
+
+.form-content-animated > .form-group {
+    opacity: 0;
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+.form-content-animated > .form-group:nth-child(1) { animation-delay: 0.1s; }
+.form-content-animated > .form-group:nth-child(2) { animation-delay: 0.2s; }
+.form-content-animated > .form-group:nth-child(3) { animation-delay: 0.3s; }
+.form-content-animated > .form-group:nth-child(4) { animation-delay: 0.4s; }
+
+/* ===========================================
+   Стили для групп приложений
+   =========================================== */
+
+.apps-group-toggle {
+    transition: transform 0.3s ease;
+}
+
+/* ===========================================
+   Модальные вкладки
+   =========================================== */
+
+.modal-tab {
+    position: relative;
+    padding-right: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.tab-content {
+    flex: 1;
+}
+
+.tab-remove-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+    opacity: 0.6;
+}
+
+.tab-remove-btn:hover {
+    opacity: 1;
+    background-color: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.modal-tab:hover .tab-remove-btn {
+    opacity: 1;
+}
+
+.no-groups-message {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+    font-size: 16px;
+}
+
+/* ===========================================
+   Режим "Сейчас" (Immediate mode)
+   =========================================== */
+
+#immediate-mode-fields {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(52, 152, 219, 0.05);
+    border-left: 3px solid #3498db;
+    border-radius: 4px;
+}
+
+/* Стиль для select оркестратора - темный фон */
+#immediate-mode-fields select#orchestrator-playbook {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    border: 1px solid #34495e;
+}
+
+#immediate-mode-fields select#orchestrator-playbook option {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+}
+
+/* ===========================================
+   Контейнер ожидания drain
+   =========================================== */
+
+.drain-wait-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.drain-wait-container input[type="number"] {
+    flex: 0 0 120px;
+    text-align: center;
+}
+
+/* Убираем стрелки spinner у input[type="number"] */
+#immediate-mode-fields input[type="number"]::-webkit-inner-spin-button,
+#immediate-mode-fields input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#immediate-mode-fields input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+.unit-label {
+    color: #666;
+    font-size: 14px;
+}
+
+/* ===========================================
+   Быстрый выбор времени
+   =========================================== */
+
+.quick-select-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+.quick-time-link {
+    color: #3498db;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 2px 4px;
+}
+
+.quick-time-link:hover {
+    color: #2980b9;
+    text-decoration: underline;
+}
+
+.quick-time-link.active {
+    color: #27ae60;
+    font-weight: 600;
+}
+
+/* ===========================================
+   Вспомогательный текст
+   =========================================== */
+
+.form-help-text {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #7f8c8d;
+    font-style: italic;
+}
