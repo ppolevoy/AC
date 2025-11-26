@@ -836,7 +836,7 @@
                     <div class="group-apps-info animated-fade-in" style="animation-delay: 0.4s">
                         <label>Приложения в группе:</label>
                         <div class="apps-list">
-                            ${apps.map(app => `<span class="app-badge">${app.name}</span>`).join('')}
+                            ${[...apps].sort((a, b) => `${a.server_name}_${a.name}`.localeCompare(`${b.server_name}_${b.name}`)).map(app => `<span class="app-badge">${app.server_name}_${app.name}</span>`).join('')}
                         </div>
                     </div>
                 </div>`;
