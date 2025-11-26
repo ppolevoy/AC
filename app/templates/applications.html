@@ -6,6 +6,8 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modules/apps-list.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modules/apps-animations.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modules/app-info-modal.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -243,6 +245,25 @@
 {% endblock %}
 
 {% block page_scripts %}
-<!-- Подключаем скрипт для страницы приложений -->
+<!-- Core модули -->
+<script src="{{ url_for('static', filename='js/applications/core/config.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/core/security-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/core/dom-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/core/state-manager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/core/api-service.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/core/artifacts-manager.js') }}"></script>
+<!-- UI модули -->
+<script src="{{ url_for('static', filename='js/applications/ui/tags-renderer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/ui/element-factory.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/ui/pagination.js') }}"></script>
+<!-- Modal модули -->
+<script src="{{ url_for('static', filename='js/applications/modals/info-modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/modals/tags-modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/modals/update-modal.js') }}"></script>
+<!-- Handler модули -->
+<script src="{{ url_for('static', filename='js/applications/handlers/dropdown-handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/handlers/checkbox-handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications/handlers/table-actions.js') }}"></script>
+<!-- Главный скрипт страницы приложений -->
 <script src="{{ url_for('static', filename='js/applications/applications.js') }}"></script>
 {% endblock %}

@@ -379,7 +379,10 @@ createFormModalContent: function(formFields, submitButtonText) {
     formActions.appendChild(submitBtn);
     
     form.appendChild(formActions);
-    
+
     return form;
 }
 };
+
+// Экспорт в глобальную область
+window.ModalUtils = ModalUtils;

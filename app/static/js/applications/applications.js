@@ -1,407 +1,28 @@
 /**
  * Faktura Apps - Управление приложениями
- *
+ * Главный модуль страницы приложений
  */
 
 (function() {
     'use strict';
 
     // ========================================
-    // КОНСТАНТЫ И КОНФИГУРАЦИЯ
-    // ========================================    
-
-    // Утилиты безопасности для предотвращения XSS
-    const SecurityUtils = {
-        escapeHtml(text) {
-            if (text == null) return '';
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;',
-                '/': '&#x2F;'
-            };
-            return String(text).replace(/[&<>"'\/]/g, char => map[char]);
-        },
-        
-        createSafeElement(tag, attrs = {}, content = '') {
-            const element = document.createElement(tag);
-            
-            Object.keys(attrs).forEach(key => {
-                if (key === 'className') {
-                    element.className = attrs.className;
-                } else if (key === 'dataset') {
-                    Object.assign(element.dataset, attrs.dataset);
-                } else if (key === 'innerHTML' && attrs.trustHtml) {
-                    element.innerHTML = attrs.innerHTML;
-                } else {
-                    element.setAttribute(key, attrs[key]);
-                }
-            });
-            
-            if (typeof content === 'string') {
-                element.textContent = content;
-            }
-            
-            return element;
-        }
-    };
-    
-    // Утилиты для работы с DOM
-    const DOMUtils = {
-        getTableContext() {
-            return document.getElementById('applications-list-body');
-        },
-
-        querySelectorInTable(selector) {
-            const listBody = this.getTableContext();
-            return listBody ? listBody.querySelectorAll(selector) : [];
-        },
-
-        getTableColumnCount() {
-            // Теперь используем div-структуру, но оставляем для совместимости
-            return 6;
-        },
-        
-        debounce(func, wait = 300) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-    };    
-   
-    const CONFIG = {
-        PROGRESS: {
-            START: 10,
-            FETCH_COMPLETE: 70,
-            PARSE_COMPLETE: 100
-        },
-        CACHE_LIFETIME: 5 * 60 * 1000, // 5 минут
-        ANIMATION_DELAYS: {
-            FADE_IN: 100,
-            FIELD_STAGGER: 100,
-            MIN_LOADER_TIME: 600
-        },
-        MAX_ARTIFACTS_DISPLAY: 20,
-        PAGE_SIZE: 10
-    };
-
+    // ССЫЛКИ НА ВНЕШНИЕ МОДУЛИ
     // ========================================
-    // МОДУЛЬ УПРАВЛЕНИЯ СОСТОЯНИЕМ
-    // ========================================
-    const StateManager = {
-        // Основное состояние приложения
-        state: {
-            allApplications: [],
-            selectedItems: {
-                applications: new Set(),
-                groups: new Set()
-            },
-            expandedGroups: [],
-            selectedServerId: 'all',
-            currentPage: 1,
-            pageSize: CONFIG.PAGE_SIZE,
-            sortColumn: 'name',
-            sortDirection: 'asc',
-            searchQuery: '',
-            groupingEnabled: false,
-            selectedTags: [],
-            tagOperator: 'OR',
-            availableTags: []
-        },
+    // Core модули загружаются из отдельных файлов:
+    // - CONFIG (core/config.js)
+    // - SecurityUtils (core/security-utils.js)
+    // - DOMUtils (core/dom-utils.js)
+    // - StateManager (core/state-manager.js)
+    // - ApiService (core/api-service.js)
+    // - ArtifactsManager (core/artifacts-manager.js)
 
-        // Кэш артефактов
-        artifactsCache: {},
-
-        // Активное выпадающее меню
-        activeDropdown: null,
-
-        // Методы работы с состоянием
-        clearSelection() {
-            this.state.selectedItems.applications.clear();
-            this.state.selectedItems.groups.clear();
-        },
-
-        addSelectedApp(appId) {
-            this.state.selectedItems.applications.add(appId);
-        },
-
-        removeSelectedApp(appId) {
-            this.state.selectedItems.applications.delete(appId);
-        },
-
-        isAppSelected(appId) {
-            return this.state.selectedItems.applications.has(appId);
-        },
-
-        getSelectedAppIds() {
-            return Array.from(this.state.selectedItems.applications);
-        },
-
-        getAppById(appId) {
-            return this.state.allApplications.find(app => app.id == appId);
-        },
-
-        clearArtifactsCache(appId = null) {
-            if (appId) {
-                delete this.artifactsCache[`app_${appId}`];
-            } else {
-                this.artifactsCache = {};
-            }
-        },
-
-        getArtifactsCacheAge(appId) {
-            const cacheKey = `app_${appId}`;
-            if (this.artifactsCache[cacheKey]) {
-                return (Date.now() - this.artifactsCache[cacheKey].timestamp) / 1000;
-            }
-            return Infinity;
-        },
-
-        saveTableState() {
-            this.state.expandedGroups = [];
-            document.querySelectorAll('.apps-group.expanded').forEach(group => {
-                const groupName = group.getAttribute('data-group');
-                if (groupName) {
-                    this.state.expandedGroups.push(groupName);
-                }
-            });
-        }
-    };
-
-    // ========================================
-    // МОДУЛЬ РАБОТЫ С API
-    // ========================================
-    const ApiService = {
-        async loadServers() {
-            try {
-                const response = await fetch('/api/servers');
-                const data = await response.json();
-                return data.success ? data.servers : [];
-            } catch (error) {
-                console.error('Ошибка загрузки серверов:', error);
-                showError('Не удалось загрузить список серверов');
-                return [];
-            }
-        },
-
-        async loadApplications(serverId = null) {
-            try {
-                let url = '/api/applications';
-                if (serverId && serverId !== 'all') {
-                    url += `?server_id=${serverId}`;
-                }
-                const response = await fetch(url);
-                const data = await response.json();
-                return data.success ? data.applications : [];
-            } catch (error) {
-                console.error('Ошибка загрузки приложений:', error);
-                showError('Не удалось загрузить список приложений');
-                return [];
-            }
-        },
-
-        async loadTags() {
-            try {
-                const response = await fetch('/api/tags');
-                const data = await response.json();
-                return data.success ? data.tags : [];
-            } catch (error) {
-                console.error('Ошибка загрузки тегов:', error);
-                return [];
-            }
-        },
-
-        async loadArtifacts(appId, limit = CONFIG.MAX_ARTIFACTS_DISPLAY, showProgress = false) {
-            try {
-                if (showProgress) {
-                    const progressBar = document.querySelector('.progress-bar');
-                    if (progressBar) {
-                        progressBar.style.width = '30%';
-                    }
-                }
-
-                const response = await fetch(`/api/applications/${appId}/artifacts?limit=${limit}`);
-                
-                if (showProgress) {
-                    const progressBar = document.querySelector('.progress-bar');
-                    if (progressBar) {
-                        progressBar.style.width = '70%';
-                    }
-                }
-
-                const data = await response.json();
-                
-                if (showProgress) {
-                    const progressBar = document.querySelector('.progress-bar');
-                    if (progressBar) {
-                        progressBar.style.width = '100%';
-                    }
-                }
-
-                if (data.success && data.versions && data.versions.length > 0) {
-                    // Сортируем версии только по номеру (от большего к меньшему)
-                    const sortedVersions = data.versions.sort((a, b) => {
-                        // Функция для извлечения числовых частей версии
-                        const extractVersion = (versionObj) => {
-                            // Удаляем префиксы типа 'v' и суффиксы типа '-SNAPSHOT', '-dev'
-                            const cleanVersion = versionObj.version
-                                .replace(/^v/i, '')
-                                .replace(/[-_](snapshot|dev|alpha|beta|rc).*$/i, '');
-                            
-                            // Разбиваем на числовые части
-                            const parts = cleanVersion.split(/[.-]/).map(part => {
-                                const num = parseInt(part, 10);
-                                return isNaN(num) ? 0 : num;
-                            });
-                            
-                            // Дополняем нулями до 4 частей для корректного сравнения
-                            while (parts.length < 4) parts.push(0);
-                            
-                            return parts;
-                        };
-                        
-                        const aParts = extractVersion(a);
-                        const bParts = extractVersion(b);
-                        
-                        // Сравниваем по частям (от большего к меньшему)
-                        for (let i = 0; i < 4; i++) {
-                            if (bParts[i] !== aParts[i]) {
-                                return bParts[i] - aParts[i];
-                            }
-                        }
-                        
-                        // Если версии одинаковые, release версии приоритетнее
-                        if (a.is_release && !b.is_release) return -1;
-                        if (!a.is_release && b.is_release) return 1;
-                        
-                        return 0;
-                    });
-
-                    return sortedVersions.slice(0, limit);
-                }
-                
-                return null;
-            } catch (error) {
-                console.error('Ошибка загрузки артефактов:', error);
-                return null;
-            }
-        },
-
-        async executeAction(appIds, action) {
-            try {
-                const response = await fetch('/api/applications/batch_action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ app_ids: appIds, action })
-                });
-                return await response.json();
-            } catch (error) {
-                console.error('Ошибка выполнения действия:', error);
-                showError(`Не удалось выполнить действие "${action}"`);
-                return { success: false, error: error.message };
-            }
-        },
-
-        async updateApplication(appId, updateParams) {
-            try {
-                const response = await fetch(`/api/applications/${appId}/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updateParams)
-                });
-                return await response.json();
-            } catch (error) {
-                console.error('Ошибка обновления приложения:', error);
-                return { success: false, error: error.message };
-            }
-        },
-
-        async getApplicationInfo(appId) {
-            try {
-                const response = await fetch(`/api/applications/${appId}`);
-                const data = await response.json();
-                return data.success ? data.application : null;
-            } catch (error) {
-                console.error('Ошибка получения информации:', error);
-                showError('Не удалось получить информацию о приложении');
-                return null;
-            }
-        },
-
-        async loadOrchestrators(activeOnly = true) {
-            try {
-                const url = `/api/orchestrators${activeOnly ? '?active_only=true' : ''}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                return data.success ? data.orchestrators : [];
-            } catch (error) {
-                console.error('Ошибка загрузки оркестраторов:', error);
-                showError('Не удалось загрузить список оркестраторов');
-                return [];
-            }
-        }
-    };
-
-    // ========================================
-    // МОДУЛЬ РАБОТЫ С АРТЕФАКТАМИ
-    // ========================================
-    const ArtifactsManager = {
-        async loadWithCache(appId, showProgress = false) {
-            const now = Date.now();
-            const cacheKey = `app_${appId}`;
-            const cache = StateManager.artifactsCache[cacheKey];
-
-            // Проверяем кэш
-            if (cache && (now - cache.timestamp) < CONFIG.CACHE_LIFETIME) {
-                return cache.data;
-            }
-
-            // Загружаем свежие данные
-            const artifacts = await ApiService.loadArtifacts(appId, CONFIG.MAX_ARTIFACTS_DISPLAY, showProgress);
-            if (artifacts && artifacts.length > 0) {
-                StateManager.artifactsCache[cacheKey] = {
-                    timestamp: now,
-                    data: artifacts
-                };
-                return artifacts;
-            }
-
-            return null;
-        },
-
-        createVersionSelect(artifacts, currentValue) {
-            if (!artifacts || artifacts.length === 0) {
-                return '<option value="">Нет доступных версий</option>';
-            }
-
-            const options = artifacts.map(version => {
-                let label = version.version;
-                let className = '';
-                const versionLower = version.version.toLowerCase();
-
-                if (versionLower.includes('snapshot')) {
-                    className = 'version-snapshot';
-                } else if (versionLower.includes('dev')) {
-                    className = 'version-dev';
-                } else if (version.is_release) {
-                    className = 'version-release';
-                }
-
-                const selected = version.url === currentValue ? 'selected' : '';
-                return `<option value="${version.url}" class="${className}" ${selected}>${label}</option>`;
-            }).join('');
-
-            return options + '<option value="custom" class="custom-option">➕ Указать вручную...</option>';
-        }
-    };
+    const CONFIG = window.CONFIG;
+    const SecurityUtils = window.SecurityUtils;
+    const DOMUtils = window.DOMUtils;
+    const StateManager = window.StateManager;
+    const ApiService = window.ApiService;
+    const ArtifactsManager = window.ArtifactsManager;
 
     // ========================================
     // МОДУЛЬ РАБОТЫ С UI
@@ -540,340 +161,46 @@
             listBody.appendChild(groupContainer);
         },
 
-        // Рендеринг тегов с унаследованными
+        // Рендеринг тегов с унаследованными - делегирование к TagsRenderer
         renderTagsWithInherited(ownTags, groupTags) {
-            const allTags = [];
-            const ownTagIds = new Set((ownTags || []).map(t => t.id));
-
-            // Добавляем собственные теги
-            (ownTags || []).forEach(tag => {
-                allTags.push({ ...tag, inherited: false });
-            });
-
-            // Добавляем унаследованные теги (если их нет в собственных)
-            (groupTags || []).forEach(tag => {
-                if (!ownTagIds.has(tag.id)) {
-                    allTags.push({ ...tag, inherited: true });
-                }
-            });
-
-            if (allTags.length === 0) {
-                return '<span class="no-tags">—</span>';
-            }
-
-            const container = document.createElement('div');
-            container.className = 'table-tags-container';
-
-            const maxVisible = 4;
-            const visibleTags = allTags.slice(0, maxVisible);
-            const hiddenCount = allTags.length - maxVisible;
-
-            visibleTags.forEach(tag => {
-                const span = document.createElement('span');
-                span.className = `tag ${tag.css_class || ''}${tag.inherited ? ' tag-inherited' : ''}`;
-                span.title = tag.inherited ? 'Унаследован от группы' : '';
-
-                // Применяем цвета из настроек тега
-                if (tag.border_color) {
-                    span.style.borderColor = tag.border_color;
-                }
-                if (tag.text_color) {
-                    span.style.color = tag.text_color;
-                }
-
-                span.textContent = tag.display_name || tag.name;
-                container.appendChild(span);
-            });
-
-            if (hiddenCount > 0) {
-                const more = document.createElement('span');
-                more.className = 'tags-more';
-                more.textContent = `+${hiddenCount}`;
-                more.title = allTags.slice(maxVisible).map(t => t.display_name || t.name).join(', ');
-                more.setAttribute('onclick', 'event.stopPropagation()');
-                container.appendChild(more);
-            }
-
-            return container.outerHTML;
+            return window.TagsRenderer.render(ownTags, { groupTags });
         },
 
-        // Рендеринг тегов
+        // Рендеринг тегов - делегирование к TagsRenderer
         renderTags(tags) {
-            if (!tags || tags.length === 0) {
-                return '<span class="no-tags">—</span>';
-            }
-
-            const container = document.createElement('div');
-            container.className = 'table-tags-container';
-
-            const maxVisible = 4;
-            const visibleTags = tags.slice(0, maxVisible);
-            const hiddenCount = tags.length - maxVisible;
-
-            visibleTags.forEach(tag => {
-                const span = document.createElement('span');
-                span.className = `tag ${tag.css_class || ''}`;
-
-                // Применяем цвета из настроек тега
-                if (tag.border_color) {
-                    span.style.borderColor = tag.border_color;
-                }
-                if (tag.text_color) {
-                    span.style.color = tag.text_color;
-                }
-
-                span.textContent = tag.display_name || tag.name;
-                container.appendChild(span);
-            });
-
-            if (hiddenCount > 0) {
-                const more = document.createElement('span');
-                more.className = 'tags-more';
-                more.textContent = `+${hiddenCount}`;
-                more.title = tags.slice(maxVisible).map(t => t.display_name || t.name).join(', ');
-                more.setAttribute('onclick', 'event.stopPropagation()');
-                container.appendChild(more);
-            }
-
-            return container.outerHTML;
+            return window.TagsRenderer.render(tags);
         },
 
         /**
-         * Создает элемент строки приложения (используется и для flat-режима, и для групп)
-         * @param {Object} app - данные приложения
-         * @param {string|null} groupName - имя группы (если приложение в группе)
+         * Создает элемент строки приложения - делегирование к ElementFactory
          */
         createAppElement(app, groupName = null) {
-            // Контейнер строки
-            const row = document.createElement('div');
-            row.className = 'apps-row';
-            row.setAttribute('data-app-id', app.id);
-            row.setAttribute('data-app-name', (app.name || '').toLowerCase());
-            if (groupName) {
-                row.setAttribute('data-parent', groupName);
-            }
-
-            // Header (grid с колонками)
-            const header = document.createElement('div');
-            header.className = 'apps-row-header';
-
-            // 1. Колонка чекбокса
-            const checkboxCol = document.createElement('div');
-            checkboxCol.className = 'apps-col apps-col-checkbox';
-            const checkboxContainer = document.createElement('div');
-            checkboxContainer.className = 'apps-checkbox-container';
-            const checkboxLabel = document.createElement('label');
-            checkboxLabel.className = 'apps-custom-checkbox';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'app-checkbox';
-            checkbox.setAttribute('data-app-id', app.id);
-            const checkmark = document.createElement('span');
-            checkmark.className = 'apps-checkmark';
-            checkboxLabel.appendChild(checkbox);
-            checkboxLabel.appendChild(checkmark);
-            checkboxContainer.appendChild(checkboxLabel);
-            checkboxCol.appendChild(checkboxContainer);
-
-            // 2. Колонка имени
-            const nameCol = document.createElement('div');
-            nameCol.className = 'apps-col apps-col-name';
-
-            // Контейнер для имени и тегов
-            const nameContainer = document.createElement('div');
-            nameContainer.className = 'apps-name-with-tags';
-            const nameText = document.createElement('span');
-            nameText.textContent = app.name || '';
-            nameContainer.appendChild(nameText);
-
-            // Теги рядом с именем
-            const tagsContainer = document.createElement('span');
-            tagsContainer.className = 'apps-inline-tags';
-            tagsContainer.innerHTML = this.renderTagsWithInherited(app.tags || [], app.group_tags || []);
-            nameContainer.appendChild(tagsContainer);
-            nameCol.appendChild(nameContainer);
-
-            // 3. Колонка версии
-            const versionCol = document.createElement('div');
-            versionCol.className = 'apps-col apps-col-version';
-            versionCol.textContent = app.version || 'Н/Д';
-
-            // 4. Колонка статуса
-            const statusCol = document.createElement('div');
-            statusCol.className = 'apps-col apps-col-status';
-            const statusDot = document.createElement('span');
-            let statusText;
-            if (app.status === 'no_data' || app.status === 'unknown') {
-                statusDot.className = 'apps-status-dot no-data';
-                statusText = 'Н/Д';
-            } else if (app.status === 'online') {
-                statusDot.className = 'apps-status-dot';
-                statusText = app.status;
-            } else {
-                statusDot.className = 'apps-status-dot offline';
-                statusText = app.status || 'offline';
-            }
-            statusCol.appendChild(statusDot);
-            const statusTextNode = document.createTextNode(` ${statusText}`);
-            statusCol.appendChild(statusTextNode);
-
-            // 5. Колонка сервера
-            const serverCol = document.createElement('div');
-            serverCol.className = 'apps-col apps-col-server';
-            serverCol.textContent = app.server_name || 'Н/Д';
-
-            // 6. Колонка действий
-            const actionsCol = document.createElement('div');
-            actionsCol.className = 'apps-col apps-col-actions';
-            actionsCol.innerHTML = this.createActionsMenu(app);
-
-            // Собираем header (grid)
-            header.appendChild(checkboxCol);
-            header.appendChild(nameCol);
-            header.appendChild(versionCol);
-            header.appendChild(statusCol);
-            header.appendChild(serverCol);
-            header.appendChild(actionsCol);
-
-            // Детали (сворачиваемые) - под header
-            const details = document.createElement('div');
-            details.className = 'apps-details';
-            details.innerHTML = `
-                <div class="apps-details-content">
-                    <div>Время запуска: ${app.start_time ? new Date(app.start_time).toLocaleString() : 'Н/Д'}</div>
-                    <div>Путь приложения: ${app.path || 'Н/Д'}</div>
-                </div>
-            `;
-
-            // Собираем строку (контейнер)
-            row.appendChild(header);
-            row.appendChild(details);
-
-            return row;
+            return window.ElementFactory.createAppElement(app, groupName, {
+                renderTagsWithInherited: this.renderTagsWithInherited.bind(this)
+            });
         },
 
+        /**
+         * Создает элемент заголовка группы - делегирование к ElementFactory
+         */
         createGroupElement(groupName, apps) {
-            const header = document.createElement('div');
-            header.className = 'apps-group-header';
-
-            // Колонка чекбокса
-            const checkboxCol = document.createElement('div');
-            checkboxCol.className = 'apps-col apps-col-checkbox';
-            const checkboxContainer = document.createElement('div');
-            checkboxContainer.className = 'apps-checkbox-container';
-            const checkboxLabel = document.createElement('label');
-            checkboxLabel.className = 'apps-custom-checkbox';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'group-checkbox';
-            checkbox.dataset.group = groupName;
-            const checkmark = document.createElement('span');
-            checkmark.className = 'apps-checkmark';
-            checkboxLabel.appendChild(checkbox);
-            checkboxLabel.appendChild(checkmark);
-            checkboxContainer.appendChild(checkboxLabel);
-            checkboxCol.appendChild(checkboxContainer);
-
-            // Колонка имени группы
-            const nameCol = document.createElement('div');
-            nameCol.className = 'apps-col apps-col-name';
-            const nameContainer = document.createElement('div');
-            nameContainer.className = 'apps-group-name-container';
-            const toggle = document.createElement('span');
-            toggle.className = 'apps-group-toggle';
-            toggle.textContent = '▶';
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'apps-group-name';
-            nameSpan.textContent = `${groupName} (${apps.length})`;
-            nameContainer.appendChild(toggle);
-            nameContainer.appendChild(nameSpan);
-
-            // Теги группы рядом с именем
-            const groupTags = apps[0]?.group_tags || [];
-            if (groupTags.length > 0) {
-                const tagsContainer = document.createElement('span');
-                tagsContainer.className = 'apps-inline-tags';
-                tagsContainer.innerHTML = this.renderTags(groupTags);
-                nameContainer.appendChild(tagsContainer);
-            }
-            nameCol.appendChild(nameContainer);
-
-            // Колонка версии
-            const versionCol = document.createElement('div');
-            versionCol.className = 'apps-col apps-col-version';
-            const versions = new Set(apps.map(app => app.version || 'Н/Д'));
-            if (versions.size === 1) {
-                versionCol.textContent = apps[0].version || 'Н/Д';
-            } else {
-                versionCol.innerHTML = '<span class="apps-version-different">*</span>';
-            }
-
-            // Колонка статуса
-            const statusCol = document.createElement('div');
-            statusCol.className = 'apps-col apps-col-status';
-            const hasOffline = apps.some(app => app.status === 'offline');
-            const hasNoData = apps.some(app => app.status === 'no_data' || app.status === 'unknown');
-            const hasProblems = hasOffline || hasNoData;
-            const statusDot = document.createElement('span');
-            statusDot.className = hasProblems ? 'apps-status-dot warning' : 'apps-status-dot';
-            statusCol.appendChild(statusDot);
-
-            // Колонка сервера
-            const serverCol = document.createElement('div');
-            serverCol.className = 'apps-col apps-col-server';
-            serverCol.textContent = '—';
-
-            // Колонка действий
-            const actionsCol = document.createElement('div');
-            actionsCol.className = 'apps-col apps-col-actions';
-            actionsCol.innerHTML = this.createGroupActionsMenu(groupName, apps);
-
-            // Собираем header
-            header.appendChild(checkboxCol);
-            header.appendChild(nameCol);
-            header.appendChild(versionCol);
-            header.appendChild(statusCol);
-            header.appendChild(serverCol);
-            header.appendChild(actionsCol);
-
-            return header;
+            return window.ElementFactory.createGroupElement(groupName, apps, {
+                renderTags: this.renderTags.bind(this)
+            });
         },
 
+        /**
+         * Создает меню действий для приложения - делегирование к ElementFactory
+         */
         createActionsMenu(app) {
-            const appId = parseInt(app.id, 10); // Дополнительная защита - приводим к числу
-            
-            return `
-                <div class="actions-menu">
-                    <button class="actions-button">...</button>
-                    <div class="actions-dropdown">
-                        <a href="#" class="app-info-btn" data-app-id="${appId}">Информация</a>
-                        <a href="#" class="app-start-btn ${app.status === 'online' ? 'disabled' : ''}" data-app-id="${appId}">Запустить</a>
-                        <a href="#" class="app-stop-btn ${app.status !== 'online' ? 'disabled' : ''}" data-app-id="${appId}">Остановить</a>
-                        <a href="#" class="app-restart-btn ${app.status !== 'online' ? 'disabled' : ''}" data-app-id="${appId}">Перезапустить</a>
-                        <a href="#" class="app-update-btn" data-app-id="${appId}">Обновить</a>
-                    </div>
-                </div>
-            `;
+            return window.ElementFactory.createActionsMenu(app);
         },
 
+        /**
+         * Создает меню действий для группы - делегирование к ElementFactory
+         */
         createGroupActionsMenu(groupName, apps) {
-            const hasOnline = apps.some(app => app.status === 'online');
-            const hasOffline = apps.some(app => app.status !== 'online');
-            const groupId = apps[0]?.group_id || '';
-
-            return `
-                <div class="actions-menu">
-                    <button class="actions-button">...</button>
-                    <div class="actions-dropdown">
-                        <a href="#" class="group-info-btn" data-group="${groupName}">Информация</a>
-                        <a href="#" class="group-tags-btn" data-group="${groupName}" data-group-id="${groupId}">Теги</a>
-                        <a href="#" class="group-start-btn ${!hasOffline ? 'disabled' : ''}" data-group="${groupName}">Запустить все</a>
-                        <a href="#" class="group-stop-btn ${!hasOnline ? 'disabled' : ''}" data-group="${groupName}">Остановить все</a>
-                        <a href="#" class="group-restart-btn ${!hasOnline ? 'disabled' : ''}" data-group="${groupName}">Перезапустить все</a>
-                        <a href="#" class="group-update-btn" data-group="${groupName}">Обновить все</a>
-                    </div>
-                </div>
-            `;
+            return window.ElementFactory.createGroupActionsMenu(groupName, apps);
         },
 
         groupApplications(applications) {
@@ -888,45 +215,20 @@
             return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
         },
 
+        /**
+         * Пагинация данных - делегирование к Pagination
+         */
         paginateData(data) {
             const { currentPage, pageSize } = StateManager.state;
-            const startIndex = (currentPage - 1) * pageSize;
-            const endIndex = startIndex + pageSize;
-            return data.slice(startIndex, endIndex);
+            return window.Pagination.paginateData(data, currentPage, pageSize);
         },
 
-        // обработка пагинации
+        /**
+         * Обновление пагинации - делегирование к Pagination
+         */
         updatePagination(totalItems) {
-            const totalPages = Math.ceil(totalItems / StateManager.state.pageSize);
-            const paginationControls = document.getElementById('pagination-controls');
-            if (!paginationControls) return;
-
-            const { currentPage } = StateManager.state;
-                    
-            // Обновляем номер текущей страницы
-            const pageNumberElement = paginationControls.querySelector('.page-number');
-            if (pageNumberElement) {
-                pageNumberElement.textContent = totalPages > 0 ? currentPage : '0';
-            }
-            
-            // Обновляем состояние кнопок (только disabled, не обработчики!)
-            const prevButton = paginationControls.querySelector('.prev-page');
-            const nextButton = paginationControls.querySelector('.next-page');
-            
-            if (prevButton) {
-                prevButton.disabled = currentPage <= 1 || totalPages === 0;
-            }
-            
-            if (nextButton) {
-                nextButton.disabled = currentPage >= totalPages || totalPages === 0;
-            }
-            
-            // Сохраняем информацию о страницах в data-атрибутах для отладки
-            if (paginationControls) {
-                paginationControls.setAttribute('data-current-page', currentPage);
-                paginationControls.setAttribute('data-total-pages', totalPages);
-                paginationControls.setAttribute('data-total-items', totalItems);
-            }
+            const { currentPage, pageSize } = StateManager.state;
+            window.Pagination.updatePagination(totalItems, currentPage, pageSize);
         },
 
         updateActionButtonsState(hasSelection) {
@@ -1534,7 +836,7 @@
                     <div class="group-apps-info animated-fade-in" style="animation-delay: 0.4s">
                         <label>Приложения в группе:</label>
                         <div class="apps-list">
-                            ${apps.map(app => `<span class="app-badge">${app.name}</span>`).join('')}
+                            ${[...apps].sort((a, b) => `${a.server_name}_${a.name}`.localeCompare(`${b.server_name}_${b.name}`)).map(app => `<span class="app-badge">${app.server_name}_${app.name}</span>`).join('')}
                         </div>
                     </div>
                 </div>`;
@@ -2110,92 +1412,18 @@
             }
         },
 
+        /**
+         * Инициализация обработчиков выпадающих меню - делегирование к DropdownHandlers
+         */
         initDropdownHandlers() {
-            // Создаем оверлей для выпадающих меню
-            let dropdownOverlay = document.querySelector('.dropdown-overlay');
-            if (!dropdownOverlay) {
-                dropdownOverlay = document.createElement('div');
-                dropdownOverlay.className = 'dropdown-overlay';
-                document.body.appendChild(dropdownOverlay);
-            }
-            
-            // Обработчик клика по кнопке меню
-            document.body.addEventListener('click', (e) => {
-                const actionButton = e.target.closest('.actions-button');
-                if (actionButton) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.toggleDropdown(actionButton);
-                }
-            });
-            
-            // Закрытие меню при клике на оверлей
-            dropdownOverlay.addEventListener('click', () => {
-                this.closeAllDropdowns();
-            });
+            window.DropdownHandlers.init();
         },
 
-        toggleDropdown(actionButton) {
-            const dropdown = actionButton.nextElementSibling;
-            const dropdownOverlay = document.querySelector('.dropdown-overlay');
-            
-            if (dropdown.classList.contains('show')) {
-                this.closeAllDropdowns();
-                return;
-            }
-            
-            this.closeAllDropdowns();
-            
-            // Показываем оверлей и меню
-            dropdownOverlay.style.display = 'block';
-            this.positionDropdown(dropdown, actionButton);
-            StateManager.activeDropdown = dropdown;
-        },
-
-        positionDropdown(dropdown, actionButton) {
-            const buttonRect = actionButton.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - buttonRect.bottom;
-            const showUpwards = spaceBelow < 200;
-            
-            // Сначала сбрасываем все позиции
-            dropdown.style.top = '';
-            dropdown.style.bottom = '';
-            dropdown.style.display = 'block';
-            dropdown.style.opacity = '0';
-            dropdown.classList.remove('dropdown-up');
-            
-            if (showUpwards) {
-                dropdown.classList.add('dropdown-up');
-                dropdown.style.bottom = (window.innerHeight - buttonRect.top) + 'px';
-                dropdown.style.top = 'auto'; // Явно убираем top
-            } else {
-                dropdown.style.top = buttonRect.bottom + 'px';
-                dropdown.style.bottom = 'auto'; // Явно убираем bottom
-            }
-            
-            dropdown.style.right = (window.innerWidth - buttonRect.right) + 'px';
-            dropdown.classList.add('show');
-            dropdown.style.opacity = '1';
-            actionButton.classList.add('active');
-        },
-
+        /**
+         * Закрывает все выпадающие меню - делегирование к DropdownHandlers
+         */
         closeAllDropdowns() {
-            const dropdownOverlay = document.querySelector('.dropdown-overlay');
-            if (dropdownOverlay) {
-                dropdownOverlay.style.display = 'none';
-            }
-            
-            document.querySelectorAll('.actions-dropdown.show').forEach(dropdown => {
-                dropdown.classList.remove('show');
-                dropdown.style.display = '';
-                
-                const actionButton = dropdown.previousElementSibling;
-                if (actionButton) {
-                    actionButton.classList.remove('active');
-                }
-            });
-            
-            StateManager.activeDropdown = null;
+            window.DropdownHandlers.closeAll();
         },
 
         async initServerSelection() {
@@ -2299,80 +1527,14 @@
             }
         },
 
-        // обработка чекбокса "выбрать все"
+        /**
+         * Инициализация обработчиков чекбоксов - делегирование к CheckboxHandlers
+         */
         initCheckboxHandlers() {
-            const selectAllCheckbox = document.getElementById('select-all');
-            if (selectAllCheckbox) {
-                selectAllCheckbox.addEventListener('change', function(e) {
-                    const isChecked = this.checked;
-                    
-                    // Используем контекст таблицы
-                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
-                        checkbox.checked = isChecked;
-                        const appId = checkbox.dataset.appId;
-                        if (appId) {
-                            if (isChecked) {
-                                StateManager.addSelectedApp(appId);
-                            } else {
-                                StateManager.removeSelectedApp(appId);
-                            }
-                        }
-                    });
-                    
-                    // Обновляем групповые чекбоксы тоже в контексте таблицы
-                    DOMUtils.querySelectorInTable('.group-checkbox').forEach(checkbox => {
-                        checkbox.checked = isChecked;
-                        checkbox.indeterminate = false;
-                    });
-                    
-                    UIRenderer.updateActionButtonsState(StateManager.state.selectedItems.applications.size > 0);
-                });
-            }
-            
-            // Делегирование событий для чекбоксов
-            document.addEventListener('change', (e) => {
-                if (e.target.classList.contains('app-checkbox')) {
-                    const appId = e.target.dataset.appId;
-                    if (e.target.checked) {
-                        StateManager.addSelectedApp(appId);
-                    } else {
-                        StateManager.removeSelectedApp(appId);
-                    }
-                    
-                    const hasSelection = StateManager.state.selectedItems.applications.size > 0;
-                    UIRenderer.updateActionButtonsState(hasSelection);
-                    
-                    // Обновляем состояние "выбрать все"
-                    UIRenderer.updateSelectAllState();
-                    
-                    // Обновляем состояние группового чекбокса
-                    const parentGroup = e.target.closest('.apps-group')?.dataset.group;
-                    if (parentGroup) {
-                        UIRenderer.updateGroupCheckbox(parentGroup);
-                    }
-                }
-                
-                if (e.target.classList.contains('group-checkbox')) {
-                    const groupName = e.target.dataset.group;
-                    const isChecked = e.target.checked;
-                    
-                    // Выбираем/снимаем выбор со всех приложений группы
-                    document.querySelectorAll(`.apps-group[data-group="${groupName}"] .apps-group-children .app-checkbox`).forEach(checkbox => {
-                        checkbox.checked = isChecked;
-                        const appId = checkbox.dataset.appId;
-                        if (isChecked) {
-                            StateManager.addSelectedApp(appId);
-                        } else {
-                            StateManager.removeSelectedApp(appId);
-                        }
-                    });
-                    
-                    // Обновляем состояние "выбрать все"
-                    UIRenderer.updateSelectAllState();
-                    
-                    const hasSelection = StateManager.state.selectedItems.applications.size > 0;
-                    UIRenderer.updateActionButtonsState(hasSelection);
-                }
+            window.CheckboxHandlers.init({
+                StateManager,
+                DOMUtils,
+                UIRenderer
             });
         },
 
@@ -2418,195 +1580,12 @@
             }
         },
 
+        /**
+         * Показывает модальное окно управления тегами - делегирование к TagsModal
+         */
         async showBatchTagsModal(appIds) {
-            const template = document.getElementById('batch-tags-modal-template');
-            if (!template) return;
-
-            const content = template.content.cloneNode(true);
-
-            // Set selected count
-            content.querySelector('.selected-count').textContent = appIds.length;
-
-            // Load tags for checkboxes
-            const tags = await ApiService.loadTags();
-            const checkboxesContainer = content.querySelector('.batch-tags-checkboxes');
-
-            // Получаем данные о тегах выбранных приложений
-            const selectedApps = appIds.map(id => StateManager.getAppById(id)).filter(app => app);
-
-            // Собираем теги: собственные и унаследованные
-            const ownTagCounts = {};  // tag_name -> count of apps having it
-            const inheritedTags = new Set();  // tags inherited from groups
-
-            selectedApps.forEach(app => {
-                (app.tags || []).forEach(tag => {
-                    ownTagCounts[tag.name] = (ownTagCounts[tag.name] || 0) + 1;
-                });
-                (app.group_tags || []).forEach(tag => {
-                    inheritedTags.add(tag.name);
-                });
-            });
-
-            // Сохраняем начальное состояние для отслеживания изменений
-            const initialState = {};  // tag_name -> 'all' | 'none' | 'partial'
-
-            if (tags.length > 0) {
-                checkboxesContainer.innerHTML = tags.map(tag => {
-                    const tagStyle = [];
-                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
-                    const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
-
-                    // Проверяем состояние тега
-                    const count = ownTagCounts[tag.name] || 0;
-                    const isOwned = count === selectedApps.length;
-                    const isPartial = count > 0 && count < selectedApps.length;
-                    const isInherited = inheritedTags.has(tag.name);
-
-                    // Сохраняем начальное состояние
-                    if (isOwned) {
-                        initialState[tag.name] = 'all';
-                    } else if (isPartial) {
-                        initialState[tag.name] = 'partial';
-                    } else {
-                        initialState[tag.name] = 'none';
-                    }
-
-                    // Для отображения: owned и inherited - checked, partial - indeterminate
-                    const checked = isOwned || isInherited ? 'checked' : '';
-                    const disabled = isInherited ? 'disabled' : '';
-                    const inheritedLabel = isInherited ? ' <span>(от группы)</span>' : '';
-                    const partialLabel = isPartial && !isInherited ? ` <span>(${count}/${selectedApps.length})</span>` : '';
-
-                    // Сокращаем описание до 40 символов
-                    const shortDescription = tag.description
-                        ? (tag.description.length > 40 ? tag.description.substring(0, 40) + '...' : tag.description)
-                        : '';
-                    const descriptionHtml = shortDescription
-                        ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
-                        : '';
-
-                    return `
-                    <label class="tag-checkbox-label">
-                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled}
-                               data-initial="${initialState[tag.name]}" data-changed="false">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
-                        ${descriptionHtml}
-                    </label>
-                `;
-                }).join('');
-
-                // Устанавливаем indeterminate для частичных и добавляем отслеживание изменений
-                checkboxesContainer.querySelectorAll('.batch-tag-checkbox').forEach(cb => {
-                    const initial = cb.dataset.initial;
-                    if (initial === 'partial') {
-                        cb.indeterminate = true;
-                        cb.checked = false;  // Partial начинает как unchecked визуально
-                    }
-                    // Отслеживаем изменения
-                    cb.addEventListener('change', () => {
-                        cb.dataset.changed = 'true';
-                        cb.indeterminate = false;  // Снимаем indeterminate при любом изменении
-                    });
-                });
-            } else {
-                checkboxesContainer.innerHTML = '';
-            }
-
-            // Show modal
-            window.showModal('Управление тегами', content);
-
-            // Apply button handler
-            document.getElementById('apply-batch-tags').addEventListener('click', async () => {
-                const tagsToAdd = [];
-                const tagsToRemove = [];
-
-                document.querySelectorAll('.batch-tag-checkbox:not(:disabled)').forEach(cb => {
-                    const tagName = cb.value;
-                    const initial = cb.dataset.initial;
-                    const changed = cb.dataset.changed === 'true';
-                    const isChecked = cb.checked;
-
-                    if (initial === 'partial') {
-                        // Частичный тег - меняем только если пользователь явно изменил
-                        if (changed) {
-                            if (isChecked) {
-                                tagsToAdd.push(tagName);  // Добавить всем
-                            } else {
-                                tagsToRemove.push(tagName);  // Удалить у всех
-                            }
-                        }
-                        // Если не changed - ничего не делаем, сохраняем как было
-                    } else if (initial === 'all') {
-                        // Был у всех - если сняли галочку, удаляем
-                        if (!isChecked) {
-                            tagsToRemove.push(tagName);
-                        }
-                    } else {  // initial === 'none'
-                        // Не было ни у кого - если поставили галочку, добавляем
-                        if (isChecked) {
-                            tagsToAdd.push(tagName);
-                        }
-                    }
-                });
-
-                try {
-                    let addedCount = 0;
-                    let removedCount = 0;
-
-                    // Добавляем теги
-                    if (tagsToAdd.length > 0) {
-                        const addResponse = await fetch('/api/tags/bulk-assign', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                tag_names: tagsToAdd,
-                                target_type: 'instances',
-                                target_ids: appIds,
-                                action: 'add'
-                            })
-                        });
-                        const addResult = await addResponse.json();
-                        if (addResult.success) addedCount = addResult.count;
-                    }
-
-                    // Удаляем теги
-                    if (tagsToRemove.length > 0) {
-                        const removeResponse = await fetch('/api/tags/bulk-assign', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                tag_names: tagsToRemove,
-                                target_type: 'instances',
-                                target_ids: appIds,
-                                action: 'remove'
-                            })
-                        });
-                        const removeResult = await removeResponse.json();
-                        if (removeResult.success) removedCount = removeResult.count;
-                    }
-
-                    if (addedCount > 0 || removedCount > 0) {
-                        showNotification(`Теги обновлены (добавлено: ${addedCount}, удалено: ${removedCount})`);
-                    } else {
-                        showNotification('Изменений не было');
-                    }
-
-                    closeModal();
-
-                    // Снимаем выделение с приложений
-                    StateManager.clearSelection();
-                    DOMUtils.querySelectorInTable('.app-checkbox').forEach(checkbox => {
-                        checkbox.checked = false;
-                    });
-                    const selectAllCheckbox = document.getElementById('select-all');
-                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
-
-                    await this.loadApplications();
-                } catch (error) {
-                    console.error('Error in batch tags operation:', error);
-                    showError(error.message || 'Ошибка операции с тегами');
-                }
+            await window.TagsModal.showBatchTagsModal(appIds, {
+                loadApplications: () => this.loadApplications()
             });
         },
 
@@ -2773,65 +1752,21 @@
             return filtered;
         },        
 
+        /**
+         * Инициализация обработчиков действий в таблице - делегирование к TableActions
+         */
         initTableActions() {
-            // Делегирование событий для действий в таблице
-            document.addEventListener('click', (e) => {
-                // Флаг для определения, был ли клик по элементу меню
-                const isMenuAction = e.target.closest('.actions-dropdown a');    
-                            
-                // Обработчики действий для приложений
-                if (e.target.classList.contains('app-info-btn')) {
-                    e.preventDefault();
-                    const appId = e.target.dataset.appId;
-                    this.showAppInfo(appId);
-                }
-                
-                if (e.target.classList.contains('app-update-btn')) {
-                    e.preventDefault();
-                    const appId = e.target.dataset.appId;
-                    ModalManager.showUpdateModal([appId]);
-                }
-                
-                // Обработчики действий для групп
-                if (e.target.classList.contains('group-update-btn')) {
-                    e.preventDefault();
-                    const groupName = e.target.dataset.group;
-                    this.handleGroupUpdate(groupName);
-                }
-
-                if (e.target.classList.contains('group-tags-btn')) {
-                    e.preventDefault();
-                    const groupId = e.target.dataset.groupId;
-                    const groupName = e.target.dataset.group;
-                    if (groupId) {
-                        this.showGroupTagsModal(groupId, groupName);
-                    } else {
-                        showError('Группа не найдена');
-                    }
-                }
-                
-                // Другие действия
-                ['start', 'stop', 'restart'].forEach(action => {
-                    if (e.target.classList.contains(`app-${action}-btn`)) {
-                        e.preventDefault();
-                        if (!e.target.classList.contains('disabled')) {
-                            const appId = e.target.dataset.appId;
-                            this.handleBatchAction([appId], action);
-                        }
-                    }
-                    
-                    if (e.target.classList.contains(`group-${action}-btn`)) {
-                        e.preventDefault();
-                        if (!e.target.classList.contains('disabled')) {
-                            const groupName = e.target.dataset.group;
-                            this.handleGroupAction(groupName, action);
-                        }
-                    }
-                });
-                // Закрываем меню после клика на любой пункт
-                if (isMenuAction) {
-                    setTimeout(() => this.closeAllDropdowns(), 100);
-                }                
+            window.TableActions.init({
+                ModalManager,
+                DropdownHandlers: window.DropdownHandlers,
+                showError
+            });
+            window.TableActions.setCallbacks({
+                showAppInfo: (appId) => this.showAppInfo(appId),
+                showGroupTagsModal: (groupId, groupName) => this.showGroupTagsModal(groupId, groupName),
+                handleBatchAction: (appIds, action) => this.handleBatchAction(appIds, action),
+                handleGroupUpdate: (groupName) => this.handleGroupUpdate(groupName),
+                handleGroupAction: (groupName, action) => this.handleGroupAction(groupName, action)
             });
         },
 
@@ -2857,151 +1792,20 @@
             }
         },
 
+        /**
+         * Показывает модальное окно тегов группы - делегирование к TagsModal
+         */
         async showGroupTagsModal(groupId, groupName) {
-            // Загружаем все теги и текущие теги группы
-            const [allTags, groupTagsResponse] = await Promise.all([
-                ApiService.loadTags(),
-                fetch(`/api/app-groups/${groupId}/tags`).then(r => r.json())
-            ]);
-
-            const groupTags = groupTagsResponse.success ? groupTagsResponse.tags : [];
-            const groupTagNames = new Set(groupTags.map(t => t.name));
-
-            // Создаем map имя -> id для удаления
-            const tagNameToId = {};
-            allTags.forEach(t => tagNameToId[t.name] = t.id);
-            groupTags.forEach(t => tagNameToId[t.name] = t.id);
-
-            // Создаем контент модального окна
-            const content = document.createElement('div');
-            content.className = 'group-tags-container';
-
-            if (allTags.length === 0) {
-                content.innerHTML = '<p style="color: #999;">Нет доступных тегов. Создайте теги в настройках.</p>';
-            } else {
-                let checkboxesHtml = allTags.map(tag => {
-                    const tagStyle = [];
-                    if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-                    if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
-                    const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
-                    const checked = groupTagNames.has(tag.name) ? 'checked' : '';
-                    return `
-                        <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
-                            <input type="checkbox" value="${tag.name}" class="group-tag-checkbox" data-tag-id="${tag.id}" ${checked}>
-                            <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
-                        </label>
-                    `;
-                }).join('');
-
-                content.innerHTML = `
-                    <div class="form-group">
-                        <div class="group-tags-checkboxes">${checkboxesHtml}</div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="cancel-btn" onclick="closeModal()">Отмена</button>
-                        <button type="button" class="submit-btn" id="save-group-tags">Сохранить</button>
-                    </div>
-                `;
-            }
-
-            // Показываем модальное окно
-            window.showModal(`Теги группы: ${groupName}`, content);
-
-            // Обработчик сохранения
-            const saveBtn = document.getElementById('save-group-tags');
-            if (saveBtn) {
-                saveBtn.addEventListener('click', async () => {
-                    const selectedTagNames = Array.from(document.querySelectorAll('.group-tag-checkbox:checked')).map(cb => cb.value);
-
-                    try {
-                        // Определяем какие теги добавить и какие удалить
-                        const toAdd = selectedTagNames.filter(name => !groupTagNames.has(name));
-                        const toRemove = [...groupTagNames].filter(name => !selectedTagNames.includes(name));
-
-                        // Добавляем новые теги
-                        for (const tagName of toAdd) {
-                            await fetch(`/api/app-groups/${groupId}/tags`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ tag_name: tagName })
-                            });
-                        }
-
-                        // Удаляем снятые теги
-                        for (const tagName of toRemove) {
-                            const tagId = tagNameToId[tagName];
-                            if (tagId) {
-                                await fetch(`/api/app-groups/${groupId}/tags/${tagId}`, {
-                                    method: 'DELETE'
-                                });
-                            }
-                        }
-
-                        showNotification('Теги группы обновлены');
-                        closeModal();
-                        this.loadApplications();
-                    } catch (error) {
-                        console.error('Error updating group tags:', error);
-                        showError('Ошибка обновления тегов');
-                    }
-                });
-            }
+            await window.TagsModal.showGroupTagsModal(groupId, groupName, {
+                loadApplications: () => this.loadApplications()
+            });
         },
 
+        /**
+         * Показывает информацию о приложении - делегирование к InfoModal
+         */
         async showAppInfo(appId) {
-            const app = await ApiService.getApplicationInfo(appId);
-            if (!app) {
-                showError('Не удалось получить информацию о приложении');
-                return;
-            }
-            
-            const sections = [
-                {
-                    title: 'Основная информация',
-                    type: 'table',
-                    rows: [
-                        { label: 'Имя:', value: app.name },
-                        { label: 'Тип:', value: app.app_type || 'Не указан' },
-                        { label: 'Статус:', value: `<span class="status-badge ${app.status === 'online' ? 'status-completed' : 'status-failed'}">${app.status || 'Неизвестно'}</span>` },
-                        { label: 'Версия:', value: app.version || 'Не указана' },
-                        { label: 'Сервер:', value: app.server_name || 'Не указан' },
-                        { label: 'IP:', value: app.ip || 'Не указан' },
-                        { label: 'Порт:', value: app.port || 'Не указан' }
-                    ]
-                },
-                {
-                    title: 'Пути и расположение',
-                    type: 'table',
-                    rows: [
-                        { label: 'Путь приложения:', value: app.path || 'Не указан' },
-                        { label: 'Путь к логам:', value: app.log_path || 'Не указан' },
-                        { label: 'Путь к дистрибутиву:', value: app.distr_path || 'Не указан' }
-                    ]
-                }
-            ];
-            
-            if (app.events && app.events.length > 0) {
-                let eventsHtml = '<table class="events-table"><thead><tr><th>Дата</th><th>Тип</th><th>Статус</th></tr></thead><tbody>';
-                app.events.forEach(event => {
-                    const eventDate = new Date(event.timestamp);
-                    eventsHtml += `
-                        <tr class="event-row ${event.status}">
-                            <td>${eventDate.toLocaleString()}</td>
-                            <td>${event.event_type}</td>
-                            <td>${event.status}</td>
-                        </tr>
-                    `;
-                });
-                eventsHtml += '</tbody></table>';
-                
-                sections.push({
-                    title: 'Последние события',
-                    type: 'html',
-                    content: eventsHtml
-                });
-            }
-            
-            ModalUtils.showInfoModal(`Информация о приложении: ${app.name}`, sections);
+            await window.InfoModal.show(appId);
         },
 
         async loadApplications() {
@@ -3049,199 +1853,19 @@
     // ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
     // ========================================
     document.addEventListener('DOMContentLoaded', () => {
+        // Инициализация core модулей
+        StateManager.init({ pageSize: CONFIG.PAGE_SIZE });
+        ApiService.init({ showError, config: CONFIG });
+        ArtifactsManager.init({ StateManager, ApiService, config: CONFIG });
+
         // Инициализация UI элементов
         UIRenderer.init();
-        
+
         // Инициализация обработчиков событий
         EventHandlers.init();
-        
+
         // Загрузка начальных данных
         EventHandlers.loadApplications();
-        
-        // Добавляем стили для анимаций
-        if (!document.getElementById('applications-animations')) {
-            const style = document.createElement('style');
-            style.id = 'applications-animations';
-            style.textContent = `
-                .rotating {
-                    animation: rotate 1s linear infinite;
-                }
-                @keyframes rotate {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-                .animated-fade-in {
-                    animation: fadeIn 0.3s ease-in;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .animated-slide-down {
-                    animation: slideDown 0.3s ease-out;
-                }
-                @keyframes slideDown {
-                    from { 
-                        opacity: 0; 
-                        max-height: 0;
-                        transform: translateY(-10px);
-                    }
-                    to { 
-                        opacity: 1; 
-                        max-height: 200px;
-                        transform: translateY(0);
-                    }
-                }
-                .form-content-animated > .form-group {
-                    opacity: 0;
-                    animation: fadeIn 0.4s ease-out forwards;
-                }
-                .form-content-animated > .form-group:nth-child(1) { animation-delay: 0.1s; }
-                .form-content-animated > .form-group:nth-child(2) { animation-delay: 0.2s; }
-                .form-content-animated > .form-group:nth-child(3) { animation-delay: 0.3s; }
-                .form-content-animated > .form-group:nth-child(4) { animation-delay: 0.4s; }
-                
-                /* Стили для группы */
-                .apps-group-toggle {
-                    transition: transform 0.3s ease;
-                }
-                
-                /* Стили для кнопки удаления вкладки */
-                .modal-tab {
-                    position: relative;
-                    padding-right: 25px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                }
-                
-                .tab-content {
-                    flex: 1;
-                }
-                
-                .tab-remove-btn {
-                    position: absolute;
-                    right: 5px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    background: none;
-                    border: none;
-                    color: #999;
-                    font-size: 18px;
-                    line-height: 1;
-                    cursor: pointer;
-                    width: 20px;
-                    height: 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: 50%;
-                    transition: all 0.2s;
-                    opacity: 0.6;
-                }
-                
-                .tab-remove-btn:hover {
-                    opacity: 1;
-                    background-color: rgba(231, 76, 60, 0.1);
-                    color: #e74c3c;
-                }
-                
-                .modal-tab:hover .tab-remove-btn {
-                    opacity: 1;
-                }
-                
-                .no-groups-message {
-                    text-align: center;
-                    padding: 40px;
-                    color: #999;
-                    font-size: 16px;
-                }
-
-                /* Стили для полей режима "Сейчас" */
-                #immediate-mode-fields {
-                    margin-top: 15px;
-                    padding: 15px;
-                    background-color: rgba(52, 152, 219, 0.05);
-                    border-left: 3px solid #3498db;
-                    border-radius: 4px;
-                }
-
-                /* Стиль для select оркестратора - темный фон */
-                #immediate-mode-fields select#orchestrator-playbook {
-                    background-color: #2c3e50;
-                    color: #ecf0f1;
-                    border: 1px solid #34495e;
-                }
-
-                #immediate-mode-fields select#orchestrator-playbook option {
-                    background-color: #2c3e50;
-                    color: #ecf0f1;
-                }
-
-                .drain-wait-container {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }
-
-                .drain-wait-container input[type="number"] {
-                    flex: 0 0 120px;
-                    text-align: center;
-                }
-
-                /* Убираем стрелки spinner у input[type="number"] */
-                #immediate-mode-fields input[type="number"]::-webkit-inner-spin-button,
-                #immediate-mode-fields input[type="number"]::-webkit-outer-spin-button {
-                    -webkit-appearance: none;
-                    margin: 0;
-                }
-
-                #immediate-mode-fields input[type="number"] {
-                    -moz-appearance: textfield;
-                }
-
-                .unit-label {
-                    color: #666;
-                    font-size: 14px;
-                }
-
-                .quick-select-buttons {
-                    display: flex;
-                    gap: 12px;
-                    margin-top: 10px;
-                    align-items: center;
-                }
-
-                .quick-time-link {
-                    color: #3498db;
-                    text-decoration: none;
-                    font-size: 14px;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: color 0.2s;
-                    padding: 2px 4px;
-                }
-
-                .quick-time-link:hover {
-                    color: #2980b9;
-                    text-decoration: underline;
-                }
-
-                .quick-time-link.active {
-                    color: #27ae60;
-                    font-weight: 600;
-                }
-
-                .form-help-text {
-                    display: block;
-                    margin-top: 8px;
-                    font-size: 12px;
-                    color: #7f8c8d;
-                    font-style: italic;
-                }
-            `;
-            document.head.appendChild(style);
-        }
     });
 
     // Экспорт модулей в глобальную область для доступа извне
@@ -3259,15 +1883,10 @@
             return result;
         }
     };
-    
-    // Экспорт обработчиков событий для доступа из обработчиков
-    window.SecurityUtils = SecurityUtils;
-    window.DOMUtils = DOMUtils;   
+
+    // Экспорт модулей (core модули уже экспортированы из своих файлов)
     window.EventHandlers = EventHandlers;
-    window.StateManager = StateManager;
     window.UIRenderer = UIRenderer;
     window.ModalManager = ModalManager;
-    window.ApiService = ApiService;
-    window.ArtifactsManager = ArtifactsManager;
 
 })();

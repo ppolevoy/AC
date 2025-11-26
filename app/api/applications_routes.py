@@ -102,6 +102,31 @@ def get_application(app_id):
                 'status': event.status
             })
 
+        # Получаем теги приложения
+        tags_list = []
+        for tag in app.tags.all():
+            tags_list.append({
+                'id': tag.id,
+                'name': tag.name,
+                'display_name': tag.display_name,
+                'css_class': tag.css_class,
+                'border_color': tag.border_color,
+                'text_color': tag.text_color
+            })
+
+        # Получаем теги группы (унаследованные)
+        group_tags_list = []
+        if app.group:
+            for tag in app.group.tags.all():
+                group_tags_list.append({
+                    'id': tag.id,
+                    'name': tag.name,
+                    'display_name': tag.display_name,
+                    'css_class': tag.css_class,
+                    'border_color': tag.border_color,
+                    'text_color': tag.text_color
+                })
+
         result = {
             'id': app.id,
             'name': app.name,
@@ -123,7 +148,9 @@ def get_application(app_id):
             'server_name': server.name if server else None,
             'group_name': app.group_name,
             'instance_number': app.instance_number,
-            'events': events_list
+            'events': events_list,
+            'tags': tags_list,
+            'group_tags': group_tags_list
         }
 
         return jsonify({

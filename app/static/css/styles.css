@@ -2765,14 +2765,18 @@ body.light-theme .modal-form select option {
     color: #5ca5e1;
 }
 
-.apps-list {
+.group-apps-info .apps-list {
     display: flex;
+    flex-direction: row;
     flex-wrap: wrap;
     gap: 8px;
 }
 
 .app-badge {
     display: inline-block;
+    flex-shrink: 0;
+    flex-grow: 0;
+    width: fit-content;
     padding: 4px 10px;
     background-color: #333336;
     border-radius: 4px;

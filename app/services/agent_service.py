@@ -154,7 +154,7 @@ class AgentService:
             logger.warning(f"Попытка получить приложения с сервера {server.name}, который не в сети")
             return None
         
-        url = f"http://{server.ip}:{server.port}/app"
+        url = f"http://{server.ip}:{server.port}/api/v1/apps"
         logger.info(f"Запрос приложений с сервера {server.name} по URL: {url}")
         
         try:

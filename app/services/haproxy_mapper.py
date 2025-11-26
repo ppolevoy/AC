@@ -281,7 +281,7 @@ class HAProxyMapper:
         mapped_server_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         # Получаем все HAProxy серверы без привязки к приложению
         unmapped_servers = HAProxyServer.query.filter(

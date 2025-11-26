@@ -459,7 +459,7 @@ class MappingService:
         mapped_haproxy_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         unmapped_haproxy = HAProxyServer.query.filter(
             ~HAProxyServer.id.in_(mapped_haproxy_ids),
@@ -470,7 +470,7 @@ class MappingService:
         mapped_eureka_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         unmapped_eureka = EurekaInstance.query.filter(
             ~EurekaInstance.id.in_(mapped_eureka_ids),
