@@ -932,6 +932,13 @@ class TaskQueue:
                 if success and not is_batch_task:
                     app = ApplicationInstance.query.get(app_id)
                     if app:
+                        # Сохраняем старые значения для истории
+                        old_version = app.version
+                        old_distr_path = app.distr_path
+                        old_tag = app.tag
+                        old_image = app.image
+
+                        # Обновляем данные
                         app.distr_path = distr_url
 
                         # Для Docker приложений пытаемся извлечь версию из тега
@@ -943,6 +950,26 @@ class TaskQueue:
                             version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
                             if version_match:
                                 app.version = version_match.group(1)
+
+                        # Записываем историю изменения версии
+                        if old_version != app.version or old_distr_path != distr_url:
+                            from app.models.application_version_history import ApplicationVersionHistory
+                            history_entry = ApplicationVersionHistory(
+                                instance_id=app.id,
+                                old_version=old_version,
+                                new_version=app.version,
+                                old_distr_path=old_distr_path,
+                                new_distr_path=distr_url,
+                                old_tag=old_tag,
+                                new_tag=app.tag,
+                                old_image=old_image,
+                                new_image=app.image,
+                                changed_by='user',
+                                change_source='update_task',
+                                task_id=task.id if task else None
+                            )
+                            db.session.add(history_entry)
+                            logger.info(f"Записана история версии для {app_name}: {old_version} -> {app.version}")
 
                         db.session.commit()
                         logger.info(f"Обновлена информация о приложении {app_name}: distr_path={distr_url}, version={app.version}")

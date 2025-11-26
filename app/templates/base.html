@@ -54,6 +54,10 @@
                 <span class="menu-icon">🔍</span>
                 <span>Eureka</span>
             </a>
+            <a href="{{ url_for('main.reports') }}" class="menu-item {% if request.endpoint == 'main.reports' %}active{% endif %}">
+                <span class="menu-icon">📊</span>
+                <span>Отчёты</span>
+            </a>
             <a href="{{ url_for('main.settings') }}" class="menu-item {% if request.endpoint == 'main.settings' %}active{% endif %}">
                 <span class="menu-icon">⚙️</span>
                 <span>Настройки</span>

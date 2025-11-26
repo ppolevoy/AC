@@ -10,6 +10,7 @@ from app.models.orchestrator_playbook import OrchestratorPlaybook
 from app.models.haproxy import HAProxyInstance, HAProxyBackend, HAProxyServer, HAProxyServerStatusHistory
 from app.models.application_mapping import ApplicationMapping, ApplicationMappingHistory, MappingType
 from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag, TagHistory
+from app.models.application_version_history import ApplicationVersionHistory
 
 # Алиас для обратной совместимости с кодом, использующим Application
 Application = ApplicationInstance
@@ -32,5 +33,6 @@ __all__ = [
     'Tag',
     'ApplicationInstanceTag',
     'ApplicationGroupTag',
-    'TagHistory'
+    'TagHistory',
+    'ApplicationVersionHistory'
 ]

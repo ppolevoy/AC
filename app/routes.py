@@ -40,6 +40,13 @@ def eureka():
     """Страница управления Eureka"""
     return render_template('eureka.html')
 
+
+@bp.route('/reports')
+def reports():
+    """Страница отчётов о версиях приложений"""
+    return render_template('reports.html')
+
+
 @bp.route('/server/<int:server_id>')
 def server_details(server_id):
     """Страница с детальной информацией о сервере"""
