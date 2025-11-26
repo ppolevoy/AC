@@ -42,7 +42,7 @@ class EurekaMapper:
         mapped_instance_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         # Получаем все несвязанные экземпляры
         unmapped_instances = EurekaInstance.query.filter(
@@ -293,7 +293,7 @@ class EurekaMapper:
         mapped_instance_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         return EurekaInstance.query.filter(
             ~EurekaInstance.id.in_(mapped_instance_ids),

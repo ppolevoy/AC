@@ -559,7 +559,7 @@ def search_applications_for_mapping():
         mapped_app_ids = db.session.query(ApplicationMapping.application_id).filter(
             ApplicationMapping.entity_type == MappingType.EUREKA_INSTANCE.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         # Ищем приложения с таким же IP, исключая уже замапленные
         query_obj = Application.query.filter(

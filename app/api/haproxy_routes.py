@@ -624,7 +624,7 @@ def get_unmapped_servers():
         mapped_server_ids = db.session.query(ApplicationMapping.entity_id).filter(
             ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         # Базовый запрос: серверы без маппинга в новой таблице
         query = HAProxyServer.query.filter(
@@ -748,7 +748,7 @@ def search_applications_for_mapping():
         mapped_app_ids = db.session.query(ApplicationMapping.application_id).filter(
             ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
             ApplicationMapping.is_active == True
-        ).subquery()
+        ).scalar_subquery()
 
         # Ищем приложения с таким же IP, исключая уже замапленные
         query_obj = Application.query.filter(

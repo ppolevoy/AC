@@ -303,12 +303,12 @@ def filter_by_tags():
             # Подзапрос для приложений с нужными тегами
             instance_subq = db.session.query(
                 ApplicationInstanceTag.application_id
-            ).join(Tag).filter(Tag.name.in_(tag_names)).subquery()
+            ).join(Tag).filter(Tag.name.in_(tag_names)).scalar_subquery()
 
             # Подзапрос для групп с нужными тегами
             group_subq = db.session.query(
                 ApplicationGroupTag.group_id
-            ).join(Tag).filter(Tag.name.in_(tag_names)).subquery()
+            ).join(Tag).filter(Tag.name.in_(tag_names)).scalar_subquery()
 
             query = query.filter(
                 or_(
