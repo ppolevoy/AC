@@ -155,18 +155,19 @@ def export_current_versions():
         })
 
     if export_format == 'csv':
-        # CSV экспорт
+        # CSV экспорт с BOM и разделителем ; для Excel
         output = io.StringIO()
+        output.write('\ufeff')  # BOM для корректного отображения UTF-8 в Excel
         writer = csv.DictWriter(output, fieldnames=[
             'instance_name', 'app_type', 'version',
             'server_name', 'distr_path', 'updated_at'
-        ])
+        ], delimiter=';')
         writer.writeheader()
         writer.writerows(data)
 
         return Response(
             output.getvalue(),
-            mimetype='text/csv; charset=utf-8',
+            mimetype='text/csv; charset=utf-8-sig',
             headers={
                 'Content-Disposition': f'attachment; filename=current_versions_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
             }
@@ -361,18 +362,20 @@ def export_version_history():
         })
 
     if export_format == 'csv':
+        # CSV экспорт с BOM и разделителем ; для Excel
         output = io.StringIO()
+        output.write('\ufeff')  # BOM для корректного отображения UTF-8 в Excel
         writer = csv.DictWriter(output, fieldnames=[
             'instance_name', 'server_name',
             'old_version', 'new_version', 'old_distr_path', 'new_distr_path',
             'changed_at', 'changed_by', 'change_source'
-        ])
+        ], delimiter=';')
         writer.writeheader()
         writer.writerows(data)
 
         return Response(
             output.getvalue(),
-            mimetype='text/csv; charset=utf-8',
+            mimetype='text/csv; charset=utf-8-sig',
             headers={
                 'Content-Disposition': f'attachment; filename=version_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
             }
