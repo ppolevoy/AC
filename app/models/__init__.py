@@ -11,6 +11,7 @@ from app.models.haproxy import HAProxyInstance, HAProxyBackend, HAProxyServer, H
 from app.models.application_mapping import ApplicationMapping, ApplicationMappingHistory, MappingType
 from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag, TagHistory
 from app.models.application_version_history import ApplicationVersionHistory
+from app.models.mailing_group import MailingGroup
 
 # Алиас для обратной совместимости с кодом, использующим Application
 Application = ApplicationInstance
@@ -34,5 +35,6 @@ __all__ = [
     'ApplicationInstanceTag',
     'ApplicationGroupTag',
     'TagHistory',
-    'ApplicationVersionHistory'
+    'ApplicationVersionHistory',
+    'MailingGroup'
 ]

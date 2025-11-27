@@ -92,6 +92,32 @@
                 return `/api/reports/version-history/export?${params}`;
             }
             return `/api/reports/current-versions/export?${params}`;
+        },
+
+        async sendReport(data) {
+            try {
+                const response = await fetch('/api/reports/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Error sending report:', error);
+                return { success: false, error: error.message };
+            }
+        },
+
+        async getMailingGroups() {
+            try {
+                const response = await fetch('/api/mailing-groups');
+                return await response.json();
+            } catch (error) {
+                console.error('Error loading mailing groups:', error);
+                return { success: false, groups: [] };
+            }
         }
     };
 
@@ -321,14 +347,16 @@
                 state.filtersData.catalogs = result.catalogs || [];
 
                 const serverSelect = document.getElementById('server-filter');
-                serverSelect.innerHTML = state.filtersData.servers.map(s =>
-                    `<option value="${s.id}">${this.escapeHtml(s.name)}</option>`
-                ).join('');
+                serverSelect.innerHTML = '<option value="">Все серверы</option>' +
+                    state.filtersData.servers.map(s =>
+                        `<option value="${s.id}">${this.escapeHtml(s.name)}</option>`
+                    ).join('');
 
                 const catalogSelect = document.getElementById('catalog-filter');
-                catalogSelect.innerHTML = state.filtersData.catalogs.map(c =>
-                    `<option value="${c.id}">${this.escapeHtml(c.name)}</option>`
-                ).join('');
+                catalogSelect.innerHTML = '<option value="">Все приложения</option>' +
+                    state.filtersData.catalogs.map(c =>
+                        `<option value="${c.id}">${this.escapeHtml(c.name)}</option>`
+                    ).join('');
             }
         }
     };
@@ -414,8 +442,15 @@
             const dateFrom = document.getElementById('date-from');
             const dateTo = document.getElementById('date-to');
 
-            state.filters.serverIds = Array.from(serverSelect.selectedOptions).map(o => parseInt(o.value));
-            state.filters.catalogIds = Array.from(catalogSelect.selectedOptions).map(o => parseInt(o.value));
+            // Фильтруем пустые значения (опция "Все")
+            state.filters.serverIds = Array.from(serverSelect.selectedOptions)
+                .map(o => o.value)
+                .filter(v => v !== '')
+                .map(v => parseInt(v));
+            state.filters.catalogIds = Array.from(catalogSelect.selectedOptions)
+                .map(o => o.value)
+                .filter(v => v !== '')
+                .map(v => parseInt(v));
             state.filters.dateFrom = dateFrom.value || null;
             state.filters.dateTo = dateTo.value || null;
 
@@ -428,8 +463,8 @@
         },
 
         clearFilters() {
-            document.getElementById('server-filter').selectedIndex = -1;
-            document.getElementById('catalog-filter').selectedIndex = -1;
+            document.getElementById('server-filter').selectedIndex = 0;
+            document.getElementById('catalog-filter').selectedIndex = 0;
             document.getElementById('date-from').value = '';
             document.getElementById('date-to').value = '';
 
@@ -471,6 +506,173 @@
     };
 
     // ========================================
+    // МОДАЛЬНОЕ ОКНО ОТПРАВКИ EMAIL
+    // ========================================
+    const EmailModal = {
+        modal: null,
+        sending: false,
+
+        init() {
+            this.modal = document.getElementById('send-email-modal');
+            if (!this.modal) return;
+
+            // Обработчики закрытия модалки
+            document.getElementById('close-email-modal').addEventListener('click', () => this.close());
+            document.getElementById('cancel-email-btn').addEventListener('click', () => this.close());
+            this.modal.querySelector('.modal-overlay').addEventListener('click', () => this.close());
+
+            // Обработчик отправки
+            document.getElementById('confirm-send-btn').addEventListener('click', () => this.send());
+
+            // Переключение типа отчёта
+            document.querySelectorAll('input[name="report-type"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const periodGroup = document.getElementById('email-period-group');
+                    periodGroup.style.display = e.target.value === 'version_history' ? 'flex' : 'none';
+                });
+            });
+
+            // Клавиша Escape
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this.isOpen()) {
+                    this.close();
+                }
+            });
+        },
+
+        open() {
+            if (!this.modal) return;
+
+            // Синхронизируем тип отчёта с активной вкладкой
+            const reportType = state.activeTab === 'version-history' ? 'version_history' : 'current_versions';
+            const radio = this.modal.querySelector(`input[name="report-type"][value="${reportType}"]`);
+            if (radio) radio.checked = true;
+
+            // Показываем/скрываем период
+            const periodGroup = document.getElementById('email-period-group');
+            periodGroup.style.display = reportType === 'version_history' ? 'flex' : 'none';
+
+            // Копируем даты из основных фильтров
+            if (state.filters.dateFrom) {
+                document.getElementById('email-date-from').value = state.filters.dateFrom;
+            }
+            if (state.filters.dateTo) {
+                document.getElementById('email-date-to').value = state.filters.dateTo;
+            }
+
+            // Очищаем сообщения
+            this.hideError();
+            this.hideSuccess();
+
+            // Показываем модалку
+            this.modal.style.display = 'flex';
+            document.getElementById('email-recipients').focus();
+        },
+
+        close() {
+            if (this.modal) {
+                this.modal.style.display = 'none';
+            }
+        },
+
+        isOpen() {
+            return this.modal && this.modal.style.display === 'flex';
+        },
+
+        showError(message) {
+            const errorEl = document.getElementById('email-error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            document.getElementById('email-success').style.display = 'none';
+        },
+
+        hideError() {
+            document.getElementById('email-error').style.display = 'none';
+        },
+
+        showSuccess(message) {
+            const successEl = document.getElementById('email-success');
+            successEl.textContent = message;
+            successEl.style.display = 'block';
+            document.getElementById('email-error').style.display = 'none';
+        },
+
+        hideSuccess() {
+            document.getElementById('email-success').style.display = 'none';
+        },
+
+        setLoading(loading) {
+            this.sending = loading;
+            const btn = document.getElementById('confirm-send-btn');
+            btn.disabled = loading;
+            btn.textContent = loading ? 'Отправка...' : 'Отправить';
+        },
+
+        async send() {
+            if (this.sending) return;
+
+            // Получаем получателей
+            const recipients = document.getElementById('email-recipients').value.trim();
+            if (!recipients) {
+                this.showError('Укажите хотя бы одного получателя');
+                return;
+            }
+
+            // Получаем тип отчёта
+            const reportType = this.modal.querySelector('input[name="report-type"]:checked').value;
+
+            // Формируем данные для отправки
+            const data = {
+                report_type: reportType,
+                recipients: recipients
+            };
+
+            // Добавляем фильтры если включено
+            if (document.getElementById('email-use-filters').checked) {
+                data.filters = {};
+                if (state.filters.serverIds?.length) {
+                    data.filters.server_ids = state.filters.serverIds;
+                }
+                if (state.filters.catalogIds?.length) {
+                    data.filters.catalog_ids = state.filters.catalogIds;
+                }
+            }
+
+            // Добавляем период для истории
+            if (reportType === 'version_history') {
+                const dateFrom = document.getElementById('email-date-from').value;
+                const dateTo = document.getElementById('email-date-to').value;
+                if (dateFrom || dateTo) {
+                    data.period = {};
+                    if (dateFrom) data.period.date_from = dateFrom;
+                    if (dateTo) data.period.date_to = dateTo;
+                }
+            }
+
+            this.setLoading(true);
+            this.hideError();
+            this.hideSuccess();
+
+            try {
+                const result = await API.sendReport(data);
+
+                if (result.success) {
+                    const count = result.details?.recipients_count || 0;
+                    this.showSuccess(`Отчёт успешно отправлен ${count} получателям`);
+                    // Закрываем через 2 секунды
+                    setTimeout(() => this.close(), 2000);
+                } else {
+                    this.showError(result.error || 'Ошибка отправки отчёта');
+                }
+            } catch (error) {
+                this.showError('Ошибка при отправке: ' + error.message);
+            } finally {
+                this.setLoading(false);
+            }
+        }
+    };
+
+    // ========================================
     // ИНИЦИАЛИЗАЦИЯ
     // ========================================
     function init() {
@@ -507,6 +709,15 @@
             () => Controller.exportReport('csv'));
         document.getElementById('export-json-btn').addEventListener('click',
             () => Controller.exportReport('json'));
+
+        // Обработчик отправки по email
+        const sendEmailBtn = document.getElementById('send-email-btn');
+        if (sendEmailBtn) {
+            sendEmailBtn.addEventListener('click', () => EmailModal.open());
+        }
+
+        // Инициализация модалки email
+        EmailModal.init();
 
         // Начальная загрузка данных
         Controller.loadCurrentVersions();

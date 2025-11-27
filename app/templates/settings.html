@@ -510,6 +510,62 @@
                 </div>
             </div>
 
+            <div class="settings-section">
+                <h4>Группы рассылки</h4>
+
+                <!-- Компактная строка со статусом -->
+                <div class="mailing-groups-status-compact" id="mailing-groups-status-compact">
+                    <div class="status-line" id="mailing-groups-status-line">
+                        <span class="status-label">Email группы</span>
+                        <span class="status-spacer"></span>
+                        <span class="status-indicator" id="mailing-groups-status-indicator">
+                            <span class="status-dot connected"></span>
+                            <span class="status-text">Загрузка...</span>
+                        </span>
+                        <span class="expand-arrow" id="mailing-groups-expand-arrow">▼</span>
+                    </div>
+
+                    <!-- Разворачивающаяся область с деталями -->
+                    <div class="mailing-groups-details" id="mailing-groups-details" style="display: none;">
+                        <div class="mailing-groups-details-content">
+
+                            <!-- Создание новой группы -->
+                            <div class="detail-section">
+                                <h5>Создать группу рассылки</h5>
+                                <div class="mailing-group-create-form">
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label for="new-mailing-group-name">Имя группы:</label>
+                                            <input type="text" id="new-mailing-group-name" class="form-control" placeholder="admins, devops_team">
+                                        </div>
+                                        <div class="form-group" style="flex: 2;">
+                                            <label for="new-mailing-group-emails">Email адреса:</label>
+                                            <input type="text" id="new-mailing-group-emails" class="form-control" placeholder="user1@example.com, user2@example.com">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label for="new-mailing-group-description">Описание (опционально):</label>
+                                            <input type="text" id="new-mailing-group-description" class="form-control" placeholder="Команда разработки">
+                                        </div>
+                                    </div>
+                                    <button id="create-mailing-group-btn" class="action-btn">Создать группу</button>
+                                </div>
+                            </div>
+
+                            <!-- Список групп -->
+                            <div class="detail-section">
+                                <h5>Существующие группы</h5>
+                                <div id="mailing-groups-list-container" class="mailing-groups-list-container">
+                                    <div class="info-loading">Загрузка групп рассылки...</div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -1766,6 +1822,154 @@
     body.light-theme .tag-description {
         color: #666;
     }
+
+    /* Mailing Groups Management Styles */
+    .mailing-groups-status-compact {
+        border: 1px solid #333336;
+        border-radius: 6px;
+        overflow: hidden;
+        background-color: #252528;
+    }
+
+    body.light-theme .mailing-groups-status-compact {
+        border: 1px solid #ddd;
+        background-color: #f5f5f5;
+    }
+
+    .mailing-groups-details {
+        padding: 15px;
+        border-top: 1px solid #333336;
+        background-color: #1e1e20;
+    }
+
+    body.light-theme .mailing-groups-details {
+        border-top: 1px solid #ddd;
+        background-color: #fafafa;
+    }
+
+    .mailing-group-create-form {
+        background-color: #252528;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        padding: 15px;
+    }
+
+    body.light-theme .mailing-group-create-form {
+        background-color: #fff;
+        border: 1px solid #ddd;
+    }
+
+    .mailing-groups-list-container {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #333336;
+        border-radius: 4px;
+        background-color: #252528;
+    }
+
+    body.light-theme .mailing-groups-list-container {
+        border: 1px solid #ddd;
+        background-color: #fff;
+    }
+
+    .mailing-group-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 12px;
+        border-bottom: 1px solid #333336;
+    }
+
+    body.light-theme .mailing-group-item {
+        border-bottom: 1px solid #eee;
+    }
+
+    .mailing-group-item:last-child {
+        border-bottom: none;
+    }
+
+    .mailing-group-info {
+        flex: 1;
+    }
+
+    .mailing-group-name {
+        font-weight: 600;
+        color: #5ca5e1;
+        font-size: 14px;
+    }
+
+    .mailing-group-emails {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+        word-break: break-all;
+    }
+
+    .mailing-group-description {
+        font-size: 12px;
+        color: #aaa;
+        font-style: italic;
+        margin-top: 4px;
+    }
+
+    .mailing-group-status {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-left: 8px;
+    }
+
+    .mailing-group-status.active {
+        background: rgba(46, 204, 113, 0.2);
+        color: #2ecc71;
+    }
+
+    .mailing-group-status.inactive {
+        background: rgba(231, 76, 60, 0.2);
+        color: #e74c3c;
+    }
+
+    .mailing-group-actions {
+        display: flex;
+        gap: 5px;
+        margin-left: 15px;
+    }
+
+    .btn-edit-mailing-group, .btn-delete-mailing-group, .btn-toggle-mailing-group {
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: background 0.2s;
+    }
+
+    .btn-edit-mailing-group {
+        background: rgba(92, 165, 225, 0.2);
+        color: #5ca5e1;
+    }
+
+    .btn-edit-mailing-group:hover {
+        background: rgba(92, 165, 225, 0.3);
+    }
+
+    .btn-toggle-mailing-group {
+        background: rgba(241, 196, 15, 0.2);
+        color: #f1c40f;
+    }
+
+    .btn-toggle-mailing-group:hover {
+        background: rgba(241, 196, 15, 0.3);
+    }
+
+    .btn-delete-mailing-group {
+        background: rgba(244, 67, 54, 0.2);
+        color: #f44336;
+    }
+
+    .btn-delete-mailing-group:hover {
+        background: rgba(244, 67, 54, 0.3);
+    }
 </style>
 
 <script>
@@ -1865,7 +2069,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Обработчик создания тега
         document.getElementById('create-tag-btn').addEventListener('click', tagsManagement.createTag);
+    }
 
+    // Инициализация секции групп рассылки
+    const mailingGroupsStatusLine = document.getElementById('mailing-groups-status-line');
+    const mailingGroupsDetails = document.getElementById('mailing-groups-details');
+    const mailingGroupsExpandArrow = document.getElementById('mailing-groups-expand-arrow');
+    let mailingGroupsExpanded = false;
+
+    if (mailingGroupsStatusLine) {
+        // Загрузка количества групп для статуса
+        fetch('/api/mailing-groups').then(r => r.json()).then(data => {
+            const statusText = document.querySelector('#mailing-groups-status-indicator .status-text');
+            if (statusText && data.success) {
+                const activeCount = data.groups.filter(g => g.is_active).length;
+                statusText.textContent = `${activeCount} активных групп`;
+            }
+        }).catch(() => {});
+
+        mailingGroupsStatusLine.addEventListener('click', function() {
+            mailingGroupsExpanded = !mailingGroupsExpanded;
+
+            if (mailingGroupsExpanded) {
+                mailingGroupsDetails.style.display = 'block';
+                mailingGroupsExpandArrow.classList.add('expanded');
+                mailingGroupsManagement.loadGroups();
+            } else {
+                mailingGroupsDetails.style.display = 'none';
+                mailingGroupsExpandArrow.classList.remove('expanded');
+            }
+        });
+
+        // Обработчик создания группы рассылки
+        document.getElementById('create-mailing-group-btn').addEventListener('click', () => mailingGroupsManagement.createGroup());
+    }
+
+    // Инициализация тегов (продолжение)
+    if (tagsStatusLine) {
         // Обновление предпросмотра тега
         const updateTagPreview = () => {
             const preview = document.getElementById('tag-preview');
@@ -2077,6 +2317,190 @@ const tagsManagement = {
 };
 
 window.tagsManagement = tagsManagement;
+
+// Mailing Groups Management Object
+const mailingGroupsManagement = {
+    async loadGroups() {
+        const container = document.getElementById('mailing-groups-list-container');
+        const statusText = document.querySelector('#mailing-groups-status-indicator .status-text');
+        try {
+            const response = await fetch('/api/mailing-groups?include_inactive=true');
+            const data = await response.json();
+
+            if (data.success && data.groups) {
+                this.renderGroupsList(data.groups);
+                if (statusText) {
+                    const activeCount = data.groups.filter(g => g.is_active).length;
+                    statusText.textContent = `${activeCount} активных групп`;
+                }
+            } else {
+                container.innerHTML = '<div class="info-loading">Ошибка загрузки групп</div>';
+                if (statusText) statusText.textContent = 'Ошибка';
+            }
+        } catch (error) {
+            console.error('Error loading mailing groups:', error);
+            container.innerHTML = '<div class="info-loading">Ошибка загрузки</div>';
+            if (statusText) statusText.textContent = 'Ошибка';
+        }
+    },
+
+    renderGroupsList(groups) {
+        const container = document.getElementById('mailing-groups-list-container');
+
+        if (!groups || groups.length === 0) {
+            container.innerHTML = '<div class="info-loading">Нет созданных групп рассылки</div>';
+            return;
+        }
+
+        let html = '';
+        groups.forEach(group => {
+            const statusClass = group.is_active ? 'active' : 'inactive';
+            const statusText = group.is_active ? 'Активна' : 'Неактивна';
+            const toggleIcon = group.is_active ? '⏸️' : '▶️';
+            const toggleTitle = group.is_active ? 'Деактивировать' : 'Активировать';
+
+            const safeName = escapeHtml(group.name);
+            const safeEmails = escapeHtml(group.emails);
+            const safeDescription = escapeHtml(group.description || '');
+
+            html += `
+                <div class="mailing-group-item" data-group-id="${group.id}">
+                    <div class="mailing-group-info">
+                        <span class="mailing-group-name">${safeName}</span>
+                        <span class="mailing-group-status ${statusClass}">${statusText}</span>
+                        <div class="mailing-group-emails">${safeEmails}</div>
+                        ${safeDescription ? `<div class="mailing-group-description">${safeDescription}</div>` : ''}
+                    </div>
+                    <div class="mailing-group-actions">
+                        <button class="btn-toggle-mailing-group" onclick="mailingGroupsManagement.toggleGroup(${group.id}, ${group.is_active})" title="${toggleTitle}">${toggleIcon}</button>
+                        <button class="btn-edit-mailing-group" onclick="mailingGroupsManagement.editGroup(${group.id})" title="Редактировать">✏️</button>
+                        <button class="btn-delete-mailing-group" onclick="mailingGroupsManagement.deleteGroup(${group.id}, '${safeName}')" title="Удалить">🗑️</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    },
+
+    async createGroup() {
+        const name = document.getElementById('new-mailing-group-name').value.trim();
+        const emails = document.getElementById('new-mailing-group-emails').value.trim();
+        const description = document.getElementById('new-mailing-group-description').value.trim();
+
+        if (!name) {
+            showError('Введите имя группы');
+            return;
+        }
+
+        if (!emails) {
+            showError('Введите хотя бы один email');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/mailing-groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    emails: emails,
+                    description: description || null
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Группа создана успешно');
+                // Очистка формы
+                document.getElementById('new-mailing-group-name').value = '';
+                document.getElementById('new-mailing-group-emails').value = '';
+                document.getElementById('new-mailing-group-description').value = '';
+                // Перезагрузка списка
+                this.loadGroups();
+            } else {
+                showError(data.error || 'Ошибка создания группы');
+            }
+        } catch (error) {
+            console.error('Error creating mailing group:', error);
+            showError('Ошибка создания группы');
+        }
+    },
+
+    async editGroup(groupId) {
+        const newEmails = prompt('Введите новый список email-адресов (через запятую):');
+        if (!newEmails) return;
+
+        try {
+            const response = await fetch(`/api/mailing-groups/${groupId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emails: newEmails })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Группа обновлена');
+                this.loadGroups();
+            } else {
+                showError(data.error || 'Ошибка обновления');
+            }
+        } catch (error) {
+            console.error('Error updating mailing group:', error);
+            showError('Ошибка обновления группы');
+        }
+    },
+
+    async toggleGroup(groupId, isActive) {
+        try {
+            const response = await fetch(`/api/mailing-groups/${groupId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: !isActive })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification(isActive ? 'Группа деактивирована' : 'Группа активирована');
+                this.loadGroups();
+            } else {
+                showError(data.error || 'Ошибка изменения статуса');
+            }
+        } catch (error) {
+            console.error('Error toggling mailing group:', error);
+            showError('Ошибка изменения статуса');
+        }
+    },
+
+    async deleteGroup(groupId, groupName) {
+        if (!confirm(`Удалить группу рассылки "${groupName}"?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/mailing-groups/${groupId}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Группа удалена');
+                this.loadGroups();
+            } else {
+                showError(data.error || 'Ошибка удаления');
+            }
+        } catch (error) {
+            console.error('Error deleting mailing group:', error);
+            showError('Ошибка удаления группы');
+        }
+    }
+};
+
+window.mailingGroupsManagement = mailingGroupsManagement;
 
 async function loadSSHStatus() {
     try {

@@ -1,7 +1,7 @@
 # app/api/reports_routes.py
 # API endpoints для отчётов о версиях приложений
 
-from flask import request, jsonify, Response
+from flask import request, jsonify, Response, current_app
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import csv
@@ -15,6 +15,7 @@ from app.models.application_group import ApplicationGroup
 from app.models.application_catalog import ApplicationCatalog
 from app.models.server import Server
 from app.models.application_version_history import ApplicationVersionHistory
+from app.services.report_mailer import ReportMailerService
 
 
 # ========== Отчёт: Текущие версии ==========
@@ -470,3 +471,175 @@ def get_version_history_statistics():
             for name, count in top_apps
         ]
     })
+
+
+# ========== Отправка отчётов по email ==========
+
+@bp.route('/reports/send', methods=['POST'])
+def send_report_email():
+    """
+    Отправить отчёт по email
+
+    Request body (JSON):
+        report_type: тип отчёта ('current_versions' или 'version_history')
+        recipients: получатели (строка через запятую или массив) - email-адреса или имена групп
+        filters: объект с фильтрами (опционально)
+            server_ids: список ID серверов
+            catalog_ids: список ID приложений из словаря
+            app_type: тип приложения
+        period: период для history (опционально)
+            date_from: начало периода (ISO формат)
+            date_to: конец периода (ISO формат)
+
+    Returns:
+        success: результат операции
+        message: сообщение
+        details: детали отправки
+    """
+    # Проверка включена ли отправка email
+    if not current_app.config.get('REPORT_EMAIL_ENABLED', True):
+        return jsonify({
+            'success': False,
+            'error': 'Отправка отчётов по email отключена в конфигурации'
+        }), 503
+
+    data = request.json or {}
+
+    # Валидация обязательных полей
+    report_type = data.get('report_type')
+    if not report_type:
+        return jsonify({
+            'success': False,
+            'error': 'Не указан тип отчёта (report_type)'
+        }), 400
+
+    if report_type not in ['current_versions', 'version_history']:
+        return jsonify({
+            'success': False,
+            'error': f'Неизвестный тип отчёта: {report_type}. Допустимые: current_versions, version_history'
+        }), 400
+
+    recipients = data.get('recipients')
+    if not recipients:
+        return jsonify({
+            'success': False,
+            'error': 'Не указаны получатели (recipients)'
+        }), 400
+
+    # Нормализация recipients в список
+    if isinstance(recipients, str):
+        recipients = [r.strip() for r in recipients.split(',') if r.strip()]
+    elif isinstance(recipients, list):
+        recipients = [r.strip() for r in recipients if isinstance(r, str) and r.strip()]
+
+    if not recipients:
+        return jsonify({
+            'success': False,
+            'error': 'Список получателей пуст'
+        }), 400
+
+    # Получение фильтров
+    filters = data.get('filters', {})
+
+    # Создание сервиса рассылки
+    mailer = ReportMailerService()
+
+    try:
+        if report_type == 'current_versions':
+            result = mailer.send_current_versions_report(
+                recipients=recipients,
+                filters=filters
+            )
+        else:  # version_history
+            period = data.get('period', {})
+            result = mailer.send_version_history_report(
+                recipients=recipients,
+                filters=filters,
+                period=period
+            )
+
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Отчёт успешно отправлен',
+                'details': {
+                    'report_type': report_type,
+                    'recipients_count': result.get('recipients_count', 0),
+                    'resolved_recipients': result.get('resolved_recipients', []),
+                    'records_count': result.get('records_count', 0)
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Ошибка отправки'),
+                'details': result.get('details')
+            }), 500
+
+    except Exception as e:
+        current_app.logger.error(f"Error sending report email: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Ошибка при отправке отчёта: {str(e)}'
+        }), 500
+
+
+@bp.route('/reports/send/test', methods=['POST'])
+def test_report_email():
+    """
+    Тестовая отправка отчёта для проверки настроек
+
+    Request body (JSON):
+        recipients: получатели для теста
+    """
+    if not current_app.config.get('REPORT_EMAIL_ENABLED', True):
+        return jsonify({
+            'success': False,
+            'error': 'Отправка отчётов по email отключена в конфигурации'
+        }), 503
+
+    data = request.json or {}
+    recipients = data.get('recipients')
+
+    if not recipients:
+        return jsonify({
+            'success': False,
+            'error': 'Не указаны получатели (recipients)'
+        }), 400
+
+    # Нормализация recipients
+    if isinstance(recipients, str):
+        recipients = [r.strip() for r in recipients.split(',') if r.strip()]
+
+    mailer = ReportMailerService()
+
+    # Разрешаем получателей для проверки
+    resolved = mailer.resolve_recipients(recipients)
+
+    if not resolved:
+        return jsonify({
+            'success': False,
+            'error': 'Не удалось разрешить ни одного получателя',
+            'original_recipients': recipients
+        }), 400
+
+    # Отправляем тестовый отчёт текущих версий с ограничением
+    try:
+        result = mailer.send_current_versions_report(
+            recipients=recipients,
+            filters={'limit': 10}  # Ограничиваем для теста
+        )
+
+        return jsonify({
+            'success': result['success'],
+            'message': 'Тестовый отчёт отправлен' if result['success'] else result.get('error'),
+            'resolved_recipients': resolved,
+            'sendmail_path': current_app.config.get('SENDMAIL_PATH', '/usr/sbin/sendmail'),
+            'email_from': current_app.config.get('REPORT_EMAIL_FROM', 'ac-reports@localhost')
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'resolved_recipients': resolved
+        }), 500

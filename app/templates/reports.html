@@ -66,6 +66,9 @@
             <button id="export-json-btn" class="export-btn">
                 <span class="export-icon">📋</span> JSON
             </button>
+            <button id="send-email-btn" class="export-btn email-btn">
+                <span class="export-icon">✉️</span> Отправить
+            </button>
         </div>
     </div>
 
@@ -122,6 +125,62 @@
     <div id="no-data-message" class="no-data-message" style="display: none;">
         <span class="no-data-icon">📭</span>
         <span>Нет данных для отображения</span>
+    </div>
+</div>
+
+<!-- Модальное окно отправки отчёта по email -->
+<div id="send-email-modal" class="modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Отправить отчёт по email</h3>
+            <button class="modal-close" id="close-email-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="email-recipients">Получатели:</label>
+                <input type="text" id="email-recipients" class="form-input"
+                       placeholder="email@example.com, группа_рассылки">
+                <small class="form-hint">Укажите email-адреса или имена групп рассылки через запятую</small>
+            </div>
+
+            <div class="form-group">
+                <label>Тип отчёта:</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="report-type" value="current_versions" checked>
+                        <span>Текущие версии</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="report-type" value="version_history">
+                        <span>История изменений</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group" id="email-period-group" style="display: none;">
+                <label>Период для истории:</label>
+                <div class="date-inputs">
+                    <input type="date" id="email-date-from" class="date-input">
+                    <span class="date-separator">—</span>
+                    <input type="date" id="email-date-to" class="date-input">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="email-use-filters" checked>
+                    <span>Применить текущие фильтры</span>
+                </label>
+            </div>
+
+            <div id="email-error" class="error-message" style="display: none;"></div>
+            <div id="email-success" class="success-message" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-email-btn" class="btn-secondary">Отмена</button>
+            <button id="confirm-send-btn" class="btn-primary">Отправить</button>
+        </div>
     </div>
 </div>
 {% endblock %}
