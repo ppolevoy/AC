@@ -80,6 +80,42 @@
     color: var(--color-text-primary);
 }
 
+/* Отображение выбранных значений фильтров */
+.filter-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 250px;
+    margin-top: 4px;
+    min-height: 20px;
+}
+
+.filter-summary:empty::before {
+    content: 'Все';
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    font-style: italic;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 12px;
+    font-size: 11px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.filter-chip.more {
+    background: var(--color-bg-quaternary);
+    color: var(--color-text-secondary);
+}
+
 .date-filter-group {
     flex-direction: row;
     align-items: center;

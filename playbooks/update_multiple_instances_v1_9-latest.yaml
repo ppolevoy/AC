@@ -99,11 +99,12 @@
             timeout: 10
           register: url_check
           ignore_errors: yes
+          check_mode: no
 
         - name: Fail if URL is not accessible
           fail:
             msg: "Distribution URL is not accessible: {{ distrib_url }}"
-          when: url_check.status != 200
+          when: url_check is failed
 
         - name: Download distrib to Ansible server
           get_url:

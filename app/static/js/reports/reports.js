@@ -357,7 +357,38 @@
                     state.filtersData.catalogs.map(c =>
                         `<option value="${c.id}">${this.escapeHtml(c.name)}</option>`
                     ).join('');
+
+                // Обновляем summary для показа выбранных значений
+                this.updateFilterSummary('server-filter', 'server-filter-summary');
+                this.updateFilterSummary('catalog-filter', 'catalog-filter-summary');
             }
+        },
+
+        updateFilterSummary(selectId, summaryId) {
+            const select = document.getElementById(selectId);
+            const summary = document.getElementById(summaryId);
+            if (!select || !summary) return;
+
+            const selectedOptions = Array.from(select.selectedOptions)
+                .filter(o => o.value !== '');
+
+            if (selectedOptions.length === 0) {
+                summary.innerHTML = '';
+                return;
+            }
+
+            const maxChips = 2;
+            let html = '';
+
+            selectedOptions.slice(0, maxChips).forEach(option => {
+                html += `<span class="filter-chip" title="${this.escapeHtml(option.text)}">${this.escapeHtml(option.text)}</span>`;
+            });
+
+            if (selectedOptions.length > maxChips) {
+                html += `<span class="filter-chip more">+${selectedOptions.length - maxChips}</span>`;
+            }
+
+            summary.innerHTML = html;
         }
     };
 
@@ -469,6 +500,11 @@
             document.getElementById('date-to').value = '';
 
             state.filters = { serverIds: [], catalogIds: [], dateFrom: null, dateTo: null };
+
+            // Обновляем summary
+            UI.updateFilterSummary('server-filter', 'server-filter-summary');
+            UI.updateFilterSummary('catalog-filter', 'catalog-filter-summary');
+
             this.applyFilters();
         },
 
@@ -689,6 +725,14 @@
             () => Controller.applyFilters());
         document.getElementById('clear-filters-btn').addEventListener('click',
             () => Controller.clearFilters());
+
+        // Обновление summary при изменении выбора в фильтрах
+        document.getElementById('server-filter').addEventListener('change', () => {
+            UI.updateFilterSummary('server-filter', 'server-filter-summary');
+        });
+        document.getElementById('catalog-filter').addEventListener('change', () => {
+            UI.updateFilterSummary('catalog-filter', 'catalog-filter-summary');
+        });
 
         // Обработчик группировки
         document.getElementById('group-by-server').addEventListener('change',
