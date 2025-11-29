@@ -17,6 +17,51 @@ from app.models.application_version_history import ApplicationVersionHistory
 
 logger = logging.getLogger(__name__)
 
+# Разрешённые статусы для ApplicationInstance (соответствуют CHECK constraint в БД)
+ALLOWED_STATUSES = {'online', 'offline', 'unknown', 'starting', 'stopping', 'no_data'}
+
+# Маппинг нестандартных статусов на разрешённые
+STATUS_MAPPING = {
+    'disabled': 'offline',
+    'enabled': 'online',
+    'running': 'online',
+    'stopped': 'offline',
+    'down': 'offline',
+    'up': 'online',
+    'active': 'online',
+    'inactive': 'offline',
+    'paused': 'stopping',
+    'pending': 'starting',
+}
+
+
+def _normalize_status(status):
+    """
+    Нормализует статус от агента к разрешённым значениям.
+
+    Args:
+        status: Статус от агента (может быть любым)
+
+    Returns:
+        str: Один из разрешённых статусов (online, offline, unknown, starting, stopping, no_data)
+    """
+    if not status:
+        return 'unknown'
+
+    status_lower = status.lower().strip()
+
+    # Если статус уже разрешён - возвращаем как есть
+    if status_lower in ALLOWED_STATUSES:
+        return status_lower
+
+    # Пробуем маппинг
+    if status_lower in STATUS_MAPPING:
+        return STATUS_MAPPING[status_lower]
+
+    # Неизвестный статус - логируем и возвращаем unknown
+    logger.warning(f"Неизвестный статус '{status}', используется 'unknown'")
+    return 'unknown'
+
 
 def _record_version_change(instance, new_version, new_tag=None, new_image=None, new_distr_path=None):
     """
@@ -405,8 +450,8 @@ class AgentService:
                         except (ValueError, AttributeError) as e:
                             logger.warning(f"Некорректный формат времени запуска для docker-экземпляра {container_name}: {app_data['start_time']}")
 
-                    # Используем статус от агента, если он указан, иначе считаем online
-                    instance.status = app_data.get('status', 'online')
+                    # Используем статус от агента с нормализацией
+                    instance.status = _normalize_status(app_data.get('status', 'online'))
                     instance.last_seen = datetime.utcnow()
 
                     # Определяем группу и каталог для экземпляра
@@ -462,7 +507,7 @@ class AgentService:
                     instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
-                    instance.status = app_data.get('status') or 'unknown'
+                    instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
 
                     if 'start_time' in app_data and app_data['start_time']:
@@ -524,7 +569,7 @@ class AgentService:
                     instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
-                    instance.status = app_data.get('status') or 'unknown'
+                    instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
 
                     if 'start_time' in app_data and app_data['start_time']:

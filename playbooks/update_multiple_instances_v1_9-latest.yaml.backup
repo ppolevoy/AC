@@ -31,9 +31,7 @@
     
     app_instances_raw: "{{ app }}"
     app_instances: "{{ app_instances_raw.split(',') | map('trim') | list }}"
-    # Убираем только числовой суффикс (_1, _2, ...) и специальные суффиксы (_canary)
-    # mdse_fiz_1 -> mdse_fiz, yggdrasil_2 -> yggdrasil, chat-storage -> chat-storage
-    base_app_name: "{{ app_instances[0] | regex_replace('_(\\d+|canary)$', '') }}"
+    base_app_name: "{{ app_instances[0].split('_')[0] }}"
     distrib_url: "{{ distr_url }}"
     unpack_archive: "{{ unpack | default(true) | bool }}"
     validate_webapp: "{{ validate_web_inf | default(true) | bool }}"
@@ -134,13 +132,6 @@
             msg: "Unsupported archive type. Only .war, .jar, and .zip files are supported. Got: {{ distr_filename }}"
           when: archive_type not in ['war', 'jar', 'zip']
 
-        - name: Set unpack flag based on archive type
-          set_fact:
-            # JAR and WAR files should NOT be unpacked (copied as files)
-            # ZIP files should be unpacked
-            # User can override with -e "unpack=true/false"
-            unpack_archive: "{{ unpack | default(archive_type == 'zip') | bool }}"
-
         - name: Generate current timestamp
           set_fact:
             current_datetime: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%Y%m%d_%H%M%S') }}"
@@ -209,7 +200,7 @@
             path: "{{ deploy_path }}"
             state: directory
             mode: '0755'
-          # Directory needed for both unpacked archives and JAR files
+          when: unpack_archive
 
 # ================
 # Unpack archive
@@ -486,105 +477,73 @@
           set_fact:
             updated_instances: []
             skipped_instances: []
-          when: deploy_mode == 'update'
-
-        # Определение суффикса симлинка на основе режима распаковки:
-        # - Если архив НЕ распаковывается (unpack_archive=false) -> симлинк С расширением -> указывает на ФАЙЛ
-        # - Если архив распаковывается (unpack_archive=true) -> симлинк БЕЗ расширения -> указывает на КАТАЛОГ
-        # Примеры:
-        #   JAR (unpack=false): doc-view.jar -> /path/to/doc-view-1.9.jar (файл)
-        #   WAR (unpack=true):  mobws_1 -> /path/to/unpacked/dir/ (каталог)
-        - name: Determine symlink suffix based on unpack mode
-          set_fact:
-            # Суффикс: пусто если распаковывается, .jar/.war/.zip если нет
-            symlink_suffix: "{{ '' if unpack_archive else '.' + archive_type }}"
-            # Цель симлинка: файл архива если не распаковывается, каталог если распаковывается
-            symlink_target: "{{ deploy_path + '/' + distr_filename if not unpack_archive else deploy_path }}"
-            # Создаём словарь с одинаковым суффиксом для всех экземпляров
-            instance_symlink_map: >-
-              {%- set result = {} -%}
-              {%- set suffix = '' if unpack_archive else '.' + archive_type -%}
-              {%- for inst in app_instances -%}
-                {%- set _ = result.update({inst: suffix}) -%}
-              {%- endfor -%}
-              {{ result }}
-          when: deploy_mode == 'update'
-
-        - name: Display symlink configuration
-          debug:
-            msg:
-              - "Archive type: {{ archive_type }}"
-              - "Symlink target: {{ symlink_target }}"
-              - "Instance symlink map: {{ instance_symlink_map }}"
+            symlink_target: "{{ deploy_path if unpack_archive else deploy_path + '/' + distr_filename }}"
           when: deploy_mode == 'update'
 
         - name: Check if instance symlinks exist
           stat:
-            path: "{{ htdoc_base_dir }}/{{ item.key }}{{ item.value }}"
+            path: "{{ htdoc_base_dir }}/{{ item }}"
           register: instance_symlink_checks
-          loop: "{{ instance_symlink_map | dict2items }}"
-          when:
-            - deploy_mode == 'update'
-            - item.value != 'NOT_FOUND'
-          loop_control:
-            label: "{{ item.key }}{{ item.value }}"
+          loop: "{{ app_instances }}"
+          when: deploy_mode == 'update'
 
         - name: Update symlinks for existing instances
           block:
             - name: Get current symlink information
               stat:
-                path: "{{ htdoc_base_dir }}/{{ item.item.key }}{{ item.item.value }}"
+                path: "{{ htdoc_base_dir }}/{{ item.item }}"
               register: instance_symlink_info
               loop: "{{ instance_symlink_checks.results }}"
-              when:
+              when: 
                 - item.stat is defined
                 - item.stat.exists
               loop_control:
-                label: "{{ item.item.key }}{{ item.item.value }}"
+                label: "{{ item.item }}"
 
             - name: Remove old symlinks
               file:
-                path: "{{ htdoc_base_dir }}/{{ item.item.key }}{{ item.item.value }}"
+                path: "{{ htdoc_base_dir }}/{{ item.item }}"
                 state: absent
               loop: "{{ instance_symlink_checks.results }}"
               when:
                 - item.stat is defined
                 - item.stat.exists
               loop_control:
-                label: "{{ item.item.key }}{{ item.item.value }}"
+                label: "{{ item.item }}"
 
             - name: Create new symlinks
               file:
                 src: "{{ symlink_target }}"
-                dest: "{{ htdoc_base_dir }}/{{ item.item.key }}{{ item.item.value }}"
+                dest: "{{ htdoc_base_dir }}/{{ item.item }}"
                 state: link
                 force: yes
               loop: "{{ instance_symlink_checks.results }}"
               when:
                 - item.stat is defined
+                - item.stat.exists
               register: create_symlinks_result
               loop_control:
-                label: "{{ item.item.key }}{{ item.item.value }}"
+                label: "{{ item.item }}"
 
             - name: Build updated instances list
               set_fact:
-                updated_instances: "{{ updated_instances + [item.item.key] }}"
+                updated_instances: "{{ updated_instances + [item.item] }}"
               loop: "{{ instance_symlink_checks.results }}"
               when:
                 - item.stat is defined
                 - item.stat.exists
               loop_control:
-                label: "{{ item.item.key }}"
+                label: "{{ item.item }}"
 
             - name: Build skipped instances list
               set_fact:
-                skipped_instances: "{{ skipped_instances + [item.item.key] }}"
+                skipped_instances: "{{ skipped_instances + [item.item] }}"
               loop: "{{ instance_symlink_checks.results }}"
               when:
                 - item.stat is defined
                 - not item.stat.exists
               loop_control:
-                label: "{{ item.item.key }}"
+                label: "{{ item.item }}"
 
           when: 
             - deploy_mode == 'update'
@@ -594,8 +553,6 @@
           debug:
             msg:
               - "=== Symlink Update Summary ==="
-              - "Archive type: {{ archive_type }}"
-              - "Instance symlink suffixes: {{ instance_symlink_map }}"
               - "Total instances: {{ app_instances | length }}"
               - "Successfully updated ({{ updated_instances | length }}): {{ updated_instances | join(', ') if updated_instances | length > 0 else 'none' }}"
               - "Skipped - symlink not found ({{ skipped_instances | length }}): {{ skipped_instances | join(', ') if skipped_instances | length > 0 else 'none' }}"

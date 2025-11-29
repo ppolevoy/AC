@@ -1,0 +1,401 @@
+#!/usr/bin/ansible-playbook
+# Ansible Playbook v1.0 - Lib-based Applications Update
+# For applications with lib/ directory structure (notifier, smsport)
+# Created: 2025-11-14
+# 
+# Usage:
+#   ansible-playbook update_lib_applications_v1_0.yaml \
+#     -e server=fe.f.ftc.ru \
+#     -e app=notifier-fps,notifier-msg \
+#     -e distr_url=http://nexus/notifier-215.0.zip \
+#     -e mode=update
+#
+# Optional parameters:
+#   -e symlink_name=notifier          # For non-standard symlink names (e.g., notifier-city → notifier)
+#   -e unpack=true                    # Always true for lib apps (default)
+#
+
+- name: Normalize server name
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Extract short hostname from FQDN
+      set_fact:
+        target_host: "{{ server.split('.')[0] if (server is defined and '.' in server) else (server | default('localhost')) }}"
+      run_once: true
+      
+    - name: Add target host dynamically
+      add_host:
+        name: "{{ target_host }}"
+        groups: dynamic_targets
+      changed_when: false
+
+- name: Update lib-based application on target server
+  hosts: dynamic_targets
+  gather_facts: no
+  
+  vars:
+    app_base_dir: "/site/app"
+    htdoc_base_dir: "/site/htdoc"
+    htdoc_data_base_dir: "/site/share/htdoc/htdoc.data"
+    tmp_dir: "/site/ansible/tmp/ansible-deploy"
+    remote_tmp_dir: "/tmp/ansible"
+    
+    app_instances_raw: "{{ app }}"
+    app_instances: "{{ app_instances_raw.split(',') | map('trim') | list }}"
+    base_app_name: "{{ app_instances[0].split('-')[0] }}"
+    distrib_url: "{{ distr_url }}"
+    deploy_mode: "{{ mode | default('deliver') }}"
+    
+    # Lib-specific variables
+    data_dir_suffix: "_lib"
+    htdoc_data_dir: "{{ htdoc_data_base_dir }}/{{ base_app_name }}{{ data_dir_suffix }}"
+    
+# ================
+# Validate parameters
+# ================     
+    
+  tasks:
+    - name: Validate input parameters
+      tags: [always, validate]
+      fail:
+        msg: "Parameter '{{ item.name }}' is required. Please provide it with -e '{{ item.name }}=value'"
+      when: item.value == ''
+      loop:
+        - { name: 'server', value: "{{ server | default('') }}" }
+        - { name: 'app', value: "{{ app_instances_raw }}" }
+        - { name: 'distr_url', value: "{{ distrib_url }}" }
+      loop_control:
+        label: "{{ item.name }}"
+          
+    - name: Display parsed instances
+      set_fact:
+        instances_count: "{{ app_instances | length }}"
+
+    - name: Validate deploy mode
+      fail:
+        msg: "Invalid mode '{{ deploy_mode }}'. Allowed values: 'deliver' or 'update'"
+      when: deploy_mode not in ['deliver', 'update']
+        
+    - name: Display validated input parameters
+      debug:
+        msg:
+          - "=== Lib-based Application Update ==="
+          - "Target server: {{ inventory_hostname }}"
+          - "Application instances ({{ instances_count }}): {{ app_instances | join(', ') }}"
+          - "Base application name: {{ base_app_name }}"
+          - "Data directory: {{ htdoc_data_dir }}"
+          - "Distribution URL: {{ distrib_url }}"
+          - "Deploy mode: {{ deploy_mode }}"
+          - "Custom symlink name: {{ symlink_name | default('not specified - will use app name') }}"
+
+# ================
+# Prepare distribution on Ansible server
+# ================
+    - name: Prepare distribution on Ansible control node
+      tags: [always, prepare]
+      delegate_to: localhost
+      run_once: true
+      block:
+        - name: Create temp directory on Ansible control node
+          file:
+            path: "{{ tmp_dir }}"
+            state: directory
+            mode: '0755'
+      
+        - name: Check distribution URL availability
+          uri:
+            url: "{{ distrib_url }}"
+            method: HEAD
+            return_content: no
+            status_code: 200
+            timeout: 10
+          register: url_check
+          ignore_errors: yes
+
+        - name: Fail if URL is not accessible
+          fail:
+            msg: "Distribution URL is not accessible: {{ distrib_url }}"
+          when: url_check.status != 200
+
+        - name: Download distribution to Ansible server
+          get_url:
+            url: "{{ distrib_url }}"
+            dest: "{{ tmp_dir }}/{{ distrib_url | basename }}"
+            mode: '0644'
+            timeout: 300
+            force: yes
+          register: download_result
+
+        - name: Extract distribution filename
+          set_fact:
+            distr_filename: "{{ distrib_url | basename }}"
+
+        - name: Extract archive name without extension
+          set_fact:
+            archive_name_without_ext: "{{ distr_filename | regex_replace('\\.zip$', '') }}"
+
+        - name: Validate archive type
+          fail:
+            msg: "Unsupported archive type. Only .zip files are supported for lib applications. Got: {{ distr_filename }}"
+          when: not distr_filename.endswith('.zip')
+
+        - name: Generate current timestamp
+          set_fact:
+            current_datetime: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%Y%m%d_%H%M%S') }}"
+            current_date: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%Y%m%d') }}"
+            current_time: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%H%M%S') }}"
+
+        - name: Extract version from filename
+          set_fact:
+            app_version: "{{ distr_filename | regex_replace('^.*-([0-9]+\\.[0-9]+[^.]*?)\\.zip$', '\\1') }}"
+
+# ================
+# Transfer distribution to target server
+# ================
+
+    - name: Transfer distribution to target server
+      tags: [always, transfer]
+      block:
+        - name: Create temp directory on target server
+          file:
+            path: "{{ remote_tmp_dir }}"
+            state: directory
+            mode: '0755'
+        
+        - name: Copy distribution from Ansible server to target server
+          copy:
+            src: "{{ tmp_dir }}/{{ distr_filename }}"
+            dest: "{{ remote_tmp_dir }}/{{ distr_filename }}"
+            mode: '0644'
+          register: copy_result
+
+        - name: Verify file was copied
+          stat:
+            path: "{{ remote_tmp_dir }}/{{ distr_filename }}"
+          register: copied_file
+
+# ================
+# Deploy lib application
+# ================
+
+    - name: Deploy lib-based application
+      tags: [always, deploy]
+      block:
+        - name: Set deployment variables
+          set_fact:
+            deploy_dir_name: "{{ current_date }}_{{ current_time }}_{{ archive_name_without_ext }}"
+            deploy_path: "{{ htdoc_data_dir }}/{{ current_date }}_{{ current_time }}_{{ archive_name_without_ext }}"
+            temp_extract_path: "{{ remote_tmp_dir }}/extract_{{ current_datetime }}"
+
+        - name: Create deployment directory
+          file:
+            path: "{{ deploy_path }}"
+            state: directory
+            mode: '0755'
+
+        - name: Create temporary extraction directory
+          file:
+            path: "{{ temp_extract_path }}"
+            state: directory
+            mode: '0755'
+
+# ================
+# Extract and process lib directory
+# ================
+        
+        - name: Extract ZIP archive to temporary directory
+          unarchive:
+            src: "{{ remote_tmp_dir }}/{{ distr_filename }}"
+            dest: "{{ temp_extract_path }}"
+            remote_src: yes
+          register: unarchive_result
+
+        - name: Verify lib directory exists and not empty
+          shell: |
+            if [ ! -d "{{ temp_extract_path }}/lib" ]; then
+              echo "ERROR: lib directory not found"
+              exit 1
+            fi
+            file_count=$(find "{{ temp_extract_path }}/lib" -type f | wc -l)
+            if [ "$file_count" -eq 0 ]; then
+              echo "ERROR: lib directory is empty"
+              exit 2
+            fi
+            echo "$file_count"
+          register: lib_validation
+          failed_when: lib_validation.rc != 0
+          changed_when: false
+
+        - name: Store lib files count for verification
+          set_fact:
+            expected_lib_files: "{{ lib_validation.stdout | int }}"
+
+        - name: Copy lib directory to deployment path
+          synchronize:
+            src: "{{ temp_extract_path }}/lib/"
+            dest: "{{ deploy_path }}/lib/"
+            recursive: yes
+          delegate_to: "{{ inventory_hostname }}"
+
+        - name: Verify lib directory was copied
+          stat:
+            path: "{{ deploy_path }}/lib"
+          register: deployed_lib_check
+
+        - name: Fail if lib directory was not copied
+          fail:
+            msg: "Failed to copy lib directory to {{ deploy_path }}/lib"
+          when: not deployed_lib_check.stat.exists or not deployed_lib_check.stat.isdir
+
+        - name: Count files in deployed lib directory
+          shell: find "{{ deploy_path }}/lib" -type f | wc -l
+          register: deployed_lib_count
+          changed_when: false
+
+        - name: Verify file count matches
+          fail:
+            msg: "File count mismatch! Expected: {{ expected_lib_files }}, Got: {{ deployed_lib_count.stdout }}"
+          when: expected_lib_files != (deployed_lib_count.stdout | int)
+
+        - name: Remove temporary extraction directory
+          file:
+            path: "{{ temp_extract_path }}"
+            state: absent
+
+# ================
+# Update symbolic links (only in 'update' mode)
+# ================
+
+    - name: Update symbolic links for lib applications
+      tags: [always, symlinks]
+      when: deploy_mode == 'update'
+      block:
+        - name: Initialize instance tracking
+          set_fact:
+            updated_instances: []
+            skipped_instances: []
+            symlink_target: "{{ deploy_path }}/lib"
+
+        - name: Determine effective symlink names for each instance
+          set_fact:
+            symlink_mappings: >-
+              {{
+                symlink_mappings | default({}) | combine({
+                  item: symlink_name | default(item)
+                })
+              }}
+          loop: "{{ app_instances }}"
+
+        - name: Check if instance symlinks exist
+          stat:
+            path: "{{ htdoc_base_dir }}/{{ symlink_mappings[item] }}"
+          register: instance_symlink_checks
+          loop: "{{ app_instances }}"
+          loop_control:
+            label: "{{ item }} → {{ symlink_mappings[item] }}"
+
+        - name: Update symlinks for instances
+          block:
+            - name: Remove old symlinks
+              file:
+                path: "{{ htdoc_base_dir }}/{{ symlink_mappings[item.item] }}"
+                state: absent
+              loop: "{{ instance_symlink_checks.results }}"
+              when:
+                - item.stat is defined
+                - item.stat.exists
+              loop_control:
+                label: "{{ item.item }} → {{ symlink_mappings[item.item] }}"
+
+            - name: Create new symlinks
+              file:
+                src: "{{ symlink_target }}"
+                dest: "{{ htdoc_base_dir }}/{{ symlink_mappings[item.item] }}"
+                state: link
+                force: yes
+              loop: "{{ instance_symlink_checks.results }}"
+              when:
+                - item.stat is defined
+                - item.stat.exists
+              register: create_symlinks_result
+              loop_control:
+                label: "{{ item.item }} → {{ symlink_mappings[item.item] }}"
+
+            - name: Build updated instances list
+              set_fact:
+                updated_instances: "{{ updated_instances + [item.item + ' → ' + symlink_mappings[item.item]] }}"
+              loop: "{{ instance_symlink_checks.results }}"
+              when:
+                - item.stat is defined
+                - item.stat.exists
+              loop_control:
+                label: "{{ item.item }}"
+
+            - name: Build skipped instances list
+              set_fact:
+                skipped_instances: "{{ skipped_instances + [item.item + ' → ' + symlink_mappings[item.item]] }}"
+              loop: "{{ instance_symlink_checks.results }}"
+              when:
+                - item.stat is defined
+                - not item.stat.exists
+              loop_control:
+                label: "{{ item.item }}"
+
+# ================
+# Cleanup and Summary
+# ================
+
+    - name: Cleanup temporary files
+      tags: [always, cleanup]
+      block:
+        - name: Remove distribution from remote temp
+          file:
+            path: "{{ remote_tmp_dir }}/{{ distr_filename }}"
+            state: absent
+
+        - name: Get final lib directory size
+          shell: du -sh "{{ deploy_path }}/lib" | cut -f1
+          register: lib_size
+          changed_when: false
+          
+        - name: Display deployment summary
+          debug:
+            msg:
+              - "╔════════════════════════════════════════════════════════════════╗"
+              - "║          LIB APPLICATION DEPLOYMENT SUMMARY                    ║"
+              - "╚════════════════════════════════════════════════════════════════╝"
+              - ""
+              - "📦 Application Details:"
+              - "   Base application: {{ base_app_name }}"
+              - "   Instances ({{ instances_count }}): {{ app_instances | join(', ') }}"
+              - "   Version: {{ app_version }}"
+              - "   Archive: {{ distr_filename }}"
+              - ""
+              - "📂 Deployment Paths:"
+              - "   Data directory: {{ htdoc_data_dir }}"
+              - "   Deploy path: {{ deploy_path }}"
+              - "   Lib directory: {{ deploy_path }}/lib"
+              - ""
+              - "📊 Lib Directory Statistics:"
+              - "   Files count: {{ deployed_lib_count.stdout }}"
+              - "   Directory size: {{ lib_size.stdout }}"
+              - ""
+              - "🔗 Symbolic Links ({{ deploy_mode | upper }} mode):"
+              - "{% if deploy_mode == 'update' %}"
+              - "   Successfully updated ({{ updated_instances | length }}):"
+              - "{% for link in updated_instances %}"
+              - "     ✓ {{ link }}"
+              - "{% endfor %}"
+              - "{% if skipped_instances | length > 0 %}"
+              - "   Skipped - symlink not found ({{ skipped_instances | length }}):"
+              - "{% for link in skipped_instances %}"
+              - "     ⊘ {{ link }}"
+              - "{% endfor %}"
+              - "{% endif %}"
+              - "{% else %}"
+              - "   Mode: DELIVER ONLY (symlinks not updated)"
+              - "{% endif %}"
+              - ""
+              - "✅ Deployment completed successfully"
+              - "═══════════════════════════════════════════════════════════════"

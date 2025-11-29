@@ -436,7 +436,7 @@
                                 <input type="radio" name="mode" value="deliver" checked> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="mode" value="immediate"> Сейчас
+                                <input type="radio" name="mode" value="update"> Сейчас
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="mode" value="night-restart"> В рестарт
@@ -492,7 +492,7 @@
 
             modeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
-                    if (this.value === 'immediate') {
+                    if (this.value === 'update') {
                         immediateModeFields.style.display = 'block';
                         immediateModeFields.classList.add('animated-slide-down');
                     } else {
@@ -675,7 +675,7 @@
                     // Восстанавливаем поля для режима "Сейчас"
                     const immediateModeFields = document.getElementById('immediate-mode-fields');
                     if (immediateModeFields) {
-                        if (state.restartMode === 'immediate') {
+                        if (state.restartMode === 'update') {
                             immediateModeFields.style.display = 'block';
                         }
 
@@ -789,7 +789,7 @@
                                 <input type="radio" name="mode" value="deliver" ${state.restartMode === 'deliver' ? 'checked' : ''}> Доставить
                             </label>
                             <label class="radio-label">
-                                <input type="radio" name="mode" value="immediate" ${state.restartMode === 'immediate' ? 'checked' : ''}> Сейчас
+                                <input type="radio" name="mode" value="update" ${state.restartMode === 'update' ? 'checked' : ''}> Сейчас
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="mode" value="night-restart" ${state.restartMode === 'night-restart' ? 'checked' : ''}> В рестарт
@@ -797,7 +797,7 @@
                         </div>
                     </div>
 
-                    <div id="immediate-mode-fields" style="display: ${state.restartMode === 'immediate' ? 'block' : 'none'}; animation-delay: 0.35s" class="animated-fade-in">
+                    <div id="immediate-mode-fields" style="display: ${state.restartMode === 'update' ? 'block' : 'none'}; animation-delay: 0.35s" class="animated-fade-in">
                         <div class="form-group">
                             <label for="orchestrator-playbook">Orchestrator playbook:</label>
                             <select id="orchestrator-playbook" name="orchestrator_playbook" class="form-control">
@@ -921,7 +921,7 @@
                         };
 
                         // Добавляем параметры для режима "Сейчас"
-                        if (state.restartMode === 'immediate') {
+                        if (state.restartMode === 'update') {
                             if (state.orchestratorPlaybook) {
                                 requestBody.orchestrator_playbook = state.orchestratorPlaybook;
                             }
@@ -1097,7 +1097,7 @@
 
             modeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
-                    if (this.value === 'immediate') {
+                    if (this.value === 'update') {
                         immediateModeFields.style.display = 'block';
                         immediateModeFields.classList.add('animated-slide-down');
                     } else {
@@ -1211,7 +1211,7 @@
                 };
 
                 // Добавляем параметры для режима "Сейчас"
-                if (mode === 'immediate') {
+                if (mode === 'update') {
                     const orchestratorPlaybook = formData.get('orchestrator_playbook');
                     const drainWaitTime = formData.get('drain_wait_time');
 
