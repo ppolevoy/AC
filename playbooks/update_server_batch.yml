@@ -1,0 +1,44 @@
+---
+# Вспомогательный файл для вызова update playbook на одном сервере
+# Используется в orchestrator-50-50.yml через include_tasks
+# версия 2.0 - для работы с составными именами
+
+- name: "{{ batch_name }}: Log update start for {{ current_server }}"
+  shell: |
+    echo "  [{{ current_server }}] Starting update for applications: {{ apps_to_update | join(', ') }}" >> {{ log_file }}
+    echo "  [{{ current_server }}] Distribution URL: {{ distr_url }}" >> {{ log_file }}
+  delegate_to: localhost
+
+- name: "{{ batch_name }}: Execute {{ update_playbook_name }} on {{ current_server }}"
+  command: >
+    ansible-playbook {{ update_playbook_name }}
+    -e "server={{ current_server }}"
+    -e "app={{ apps_to_update | join(',') }}"
+    -e "distr_url={{ distr_url }}"
+    -e "mode=update"
+  register: update_result
+  failed_when: update_result.rc != 0
+  delegate_to: localhost
+
+- name: "{{ batch_name }}: Log {{ update_playbook_name }} output for {{ current_server }}"
+  copy:
+    content: |
+      [{{ current_server }}] {{ update_playbook_name }} execution:
+      {{ update_result.stdout | default('') }}
+      {% if update_result.stderr is defined and update_result.stderr != '' %}
+      [{{ current_server }}] STDERR:
+      {{ update_result.stderr }}
+      {% endif %}
+      [{{ current_server }}] Return code: {{ update_result.rc }}
+
+    dest: "{{ log_file }}.{{ current_server }}.tmp"
+  delegate_to: localhost
+
+- name: "{{ batch_name }}: Append log for {{ current_server }}"
+  shell: cat "{{ log_file }}.{{ current_server }}.tmp" >> "{{ log_file }}" && rm -f "{{ log_file }}.{{ current_server }}.tmp"
+  delegate_to: localhost
+
+- name: "{{ batch_name }}: Log update completion for {{ current_server }}"
+  shell: |
+    echo "  [{{ current_server }}] Update completed successfully" >> {{ log_file }}
+  delegate_to: localhost

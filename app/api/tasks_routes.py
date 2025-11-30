@@ -26,7 +26,8 @@ def get_tasks():
 
             # Добавляем имена приложения и сервера вместо ID
             # Проверяем, является ли задача групповой (по наличию app_ids в params)
-            app_ids = task.params.get('app_ids')
+            params = task.params or {}
+            app_ids = params.get('app_ids')
             if app_ids and isinstance(app_ids, list) and len(app_ids) > 1:
                 # Групповая задача - загружаем приложения и формируем строку
                 apps = Application.query.filter(Application.id.in_(app_ids)).all()
@@ -34,9 +35,9 @@ def get_tasks():
                     task_data['application_name'] = ','.join([app.instance_name for app in apps])
                 else:
                     task_data['application_name'] = f"Apps: {','.join(map(str, app_ids))}"
-            elif task.application_id:
+            elif task.instance_id:
                 # Одиночная задача
-                app = Application.query.get(task.application_id)
+                app = Application.query.get(task.instance_id)
                 task_data['application_name'] = app.instance_name if app else None
             else:
                 task_data['application_name'] = None
@@ -77,7 +78,8 @@ def get_task(task_id):
 
         # Добавляем имена приложения и сервера вместо ID
         # Проверяем, является ли задача групповой (по наличию app_ids в params)
-        app_ids = task.params.get('app_ids')
+        params = task.params or {}
+        app_ids = params.get('app_ids')
         if app_ids and isinstance(app_ids, list) and len(app_ids) > 1:
             # Групповая задача - загружаем приложения и формируем строку
             apps = Application.query.filter(Application.id.in_(app_ids)).all()

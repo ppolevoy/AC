@@ -12,6 +12,7 @@ from app.models.application_mapping import ApplicationMapping, ApplicationMappin
 from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag, TagHistory
 from app.models.application_version_history import ApplicationVersionHistory
 from app.models.mailing_group import MailingGroup
+from app.models.task import Task
 
 # Алиас для обратной совместимости с кодом, использующим Application
 Application = ApplicationInstance
@@ -36,5 +37,6 @@ __all__ = [
     'ApplicationGroupTag',
     'TagHistory',
     'ApplicationVersionHistory',
-    'MailingGroup'
+    'MailingGroup',
+    'Task'
 ]

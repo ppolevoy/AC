@@ -628,7 +628,8 @@ def update_application_group(group_id):
 def manage_application_group(group_id):
     """Массовое управление всеми экземплярами группы приложений"""
     try:
-        from app.tasks.queue import task_queue, Task
+        from app.tasks.queue import task_queue
+        from app.models.task import Task
         group = ApplicationGroup.query.get(group_id)
         if not group:
             return jsonify({
@@ -669,7 +670,7 @@ def manage_application_group(group_id):
                 task_type=action,
                 params={},
                 server_id=app.server_id,
-                application_id=app.id
+                instance_id=app.id
             )
             
             task_queue.add_task(task)

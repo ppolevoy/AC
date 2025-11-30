@@ -69,7 +69,9 @@ class SSHAnsibleService:
         'app_instances': 'Список составных имен server::app для orchestrator (через запятую)',
         'drain_delay': 'Время ожидания после drain в секундах (для orchestrator)',
         'update_playbook': 'Имя playbook для обновления (для orchestrator)',
-        'wait_after_update': 'Время ожидания после обновления в секундах (для orchestrator)'
+        'wait_after_update': 'Время ожидания после обновления в секундах (для orchestrator)',
+        'haproxy_api_url': 'URL HAProxy API для orchestrator (например: http://10.0.0.1:5000/haproxy/default)',
+        'haproxy_backend': 'Имя backend в HAProxy (для orchestrator)'
     }
     
     # Регулярные выражения для безопасной валидации кастомных параметров
@@ -229,7 +231,10 @@ class SSHAnsibleService:
                           image_url: Optional[str] = None,
                           orchestrator_app_instances: Optional[str] = None,
                           orchestrator_drain_delay: Optional[int] = None,
-                          orchestrator_update_playbook: Optional[str] = None) -> Dict[str, str]:
+                          orchestrator_update_playbook: Optional[str] = None,
+                          orchestrator_haproxy_api_url: Optional[str] = None,
+                          orchestrator_haproxy_backend: Optional[str] = None,
+                          orchestrator_wait_after_update: Optional[int] = None) -> Dict[str, str]:
         """
         Формирует контекстные переменные для подстановки в playbook
 
@@ -283,6 +288,18 @@ class SSHAnsibleService:
         if orchestrator_update_playbook:
             context_vars['update_playbook'] = orchestrator_update_playbook
             logger.info(f"Orchestrator update_playbook: {orchestrator_update_playbook}")
+
+        if orchestrator_haproxy_api_url:
+            context_vars['haproxy_api_url'] = orchestrator_haproxy_api_url
+            logger.info(f"Orchestrator haproxy_api_url: {orchestrator_haproxy_api_url}")
+
+        if orchestrator_haproxy_backend:
+            context_vars['haproxy_backend'] = orchestrator_haproxy_backend
+            logger.info(f"Orchestrator haproxy_backend: {orchestrator_haproxy_backend}")
+
+        if orchestrator_wait_after_update is not None:
+            context_vars['wait_after_update'] = str(orchestrator_wait_after_update)
+            logger.info(f"Orchestrator wait_after_update: {orchestrator_wait_after_update}s")
 
         return context_vars
     
@@ -400,11 +417,17 @@ class SSHAnsibleService:
         orchestrator_app_instances = None
         orchestrator_drain_delay = None
         orchestrator_update_playbook = None
+        orchestrator_haproxy_api_url = None
+        orchestrator_haproxy_backend = None
+        orchestrator_wait_after_update = None
 
         if extra_params:
             orchestrator_app_instances = extra_params.get('app_instances')
             orchestrator_drain_delay = extra_params.get('drain_delay')
             orchestrator_update_playbook = extra_params.get('update_playbook')
+            orchestrator_haproxy_api_url = extra_params.get('haproxy_api_url')
+            orchestrator_haproxy_backend = extra_params.get('haproxy_backend')
+            orchestrator_wait_after_update = extra_params.get('wait_after_update')
             logger.info(f"Получены extra_params для orchestrator: {extra_params}")
 
         # Если путь к playbook не указан, используем playbook по умолчанию
@@ -494,7 +517,10 @@ class SSHAnsibleService:
                 image_url=image_url,
                 orchestrator_app_instances=orchestrator_app_instances,
                 orchestrator_drain_delay=orchestrator_drain_delay,
-                orchestrator_update_playbook=orchestrator_update_playbook
+                orchestrator_update_playbook=orchestrator_update_playbook,
+                orchestrator_haproxy_api_url=orchestrator_haproxy_api_url,
+                orchestrator_haproxy_backend=orchestrator_haproxy_backend,
+                orchestrator_wait_after_update=orchestrator_wait_after_update
             )
             
             # Формируем extra_vars на основе конфигурации и контекста

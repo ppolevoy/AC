@@ -7,7 +7,8 @@ from app.models.server import Server
 from app.models.application_instance import ApplicationInstance
 from app.models.application_group import ApplicationGroup
 from app.models.event import Event
-from app.tasks.queue import task_queue, Task
+from app.tasks.queue import task_queue
+from app.models.task import Task
 from app.api import bp
 
 # Алиас для обратной совместимости
@@ -255,7 +256,7 @@ def update_application(app_id):
                 'playbook_path': playbook_path
             },
             server_id=server.id,
-            application_id=app.id
+            instance_id=app.id
         )
 
         # Добавляем задачу в очередь для асинхронной обработки
@@ -427,7 +428,7 @@ def batch_update_applications():
                     'drain_wait_time': drain_wait_time
                 },
                 server_id=first_app.server_id,
-                application_id=grouped_app_ids[0]
+                instance_id=grouped_app_ids[0]
             )
 
             # Добавляем задачу в очередь
@@ -506,7 +507,7 @@ def manage_application(app_id):
             task_type=action,
             params={},
             server_id=server.id,
-            application_id=app.id
+            instance_id=app.id
         )
 
         task_queue.add_task(task)
@@ -578,7 +579,7 @@ def bulk_manage_applications():
                 task_type=action,
                 params={},
                 server_id=server.id,
-                application_id=app.id
+                instance_id=app.id
             )
 
             task_queue.add_task(task)

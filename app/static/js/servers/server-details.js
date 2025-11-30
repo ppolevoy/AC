@@ -287,7 +287,7 @@ async function toggleHAProxyNode(serverId, isEnabled) {
 
         if (data.success) {
             if (isEnabled) {
-                showNotification('✓ HAProxy узел активирован. Нажмите "Обнаружить instances" для поиска instances.');
+                showNotification('✓ HAProxy узел активирован');
             } else {
                 showNotification('Статус HAProxy узла снят');
             }

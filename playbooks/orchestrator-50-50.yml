@@ -14,7 +14,7 @@
 #   haproxy_api_url  - URL HAProxy API (например: http://10.0.0.1:5000/haproxy/default)
 #
 # optional_params:
-#   wait_after_update - Время ожидания после обновления (по умолчанию 1800 сек = 30 мин)
+#   wait_after_update - Время ожидания после обновления (по умолчанию 180 сек = 3 мин)
 #
 # Требования:
 #   - Указанный playbook для обновления должен находиться в той же директории
@@ -27,8 +27,7 @@
   gather_facts: no
   vars:
     log_dir: "/site/ansible/log"
-    log_file: "{{ log_dir }}/update-apps-{{ ansible_date_time.iso8601_basic_short }}.log"
-    wait_after_update: "{{ wait_after_update | default(1800) }}"
+    wait_after_update: "{{ wait_after_update | default(180) }}"
     update_playbook_name: "{{ update_playbook | default('update_multiple_instances_v1_9-latest.yaml') }}"
     haproxy_command_timeout: 10
 
@@ -36,6 +35,17 @@
     # ============================================
     # БЛОК 1: Инициализация и валидация
     # ============================================
+
+    - name: Generate current timestamp
+      set_fact:
+        current_datetime: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%Y%m%d_%H%M%S') }}"
+        current_datetime_iso: "{{ lookup('pipe', 'TZ=Asia/Novosibirsk date +%Y-%m-%dT%H:%M:%S') }}"
+      delegate_to: localhost
+
+    - name: Set log file path
+      set_fact:
+        log_file: "{{ log_dir }}/update-apps-{{ current_datetime }}.log"
+      delegate_to: localhost
 
     - name: Create log directory
       file:
@@ -50,7 +60,7 @@
           ==========================================
           Application Update Started (v2.0)
           ==========================================
-          Date: {{ ansible_date_time.iso8601 }}
+          Date: {{ current_datetime_iso }}
           App instances: {{ app_instances }}
           Distribution URL: {{ distr_url }}
           Drain delay: {{ drain_delay }}s
@@ -132,20 +142,22 @@
 
     - name: Split to even indices (0, 2, 4, ...)
       set_fact:
-        even_batch: "{{ even_batch + [item.1] }}"
-      loop: "{{ instances_list | enumerate }}"
-      when: item.0 % 2 == 0
+        even_batch: "{{ even_batch + [item] }}"
+      loop: "{{ instances_list }}"
+      when: idx % 2 == 0
       loop_control:
-        label: "[{{ item.0 }}] {{ item.1 }}"
+        index_var: idx
+        label: "[{{ idx }}] {{ item }}"
       delegate_to: localhost
 
     - name: Split to odd indices (1, 3, 5, ...)
       set_fact:
-        odd_batch: "{{ odd_batch + [item.1] }}"
-      loop: "{{ instances_list | enumerate }}"
-      when: item.0 % 2 == 1
+        odd_batch: "{{ odd_batch + [item] }}"
+      loop: "{{ instances_list }}"
+      when: idx % 2 == 1
       loop_control:
-        label: "[{{ item.0 }}] {{ item.1 }}"
+        index_var: idx
+        label: "[{{ idx }}] {{ item }}"
       delegate_to: localhost
 
     - name: Determine update order (larger batch first)
@@ -251,8 +263,10 @@
 
         - name: "Batch 1: Set instances to DRAIN via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/drain"
-            method: GET
+            url: "{{ haproxy_api_url }}/backends/{{ backend_name }}/servers/{{ item.haproxy_name }}/action"
+            method: POST
+            body: '{"action": "drain"}'
+            body_format: json
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
           loop: "{{ drain_batch1_targets }}"
@@ -346,8 +360,10 @@
         # Шаг 6: Возврат в READY
         - name: "Batch 1: Set instances to READY via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/ready"
-            method: GET
+            url: "{{ haproxy_api_url }}/backends/{{ backend_name }}/servers/{{ item.haproxy_name }}/action"
+            method: POST
+            body: '{"action": "ready"}'
+            body_format: json
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
           loop: "{{ drain_batch1_targets }}"
@@ -429,8 +445,10 @@
 
         - name: "Batch 2: Set instances to DRAIN via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/drain"
-            method: GET
+            url: "{{ haproxy_api_url }}/backends/{{ backend_name }}/servers/{{ item.haproxy_name }}/action"
+            method: POST
+            body: '{"action": "drain"}'
+            body_format: json
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
           loop: "{{ drain_batch2_targets }}"
@@ -524,8 +542,10 @@
         # Шаг 6: Возврат в READY
         - name: "Batch 2: Set instances to READY via HAProxy API"
           uri:
-            url: "{{ haproxy_api_url }}/{{ backend_name }}/{{ item.haproxy_name }}/ready"
-            method: GET
+            url: "{{ haproxy_api_url }}/backends/{{ backend_name }}/servers/{{ item.haproxy_name }}/action"
+            method: POST
+            body: '{"action": "ready"}'
+            body_format: json
             timeout: "{{ haproxy_command_timeout }}"
             status_code: [200, 201]
           loop: "{{ drain_batch2_targets }}"
