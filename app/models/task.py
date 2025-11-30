@@ -50,6 +50,10 @@ class Task(db.Model):
     # Прогресс выполнения (для отображения в UI)
     progress = db.Column(db.JSON, default=dict)
 
+    # PID процесса для возможности отмены
+    pid = db.Column(db.Integer, nullable=True)
+    cancelled = db.Column(db.Boolean, default=False, nullable=False)
+
     # Relationships
     server = db.relationship('Server', backref=db.backref('tasks', lazy='dynamic'))
     instance = db.relationship('ApplicationInstance', backref=db.backref('tasks', lazy='dynamic'))
@@ -82,5 +86,13 @@ class Task(db.Model):
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'result': self.result,
             'error': self.error,
-            'progress': self.progress or {}
+            'progress': self.progress or {},
+            'pid': self.pid,
+            'cancelled': self.cancelled,
+            'can_cancel': self.can_cancel
         }
+
+    @property
+    def can_cancel(self):
+        """Проверка возможности отмены задачи"""
+        return self.status == 'processing' and self.pid is not None and not self.cancelled

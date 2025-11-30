@@ -8,9 +8,47 @@ import uuid
 import queue
 import logging
 import threading
+import re
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def parse_custom_params_from_playbook_path(playbook_path_with_params: str) -> dict:
+    """
+    Извлекает кастомные параметры вида {param=value} из строки playbook_path.
+
+    Args:
+        playbook_path_with_params: Строка вида "playbook.yml {server} {app} {unpack=true}"
+
+    Returns:
+        dict: Словарь кастомных параметров {param_name: param_value}
+
+    Examples:
+        "playbook.yml {server} {unpack=true}" -> {"unpack": True}
+        "playbook.yml {mode} {env=prod}" -> {"env": "prod"}
+    """
+    if not playbook_path_with_params:
+        return {}
+
+    custom_params = {}
+    param_pattern = r'\{([^}]+)\}'
+
+    for match in re.findall(param_pattern, playbook_path_with_params):
+        if '=' in match:
+            parts = match.split('=', 1)
+            param_name = parts[0].strip()
+            param_value = parts[1].strip() if len(parts) > 1 else ""
+
+            # Преобразуем булевы значения
+            if param_value.lower() == 'true':
+                param_value = True
+            elif param_value.lower() == 'false':
+                param_value = False
+
+            custom_params[param_name] = param_value
+
+    return custom_params
 
 
 class TaskQueue:
@@ -707,9 +745,13 @@ class TaskQueue:
 
                 # Извлекаем только имя файла из оригинального playbook
                 # Убираем параметры в фигурных скобках если они есть
-                import re
                 playbook_filename = original_playbook_path.split('/')[-1]
                 update_playbook_name = re.sub(r'\s*\{[^}]+\}', '', playbook_filename).strip()
+
+                # Извлекаем кастомные параметры из playbook_path (например {unpack=true})
+                custom_params_from_db = parse_custom_params_from_playbook_path(original_playbook_path)
+                if custom_params_from_db:
+                    logger.info(f"Извлечены кастомные параметры из playbook_path: {custom_params_from_db}")
 
                 # Определяем backend (берем первый, если несколько)
                 haproxy_backend = None
@@ -725,11 +767,19 @@ class TaskQueue:
                     'distr_url': distr_url
                 }
 
-                # Добавляем haproxy_backend если он определен
+                # Добавляем кастомные параметры из playbook_path (например {unpack=true})
+                # Эти параметры предназначены для вложенного плейбука и обычно
+                # не пересекаются с базовыми параметрами оркестратора
+                for param_name, param_value in custom_params_from_db.items():
+                    param_values[param_name] = param_value
+                    logger.info(f"Добавлен параметр из playbook_path: {param_name}={param_value}")
+
+                # Добавляем HAProxy параметры из автоматического mapping'а (таблица ApplicationMapping)
+                # Эти значения имеют приоритет над ручными настройками в playbook_path,
+                # т.к. mapping синхронизируется с реальным состоянием HAProxy
                 if haproxy_backend:
                     param_values['haproxy_backend'] = haproxy_backend
 
-                # Добавляем haproxy_api_url если он определен
                 if haproxy_api_url:
                     param_values['haproxy_api_url'] = haproxy_api_url
                 else:
@@ -754,7 +804,24 @@ class TaskQueue:
                 logger.info(f"  Optional: {optional_param_names}")
 
                 # Формируем строку с параметрами в фигурных скобках
-                params_string = ' '.join([f'{{{param}}}' for param in all_params])
+                # Для параметров с известным значением (кастомные) используем {param=value}
+                # Для динамических параметров используем {param}
+                params_parts = []
+                for param in all_params:
+                    if param in param_values:
+                        value = param_values[param]
+                        # Для булевых значений и кастомных параметров используем формат {param=value}
+                        if isinstance(value, bool) or param in custom_params_from_db:
+                            formatted_value = str(value).lower() if isinstance(value, bool) else str(value)
+                            params_parts.append(f'{{{param}={formatted_value}}}')
+                        else:
+                            # Динамический параметр с известным значением
+                            params_parts.append(f'{{{param}}}')
+                    else:
+                        # Параметр без значения - динамический
+                        params_parts.append(f'{{{param}}}')
+
+                params_string = ' '.join(params_parts)
                 playbook_path = f"{orchestrator_playbook} {params_string}"
 
                 logger.info(f"Сформирован playbook_path с параметрами: {playbook_path}")
@@ -817,7 +884,7 @@ class TaskQueue:
                 # Создаем SSH Ansible сервис внутри контекста
                 ssh_service = SSHAnsibleService.from_config()
 
-                success, message = loop.run_until_complete(
+                success, message, ansible_output = loop.run_until_complete(
                     ssh_service.update_application(
                         server_name=server_name,
                         app_name=app_name,
@@ -825,7 +892,8 @@ class TaskQueue:
                         distr_url=distr_url,
                         mode=mode,
                         playbook_path=playbook_path,
-                        extra_params=extra_params if extra_params else None
+                        extra_params=extra_params if extra_params else None,
+                        task_id=task_id
                     )
                 )
 
@@ -848,7 +916,6 @@ class TaskQueue:
                             app.version = distr_url.split(':')[-1]
                         else:
                             # Для обычных приложений пытаемся извлечь версию из URL
-                            import re
                             version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
                             if version_match:
                                 app.version = version_match.group(1)
@@ -879,7 +946,9 @@ class TaskQueue:
             if not success:
                 raise Exception(message)
 
-            return message
+            # Возвращаем вывод Ansible для сохранения в task.result
+            # Если ansible_output пустой, возвращаем message
+            return ansible_output if ansible_output else message
 
         finally:
             # Закрываем event loop

@@ -77,12 +77,49 @@ class SSHAnsibleService:
     # Регулярные выражения для безопасной валидации кастомных параметров
     SAFE_PARAM_NAME_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
     SAFE_PARAM_VALUE_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\./:\@\=\s]+$')
-    
+
+    # Хранилище активных процессов для возможности отмены (task_id -> process)
+    _active_processes: Dict[str, asyncio.subprocess.Process] = {}
+
     def __init__(self, ssh_config: SSHConfig):
         self.ssh_config = ssh_config
         self.current_stage = PlaybookStage.CONNECTING
         self.task_progress = {}
-        
+
+    @classmethod
+    def cancel_task(cls, task_id: str) -> Tuple[bool, str]:
+        """
+        Отменяет выполнение задачи по её ID.
+
+        Args:
+            task_id: ID задачи для отмены
+
+        Returns:
+            Tuple[bool, str]: (успех, сообщение)
+        """
+        process = cls._active_processes.get(task_id)
+        if process is None:
+            return False, f"Процесс для задачи {task_id} не найден"
+
+        try:
+            if process.returncode is None:  # Процесс ещё работает
+                process.terminate()  # Отправляем SIGTERM
+                logger.info(f"Отправлен SIGTERM процессу задачи {task_id} (PID: {process.pid})")
+                return True, f"Задача {task_id} отменена"
+            else:
+                return False, f"Процесс задачи {task_id} уже завершен"
+        except Exception as e:
+            logger.error(f"Ошибка при отмене задачи {task_id}: {e}")
+            return False, f"Ошибка при отмене: {str(e)}"
+
+    @classmethod
+    def get_active_task_pid(cls, task_id: str) -> Optional[int]:
+        """Получает PID активного процесса по task_id"""
+        process = cls._active_processes.get(task_id)
+        if process and process.returncode is None:
+            return process.pid
+        return None
+
     @classmethod
     def from_config(cls) -> 'SSHAnsibleService':
         """Создает экземпляр из конфигурации приложения"""
@@ -397,7 +434,8 @@ class SSHAnsibleService:
                                distr_url: str,
                                mode: str,
                                playbook_path: Optional[str] = None,
-                               extra_params: Optional[Dict] = None) -> Tuple[bool, str]:
+                               extra_params: Optional[Dict] = None,
+                               task_id: Optional[str] = None) -> Tuple[bool, str, str]:
         """
         Запуск Ansible playbook для обновления приложения через SSH
 
@@ -409,9 +447,10 @@ class SSHAnsibleService:
             mode: Режим обновления (deliver, immediate, night-restart)
             playbook_path: Путь к playbook с параметрами (опционально)
             extra_params: Дополнительные параметры для orchestrator (опционально)
+            task_id: ID задачи для возможности отмены (опционально)
 
         Returns:
-            Tuple[bool, str]: (успех операции, информация о результате)
+            Tuple[bool, str, str]: (успех операции, информация о результате, вывод Ansible)
         """
         # Извлекаем дополнительные параметры для orchestrator если они есть
         orchestrator_app_instances = None
@@ -442,7 +481,7 @@ class SSHAnsibleService:
         if not is_valid:
             error_msg = f"Недопустимые параметры в playbook path: {', '.join(invalid_params)}"
             logger.error(error_msg)
-            return False, error_msg
+            return False, error_msg, ""
         
         # Формируем полный путь к playbook
         playbook_full_path = os.path.join(
@@ -459,7 +498,7 @@ class SSHAnsibleService:
             if not server:
                 error_msg = f"Сервер с именем {server_name} не найден"
                 logger.error(error_msg)
-                return False, error_msg
+                return False, error_msg, ""
 
             # Получаем информацию о приложении
             app = ApplicationInstance.query.get(app_id)
@@ -481,7 +520,7 @@ class SSHAnsibleService:
                     server_id=server.id,
                     instance_id=app_id
                 )
-                return False, f"SSH-соединение не удалось: {connection_msg}"
+                return False, f"SSH-соединение не удалось: {connection_msg}", ""
             
             # Записываем событие о начале обновления
             await self._create_event(
@@ -496,7 +535,7 @@ class SSHAnsibleService:
             if not await self._remote_file_exists(playbook_full_path):
                 error_msg = f"Ansible playbook не найден на удаленном хосте: {playbook_full_path}"
                 logger.error(error_msg)
-                
+
                 await self._create_event(
                     event_type='update',
                     description=f"Ошибка обновления {app_name} на {server_name}: {error_msg}",
@@ -504,7 +543,7 @@ class SSHAnsibleService:
                     server_id=server.id,
                     instance_id=app_id
                 )
-                return False, error_msg
+                return False, error_msg, ""
             
             # Формируем контекст переменных из параметров события
             context_vars = self.build_context_vars(
@@ -534,16 +573,16 @@ class SSHAnsibleService:
             )
             
             logger.info(f"Запуск Ansible через SSH: {' '.join(ansible_cmd)}")
-            
+
             # Выполняем команду
             success, output, error_output = await self._execute_ansible_command(
-                ansible_cmd, server.id, app_id, app_name, server_name, 'update'
+                ansible_cmd, server.id, app_id, app_name, server_name, 'update', task_id
             )
             
             if success:
                 result_msg = f"Обновление приложения {app_name} на сервере {server_name} выполнено успешно"
                 logger.info(result_msg)
-                
+
                 await self._create_event(
                     event_type='update',
                     description=f"Обновление {app_name} на {server_name} завершено успешно",
@@ -551,12 +590,12 @@ class SSHAnsibleService:
                     server_id=server.id,
                     instance_id=app_id
                 )
-                
-                return True, result_msg
+
+                return True, result_msg, output
             else:
                 error_msg = f"Ошибка при обновлении {app_name} на {server_name}: {error_output}"
                 logger.error(error_msg)
-                
+
                 await self._create_event(
                     event_type='update',
                     description=f"Ошибка обновления {app_name} на {server_name}: {error_output}",
@@ -564,13 +603,13 @@ class SSHAnsibleService:
                     server_id=server.id,
                     instance_id=app_id
                 )
-                
-                return False, error_msg
+
+                return False, error_msg, output
                 
         except Exception as e:
             error_msg = f"Исключение при обновлении {app_name} на {server_name}: {str(e)}"
             logger.error(error_msg)
-            
+
             try:
                 await self._create_event(
                     event_type='update',
@@ -581,8 +620,8 @@ class SSHAnsibleService:
                 )
             except:
                 pass
-            
-            return False, error_msg
+
+            return False, error_msg, ""
     
     async def manage_application(self,
                                 server_name: str,
@@ -726,7 +765,8 @@ class SSHAnsibleService:
         return None
     
     async def _execute_ansible_command(self, ansible_cmd: list, server_id: int, app_id: int,
-                                     app_name: str, server_name: str, action: str) -> Tuple[bool, str, str]:
+                                     app_name: str, server_name: str, action: str,
+                                     task_id: Optional[str] = None) -> Tuple[bool, str, str]:
         """Выполняет команду Ansible через SSH с отслеживанием этапов"""
         ssh_cmd = self._build_ssh_command(ansible_cmd)
 
@@ -736,6 +776,21 @@ class SSHAnsibleService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
+
+            # Регистрируем процесс для возможности отмены
+            if task_id:
+                SSHAnsibleService._active_processes[task_id] = process
+                logger.info(f"Зарегистрирован процесс для задачи {task_id} (PID: {process.pid})")
+                # Сохраняем PID в Task для отображения в UI
+                try:
+                    from app.models.task import Task
+                    task = Task.query.get(task_id)
+                    if task:
+                        task.pid = process.pid
+                        db.session.commit()
+                        logger.info(f"PID {process.pid} сохранен для задачи {task_id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось сохранить PID для задачи {task_id}: {e}")
 
             stdout_lines = []
             stderr_lines = []
@@ -790,16 +845,27 @@ class SSHAnsibleService:
             except asyncio.TimeoutError:
                 process.kill()
                 await process.wait()
+                # Удаляем из списка активных процессов
+                if task_id and task_id in SSHAnsibleService._active_processes:
+                    del SSHAnsibleService._active_processes[task_id]
                 return False, "", "Таймаут выполнения команды Ansible"
 
             success = process.returncode == 0
             stdout_output = '\n'.join(stdout_lines)
             stderr_output = '\n'.join(stderr_lines)
 
+            # Удаляем из списка активных процессов
+            if task_id and task_id in SSHAnsibleService._active_processes:
+                del SSHAnsibleService._active_processes[task_id]
+                logger.info(f"Процесс задачи {task_id} завершен, удален из активных")
+
             return success, stdout_output, stderr_output
 
         except Exception as e:
             logger.error(f"Исключение при выполнении Ansible команды: {str(e)}")
+            # Удаляем из списка активных процессов при ошибке
+            if task_id and task_id in SSHAnsibleService._active_processes:
+                del SSHAnsibleService._active_processes[task_id]
             return False, "", str(e)
     
     async def _create_event(self, event_type: str, description: str, status: str,
