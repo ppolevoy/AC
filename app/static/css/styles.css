@@ -2073,6 +2073,28 @@ body.light-theme .data-table tbody tr:hover {
     width: 110px;
 }
 
+.col-progress {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.current-task {
+    color: #4CAF50;
+    font-size: 13px;
+    animation: pulse-task 1.5s infinite;
+}
+
+@keyframes pulse-task {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+body.light-theme .current-task {
+    color: #2e7d32;
+}
+
 .col-actions {
     width: 80px;
     text-align: center;

@@ -75,7 +75,8 @@ class MonitoringTasks:
                 with self.app.app_context():
                     try:
                         from app.tasks.queue import task_queue
-                        task_queue.clear_completed_tasks()
+                        from app.config import Config
+                        task_queue.clear_completed_tasks(days_old=Config.CLEAN_TASKS_OLDER_THAN)
                     except Exception as e:
                         logger.error(f"Ошибка при очистке старых задач: {str(e)}")
 

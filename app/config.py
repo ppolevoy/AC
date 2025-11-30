@@ -50,7 +50,8 @@ class Config:
     # Настройки для хранения информации о серверах и приложениях
     MAX_EVENTS_PER_APP = int(os.environ.get('MAX_EVENTS_PER_APP') or 100)
     CLEAN_EVENTS_OLDER_THAN = int(os.environ.get('CLEAN_EVENTS_OLDER_THAN') or 30)  # в днях
-    
+    CLEAN_TASKS_OLDER_THAN = int(os.environ.get('CLEAN_TASKS_OLDER_THAN') or 365)  # в днях
+
     # Настройки для группировки приложений
     APP_GROUP_PATTERN = r'(.+)_(\d+)$'  # Шаблон для определения группы и номера экземпляра
 

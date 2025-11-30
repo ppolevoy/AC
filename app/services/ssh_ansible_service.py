@@ -78,13 +78,18 @@ class SSHAnsibleService:
     SAFE_PARAM_NAME_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
     SAFE_PARAM_VALUE_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\./:\@\=\s]+$')
 
+    # Этапы Ansible, которые отслеживаются для отображения прогресса
+    TRACKABLE_STAGES = ('task', 'handler', 'gathering_facts')
+
     # Хранилище активных процессов для возможности отмены (task_id -> process)
     _active_processes: Dict[str, asyncio.subprocess.Process] = {}
+
+    # Хранилище прогресса выполнения задач (task_id -> {current_task, stage, updated_at})
+    _task_progress: Dict[str, dict] = {}
 
     def __init__(self, ssh_config: SSHConfig):
         self.ssh_config = ssh_config
         self.current_stage = PlaybookStage.CONNECTING
-        self.task_progress = {}
 
     @classmethod
     def cancel_task(cls, task_id: str) -> Tuple[bool, str]:
@@ -119,6 +124,28 @@ class SSHAnsibleService:
         if process and process.returncode is None:
             return process.pid
         return None
+
+    @classmethod
+    def get_task_progress(cls, task_id: str) -> Optional[dict]:
+        """Получает текущий прогресс задачи"""
+        progress = cls._task_progress.get(task_id)
+        return progress.copy() if progress else None
+
+    @classmethod
+    def _update_task_progress(cls, task_id: str, stage_info: dict) -> None:
+        """Обновляет прогресс задачи в памяти"""
+        if task_id and stage_info.get('stage') in cls.TRACKABLE_STAGES:
+            cls._task_progress[task_id] = {
+                'current_task': stage_info.get('message', ''),
+                'stage': stage_info.get('stage', ''),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+
+    @classmethod
+    def _cleanup_task(cls, task_id: str) -> None:
+        """Очищает данные задачи из памяти"""
+        cls._active_processes.pop(task_id, None)
+        cls._task_progress.pop(task_id, None)
 
     @classmethod
     def from_config(cls) -> 'SSHAnsibleService':
@@ -373,15 +400,17 @@ class SSHAnsibleService:
                 # Динамический параметр - берем из контекста
                 if param.name in context_vars:
                     value = context_vars[param.name]
-                    if value is not None:
+                    if value is not None and value != "":
                         extra_vars[param.name] = str(value)
                         logger.info(f"Added dynamic parameter from context: {param.name}={value}")
                     else:
-                        logger.warning(f"Dynamic parameter '{param.name}' has None value in context, using empty string")
-                        extra_vars[param.name] = ""
+                        # Пропускаем параметры с None или пустым значением
+                        # Плейбук должен обработать их отсутствие через defaults
+                        logger.warning(f"Dynamic parameter '{param.name}' has empty value, skipping")
                 else:
-                    logger.warning(f"Dynamic parameter '{param.name}' not found in context, using empty string")
-                    extra_vars[param.name] = ""
+                    # Параметр не найден в context - пропускаем
+                    # Плейбук должен использовать свои defaults или пропустить шаги
+                    logger.warning(f"Dynamic parameter '{param.name}' not found in context, skipping")
         
         logger.info(f"Built extra_vars with {len(extra_vars)} parameters: {list(extra_vars.keys())}")
         
@@ -811,6 +840,7 @@ class SSHAnsibleService:
                                 stage_info = self._parse_ansible_output(line_str)
                                 if stage_info:
                                     logger.info(f"Ansible {action} для {app_name}: {stage_info['message']}")
+                                    SSHAnsibleService._update_task_progress(task_id, stage_info)
                         break
 
                     buffer += chunk
@@ -824,6 +854,7 @@ class SSHAnsibleService:
                             stage_info = self._parse_ansible_output(line_str)
                             if stage_info:
                                 logger.info(f"Ansible {action} для {app_name}: {stage_info['message']}")
+                                SSHAnsibleService._update_task_progress(task_id, stage_info)
 
             async def read_stderr():
                 while True:
@@ -845,27 +876,22 @@ class SSHAnsibleService:
             except asyncio.TimeoutError:
                 process.kill()
                 await process.wait()
-                # Удаляем из списка активных процессов
-                if task_id and task_id in SSHAnsibleService._active_processes:
-                    del SSHAnsibleService._active_processes[task_id]
+                SSHAnsibleService._cleanup_task(task_id)
                 return False, "", "Таймаут выполнения команды Ansible"
 
             success = process.returncode == 0
             stdout_output = '\n'.join(stdout_lines)
             stderr_output = '\n'.join(stderr_lines)
 
-            # Удаляем из списка активных процессов
-            if task_id and task_id in SSHAnsibleService._active_processes:
-                del SSHAnsibleService._active_processes[task_id]
+            SSHAnsibleService._cleanup_task(task_id)
+            if task_id:
                 logger.info(f"Процесс задачи {task_id} завершен, удален из активных")
 
             return success, stdout_output, stderr_output
 
         except Exception as e:
             logger.error(f"Исключение при выполнении Ansible команды: {str(e)}")
-            # Удаляем из списка активных процессов при ошибке
-            if task_id and task_id in SSHAnsibleService._active_processes:
-                del SSHAnsibleService._active_processes[task_id]
+            SSHAnsibleService._cleanup_task(task_id)
             return False, "", str(e)
     
     async def _create_event(self, event_type: str, description: str, status: str,

@@ -178,6 +178,44 @@ class TaskQueue:
             from app.models.task import Task
             return Task.query.get(task_id)
 
+    def clear_completed_tasks(self, days_old: int = 365):
+        """
+        Очистка старых завершённых задач из БД.
+
+        Args:
+            days_old: Удалять задачи старше указанного количества дней (по умолчанию 7)
+        """
+        if not self.app:
+            logger.warning("TaskQueue не инициализирован, пропуск очистки задач")
+            return
+
+        try:
+            from app import db
+            from app.models.task import Task
+            from datetime import timedelta
+
+            # Определяем дату, старше которой задачи нужно удалить
+            cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+
+            # Удаляем только завершённые и неудачные задачи старше cutoff_date
+            deleted_count = Task.query.filter(
+                Task.status.in_(['completed', 'failed']),
+                Task.completed_at < cutoff_date
+            ).delete(synchronize_session=False)
+
+            db.session.commit()
+
+            if deleted_count > 0:
+                logger.info(f"Удалено {deleted_count} старых задач (старше {days_old} дней)")
+
+        except Exception as e:
+            logger.error(f"Ошибка при очистке старых задач: {str(e)}")
+            try:
+                from app import db
+                db.session.rollback()
+            except:
+                pass
+
     def get_tasks(self, status=None, application_id=None, server_id=None, instance_id=None):
         """
         Получение списка задач с возможностью фильтрации.
@@ -806,6 +844,7 @@ class TaskQueue:
                 # Формируем строку с параметрами в фигурных скобках
                 # Для параметров с известным значением (кастомные) используем {param=value}
                 # Для динамических параметров используем {param}
+                # ВАЖНО: optional параметры без значений НЕ включаем (плейбук должен обработать их отсутствие)
                 params_parts = []
                 for param in all_params:
                     if param in param_values:
@@ -817,9 +856,15 @@ class TaskQueue:
                         else:
                             # Динамический параметр с известным значением
                             params_parts.append(f'{{{param}}}')
-                    else:
-                        # Параметр без значения - динамический
+                    elif param in required_param_names:
+                        # Required параметр без значения - добавляем как динамический,
+                        # плейбук выдаст понятную ошибку
+                        logger.warning(f"Required параметр '{param}' не имеет значения!")
                         params_parts.append(f'{{{param}}}')
+                    else:
+                        # Optional параметр без значения - пропускаем
+                        # Плейбук должен использовать свои defaults или пропустить шаги
+                        logger.info(f"Optional параметр '{param}' пропущен (нет значения)")
 
                 params_string = ' '.join(params_parts)
                 playbook_path = f"{orchestrator_playbook} {params_string}"

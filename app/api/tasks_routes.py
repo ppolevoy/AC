@@ -228,6 +228,13 @@ def get_tasks():
             else:
                 task_data['orchestrator_playbook'] = None
 
+            # Добавляем текущий TASK для выполняющихся задач
+            if task.status == 'processing':
+                progress = SSHAnsibleService.get_task_progress(task.id)
+                task_data['current_task'] = progress.get('current_task', '') if progress else None
+            else:
+                task_data['current_task'] = None
+
             result.append(task_data)
 
         return jsonify({
@@ -286,6 +293,13 @@ def get_task(task_id):
             task_data['orchestrator_playbook'] = orchestrator
         else:
             task_data['orchestrator_playbook'] = None
+
+        # Добавляем текущий TASK для выполняющихся задач
+        if task.status == 'processing':
+            progress = SSHAnsibleService.get_task_progress(task.id)
+            task_data['current_task'] = progress.get('current_task', '') if progress else None
+        else:
+            task_data['current_task'] = None
 
         # Парсим данные из результата Ansible для отображения
         if task.result and task.task_type == 'update':

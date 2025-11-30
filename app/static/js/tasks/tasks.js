@@ -108,18 +108,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 renderTasks(data.tasks);
                 updateLastUpdatedTime();
+                // Пересчитываем интервал (ускоренный для processing задач)
+                setupAutoRefresh();
             } else {
                 console.error('Ошибка при загрузке задач:', data.error);
                 showError('Не удалось загрузить список задач');
                 if (tasksTableBody) {
-                    tasksTableBody.innerHTML = '<tr><td colspan="7" class="table-loading error">Ошибка загрузки задач</td></tr>';
+                    tasksTableBody.innerHTML = '<tr><td colspan="8" class="table-loading error">Ошибка загрузки задач</td></tr>';
                 }
             }
         } catch (error) {
             console.error('Ошибка при загрузке задач:', error);
             showError('Не удалось загрузить список задач');
             if (tasksTableBody) {
-                tasksTableBody.innerHTML = '<tr><td colspan="7" class="table-loading error">Ошибка загрузки задач</td></tr>';
+                tasksTableBody.innerHTML = '<tr><td colspan="8" class="table-loading error">Ошибка загрузки задач</td></tr>';
             }
         }
     }
@@ -134,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tasksTableBody.innerHTML = '';
         
         if (tasks.length === 0) {
-            tasksTableBody.innerHTML = '<tr><td colspan="7" class="table-loading">Нет задач, соответствующих критериям фильтра</td></tr>';
+            tasksTableBody.innerHTML = '<tr><td colspan="8" class="table-loading">Нет задач, соответствующих критериям фильтра</td></tr>';
             totalTasks = 0;
             updatePagination();
             return;
@@ -181,12 +183,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? `<button class="task-action-btn cancel-task-btn" data-task-id="${task.id}" title="Отменить задачу">×</button>`
                 : '';
 
+            // Форматируем текущий этап для processing задач
+            const currentTask = task.status === 'processing' && task.current_task
+                ? `<span class="current-task">${escapeHtml(task.current_task)}</span>`
+                : '-';
+
             row.innerHTML = `
                 <td class="col-id task-id-cell">${shortId}</td>
                 <td class="col-type">${formatTaskType(task.task_type, task.orchestrator_playbook)}</td>
                 <td class="col-app">${task.application_name || '-'}</td>
                 <td class="col-server">${task.server_name || '-'}</td>
                 <td class="col-status"><span class="status-badge ${statusClass}">${statusText}${task.cancelled ? ' (отменена)' : ''}</span></td>
+                <td class="col-progress">${currentTask}</td>
                 <td class="col-created">${createdDateStr}</td>
                 <td class="col-actions">
                     <button class="task-action-btn view-task-btn" data-task-id="${task.id}" title="Посмотреть детали">i</button>
@@ -295,6 +303,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     /**
+     * Проверяет наличие задач в статусе processing
+     */
+    function hasProcessingTasks() {
+        return document.querySelectorAll('.status-processing').length > 0;
+    }
+
+    /**
      * Функция для настройки интервала автообновления
      */
     function setupAutoRefresh() {
@@ -303,10 +318,15 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-        
+
+        // Если есть processing задачи - обновляем каждую секунду
+        // Иначе используем выбранный интервал
+        const hasProcessing = hasProcessingTasks();
+        const interval = hasProcessing ? 1000 : refreshTime * 1000;
+
         // Устанавливаем новый интервал, если выбрано значение больше 0
-        if (refreshTime > 0) {
-            refreshInterval = setInterval(loadTasks, refreshTime * 1000);
+        if (interval > 0) {
+            refreshInterval = setInterval(loadTasks, interval);
         }
     }
     
