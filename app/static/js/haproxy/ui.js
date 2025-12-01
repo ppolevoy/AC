@@ -18,26 +18,174 @@ const HAProxyUI = {
     },
 
     /**
+     * Кэш инстансов для доступа к данным об ошибках
+     */
+    _instancesCache: [],
+
+    /**
      * Отрисовать список инстансов в фильтре
      * @param {Array} instances - Массив инстансов
      */
     renderInstanceFilter(instances) {
+        // Сохраняем инстансы в кэш для доступа к ошибкам
+        this._instancesCache = instances || [];
+
         const filter = document.getElementById('instance-filter');
         const currentValue = filter.value;
 
-        // Сохраняем опцию "Все инстансы"
-        filter.innerHTML = '<option value="">Все инстансы</option>';
+        // Подсчитываем инстансы с ошибками
+        const errorCount = instances.filter(i => i.last_sync_status === 'failed').length;
+
+        // Формируем опцию "Все инстансы" с индикатором ошибок
+        const allOptionText = errorCount > 0
+            ? `Все инстансы (${errorCount} с ошибками)`
+            : 'Все инстансы';
+        filter.innerHTML = `<option value="">${allOptionText}</option>`;
 
         instances.forEach(instance => {
             const option = document.createElement('option');
             option.value = instance.id;
-            option.textContent = `${instance.name} (${instance.server_name})`;
+
+            // Добавляем индикатор ошибки в название
+            const hasError = instance.last_sync_status === 'failed';
+            const errorIndicator = hasError ? ' ⚠️' : '';
+            option.textContent = `${instance.name} (${instance.server_name})${errorIndicator}`;
+
+            // Добавляем data-атрибуты для доступа к информации об ошибке
+            if (hasError) {
+                option.dataset.hasError = 'true';
+                option.dataset.errorMessage = instance.last_sync_error || 'Ошибка синхронизации';
+            }
+
             filter.appendChild(option);
         });
 
         // Восстанавливаем выбранное значение, если оно было
         if (currentValue) {
             filter.value = currentValue;
+        }
+
+        // Обновляем отображение баннера ошибки для выбранного инстанса
+        this.updateInstanceErrorBanner();
+    },
+
+    /**
+     * Получить данные инстанса по ID
+     * @param {number|string} instanceId - ID инстанса
+     * @returns {Object|null} Данные инстанса
+     */
+    getInstanceById(instanceId) {
+        return this._instancesCache.find(i => i.id == instanceId) || null;
+    },
+
+    /**
+     * Обновить баннер ошибки синхронизации инстанса
+     */
+    updateInstanceErrorBanner() {
+        const filter = document.getElementById('instance-filter');
+        const selectedId = filter.value;
+
+        // Удаляем существующий баннер
+        const existingBanner = document.getElementById('instance-error-banner');
+        if (existingBanner) {
+            existingBanner.remove();
+        }
+
+        // Если выбран конкретный инстанс, проверяем его на ошибку
+        if (selectedId) {
+            const instance = this.getInstanceById(selectedId);
+            if (instance && instance.last_sync_status === 'failed') {
+                this.showInstanceErrorBanner(instance);
+            }
+        } else {
+            // Если выбраны "Все инстансы", показываем общий баннер при наличии ошибок
+            const instancesWithErrors = this._instancesCache.filter(i => i.last_sync_status === 'failed');
+            if (instancesWithErrors.length > 0) {
+                this.showInstancesErrorSummaryBanner(instancesWithErrors);
+            }
+        }
+    },
+
+    /**
+     * Показать баннер ошибки для конкретного инстанса
+     * @param {Object} instance - Данные инстанса с ошибкой
+     */
+    showInstanceErrorBanner(instance) {
+        const container = document.querySelector('.backends-accordion') || document.getElementById('backends-container');
+        if (!container) return;
+
+        const timeAgo = this.formatTimeAgo(instance.last_sync_at || instance.last_sync);
+
+        const banner = document.createElement('div');
+        banner.id = 'instance-error-banner';
+        banner.className = 'instance-error-banner';
+        banner.innerHTML = `
+            <div class="instance-error-banner-content">
+                <span class="instance-error-icon">⚠️</span>
+                <div class="instance-error-details">
+                    <strong>Ошибка синхронизации инстанса "${instance.name}"</strong>
+                    <div class="instance-error-message">${this.escapeHtml(instance.last_sync_error || 'Неизвестная ошибка')}</div>
+                    <div class="instance-error-time">Последняя попытка: ${timeAgo}</div>
+                </div>
+                <button class="instance-error-sync-btn" onclick="HAProxyManager.syncInstance(${instance.id})" title="Повторить синхронизацию">
+                    🔄 Синхронизировать
+                </button>
+            </div>
+        `;
+
+        container.parentNode.insertBefore(banner, container);
+    },
+
+    /**
+     * Показать общий баннер об инстансах с ошибками
+     * @param {Array} instances - Массив инстансов с ошибками
+     */
+    showInstancesErrorSummaryBanner(instances) {
+        const container = document.querySelector('.backends-accordion') || document.getElementById('backends-container');
+        if (!container) return;
+
+        const names = instances.map(i => i.name).join(', ');
+
+        const banner = document.createElement('div');
+        banner.id = 'instance-error-banner';
+        banner.className = 'instance-error-banner instance-error-banner-summary';
+        banner.innerHTML = `
+            <div class="instance-error-banner-content">
+                <span class="instance-error-icon">⚠️</span>
+                <div class="instance-error-details">
+                    <strong>${instances.length} инстанс(ов) с ошибками синхронизации</strong>
+                    <div class="instance-error-message">Инстансы: ${this.escapeHtml(names)}</div>
+                </div>
+            </div>
+        `;
+
+        container.parentNode.insertBefore(banner, container);
+    },
+
+    /**
+     * Форматировать время в "X минут/часов назад"
+     * @param {string} isoDate - ISO дата
+     * @returns {string} Отформатированное время
+     */
+    formatTimeAgo(isoDate) {
+        if (!isoDate) return 'неизвестно';
+
+        const date = new Date(isoDate);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - date) / 60000);
+
+        if (diffMinutes < 1) {
+            return 'только что';
+        } else if (diffMinutes < 60) {
+            return `${diffMinutes} мин. назад`;
+        } else {
+            const diffHours = Math.floor(diffMinutes / 60);
+            if (diffHours < 24) {
+                return `${diffHours} ч. назад`;
+            } else {
+                const diffDays = Math.floor(diffHours / 24);
+                return `${diffDays} дн. назад`;
+            }
         }
     },
 

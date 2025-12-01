@@ -20,6 +20,11 @@ const HAProxyManager = {
     backendsWithErrors: new Set(),
 
     /**
+     * Отслеживание инстансов с ошибками (для уведомлений о новых ошибках)
+     */
+    instancesWithErrors: new Set(),
+
+    /**
      * Инициализация менеджера
      */
     async init() {
@@ -85,6 +90,11 @@ const HAProxyManager = {
             const interval = parseInt(e.target.value, 10);
             this.setRefreshInterval(interval);
         });
+
+        // Обработчик изменения фильтра инстансов - обновляем баннер ошибки
+        document.getElementById('instance-filter').addEventListener('change', () => {
+            HAProxyUI.updateInstanceErrorBanner();
+        });
     },
 
     /**
@@ -106,6 +116,9 @@ const HAProxyManager = {
 
             // Обновляем фильтр инстансов
             HAProxyUI.renderInstanceFilter(summary.instances || []);
+
+            // Проверяем наличие новых ошибок инстансов
+            this.checkForNewInstanceErrors(summary.instances || []);
 
             // Загружаем backends для выбранного инстанса или всех
             await this.loadBackends();
@@ -330,6 +343,83 @@ const HAProxyManager = {
             window.showNotification(message, 'error');
         } else {
             alert(message);
+        }
+    },
+
+    /**
+     * Проверка наличия новых ошибок инстансов и показ уведомлений
+     * @param {Array} instances - Массив инстансов
+     */
+    checkForNewInstanceErrors(instances) {
+        if (!instances || instances.length === 0) {
+            return;
+        }
+
+        // Находим инстансы с ошибками
+        const currentErrorInstances = new Set();
+        const newErrors = [];
+
+        instances.forEach(instance => {
+            if (instance.last_sync_status === 'failed') {
+                currentErrorInstances.add(instance.id);
+
+                // Если это новая ошибка (не была в предыдущей проверке)
+                if (!this.instancesWithErrors.has(instance.id)) {
+                    newErrors.push({
+                        id: instance.id,
+                        name: instance.name,
+                        error: instance.last_sync_error || 'Неизвестная ошибка'
+                    });
+                }
+            }
+        });
+
+        // Показываем уведомление о новых ошибках
+        if (newErrors.length > 0) {
+            const message = newErrors.length === 1
+                ? `⚠️ Ошибка синхронизации инстанса "${newErrors[0].name}": ${newErrors[0].error}`
+                : `⚠️ Обнаружено ${newErrors.length} инстансов с ошибками синхронизации`;
+
+            if (window.showNotification) {
+                window.showNotification(message, 'warning');
+            } else {
+                console.warn(message);
+            }
+        }
+
+        // Обновляем список отслеживаемых ошибок
+        this.instancesWithErrors = currentErrorInstances;
+    },
+
+    /**
+     * Принудительная синхронизация инстанса
+     * @param {number} instanceId - ID инстанса
+     */
+    async syncInstance(instanceId) {
+        try {
+            if (window.showNotification) {
+                window.showNotification('Запуск синхронизации...', 'info');
+            }
+
+            const result = await HAProxyAPI.syncInstance(instanceId);
+
+            if (result.success) {
+                if (window.showNotification) {
+                    window.showNotification('Синхронизация выполнена успешно', 'success');
+                }
+            } else {
+                // Показываем ошибку от сервера
+                const errorMsg = result.error || 'Синхронизация не удалась';
+                if (window.showNotification) {
+                    window.showNotification(`Ошибка: ${errorMsg}`, 'error');
+                }
+            }
+
+            // Перезагружаем данные в любом случае для обновления статуса
+            await this.loadData();
+        } catch (error) {
+            console.error('Error syncing instance:', error);
+            this.showError(`Ошибка синхронизации: ${error.message}`);
         }
     }
 };

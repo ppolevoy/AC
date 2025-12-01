@@ -20,6 +20,11 @@ const EurekaManager = {
     applicationsWithErrors: new Set(),
 
     /**
+     * Отслеживание серверов с ошибками (для уведомлений о новых ошибках)
+     */
+    serversWithErrors: new Set(),
+
+    /**
      * Инициализация менеджера
      */
     async init() {
@@ -59,6 +64,14 @@ const EurekaManager = {
                 this.restartAutoRefresh();
             });
         }
+
+        // Обработчик изменения фильтра серверов - обновляем баннер ошибки
+        const serverFilter = document.getElementById('server-filter');
+        if (serverFilter) {
+            serverFilter.addEventListener('change', () => {
+                EurekaUI.updateServerErrorBanner();
+            });
+        }
     },
 
     /**
@@ -72,6 +85,9 @@ const EurekaManager = {
             const serversResult = await EurekaAPI.getServers(true);
             if (serversResult.success && serversResult.data) {
                 EurekaUI.populateServerFilter(serversResult.data);
+
+                // Проверяем наличие новых ошибок серверов
+                this.checkForNewServerErrors(serversResult.data);
             }
 
             // Загрузить приложения для фильтров
@@ -143,6 +159,51 @@ const EurekaManager = {
 
         // Обновляем список отслеживаемых ошибок
         this.applicationsWithErrors = new Set(currentErrorApps.keys());
+    },
+
+    /**
+     * Проверка наличия новых ошибок серверов Eureka и показ уведомлений
+     * @param {Array} servers - Массив серверов
+     */
+    checkForNewServerErrors(servers) {
+        if (!servers || servers.length === 0) {
+            return;
+        }
+
+        // Находим серверы с ошибками
+        const currentErrorServers = new Set();
+        const newErrors = [];
+
+        servers.forEach(server => {
+            if (server.last_error || server.consecutive_failures > 0) {
+                currentErrorServers.add(server.id);
+
+                // Если это новая ошибка (не была в предыдущей проверке)
+                if (!this.serversWithErrors.has(server.id)) {
+                    newErrors.push({
+                        id: server.id,
+                        name: `${server.eureka_host}:${server.eureka_port}`,
+                        error: server.last_error || `${server.consecutive_failures} последовательных сбоев`
+                    });
+                }
+            }
+        });
+
+        // Показываем уведомление о новых ошибках
+        if (newErrors.length > 0) {
+            const message = newErrors.length === 1
+                ? `⚠️ Ошибка синхронизации сервера Eureka "${newErrors[0].name}": ${newErrors[0].error}`
+                : `⚠️ Обнаружено ${newErrors.length} серверов Eureka с ошибками синхронизации`;
+
+            if (window.showNotification) {
+                window.showNotification(message, 'warning');
+            } else {
+                console.warn(message);
+            }
+        }
+
+        // Обновляем список отслеживаемых ошибок
+        this.serversWithErrors = currentErrorServers;
     },
 
     /**

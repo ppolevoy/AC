@@ -125,11 +125,13 @@ const HAProxyAPI = {
                 method: 'POST'
             });
 
-            if (!response.ok) {
+            const data = await response.json();
+
+            // Даже при HTTP 500 возвращаем данные с ошибкой из backend
+            if (!response.ok && !data.error) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            const data = await response.json();
             return data;
         } catch (error) {
             console.error(`Error syncing HAProxy instance ${instanceId}:`, error);

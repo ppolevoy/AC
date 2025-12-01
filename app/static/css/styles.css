@@ -1276,7 +1276,6 @@ body.light-theme .info-label {
 .info-value {
     word-break: break-word;
     overflow-wrap: break-word;
-    max-width: 0;
 }
 
 .input-with-button {

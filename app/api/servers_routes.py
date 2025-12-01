@@ -352,10 +352,26 @@ def update_server(server_id):
 
             # Если HAProxy узел выключается, удаляем все instances
             if not is_haproxy_node and old_value:
-                from app.models.haproxy import HAProxyInstance
+                from app.models.haproxy import HAProxyInstance, HAProxyServer
+                from app.models.application_mapping import ApplicationMapping, MappingType
+
+                # Собираем ID всех серверов для очистки маппингов
+                server_ids = []
+                instances = HAProxyInstance.query.filter_by(server_id=server.id).all()
+                for instance in instances:
+                    for backend in instance.backends:
+                        for haproxy_server in backend.servers:
+                            server_ids.append(haproxy_server.id)
+
+                # Удаляем маппинги на эти серверы (orphaned mappings prevention)
+                if server_ids:
+                    mappings_deleted = ApplicationMapping.query.filter(
+                        ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+                        ApplicationMapping.entity_id.in_(server_ids)
+                    ).delete(synchronize_session=False)
+                    logger.info(f"Очищено {mappings_deleted} маппингов при отключении HAProxy на {server.name}")
 
                 # Удаляем все HAProxy instances на этом сервере
-                instances = HAProxyInstance.query.filter_by(server_id=server.id).all()
                 for instance in instances:
                     db.session.delete(instance)
                     logger.info(f"Удален HAProxy instance {instance.name} для сервера {server.name}")

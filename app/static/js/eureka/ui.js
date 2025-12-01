@@ -15,6 +15,11 @@ const EurekaUI = {
     currentInstanceId: null,
 
     /**
+     * Кэш серверов для доступа к данным об ошибках
+     */
+    _serversCache: [],
+
+    /**
      * Инициализация UI модуля
      */
     init() {
@@ -320,16 +325,170 @@ const EurekaUI = {
      * @param {Array} servers - Список серверов
      */
     populateServerFilter(servers) {
+        // Сохраняем серверы в кэш для доступа к ошибкам
+        this._serversCache = servers || [];
+
         if (!this.elements.serverFilter) return;
 
-        this.elements.serverFilter.innerHTML = '<option value="">Все серверы</option>';
+        const currentValue = this.elements.serverFilter.value;
+
+        // Подсчитываем серверы с ошибками
+        const errorCount = servers.filter(s => s.last_error || s.consecutive_failures > 0).length;
+
+        // Формируем опцию "Все серверы" с индикатором ошибок
+        const allOptionText = errorCount > 0
+            ? `Все серверы (${errorCount} с ошибками)`
+            : 'Все серверы';
+        this.elements.serverFilter.innerHTML = `<option value="">${allOptionText}</option>`;
 
         servers.forEach(server => {
             const option = document.createElement('option');
             option.value = server.id;
-            option.textContent = `${server.eureka_host}:${server.eureka_port}`;
+
+            // Добавляем индикатор ошибки в название
+            const hasError = server.last_error || server.consecutive_failures > 0;
+            const errorIndicator = hasError ? ' ⚠️' : '';
+            option.textContent = `${server.eureka_host}:${server.eureka_port}${errorIndicator}`;
+
+            // Добавляем data-атрибуты для доступа к информации об ошибке
+            if (hasError) {
+                option.dataset.hasError = 'true';
+                option.dataset.errorMessage = server.last_error || `${server.consecutive_failures} последовательных сбоев`;
+            }
+
             this.elements.serverFilter.appendChild(option);
         });
+
+        // Восстанавливаем выбранное значение, если оно было
+        if (currentValue) {
+            this.elements.serverFilter.value = currentValue;
+        }
+
+        // Обновляем отображение баннера ошибки для выбранного сервера
+        this.updateServerErrorBanner();
+    },
+
+    /**
+     * Получить данные сервера по ID
+     * @param {number|string} serverId - ID сервера
+     * @returns {Object|null} Данные сервера
+     */
+    getServerById(serverId) {
+        return this._serversCache.find(s => s.id == serverId) || null;
+    },
+
+    /**
+     * Обновить баннер ошибки сервера
+     */
+    updateServerErrorBanner() {
+        const filter = this.elements.serverFilter;
+        if (!filter) return;
+
+        const selectedId = filter.value;
+
+        // Удаляем существующий баннер
+        const existingBanner = document.getElementById('server-error-banner');
+        if (existingBanner) {
+            existingBanner.remove();
+        }
+
+        // Если выбран конкретный сервер, проверяем его на ошибку
+        if (selectedId) {
+            const server = this.getServerById(selectedId);
+            if (server && (server.last_error || server.consecutive_failures > 0)) {
+                this.showServerErrorBanner(server);
+            }
+        } else {
+            // Если выбраны "Все серверы", показываем общий баннер при наличии ошибок
+            const serversWithErrors = this._serversCache.filter(s => s.last_error || s.consecutive_failures > 0);
+            if (serversWithErrors.length > 0) {
+                this.showServersErrorSummaryBanner(serversWithErrors);
+            }
+        }
+    },
+
+    /**
+     * Показать баннер ошибки для конкретного сервера
+     * @param {Object} server - Данные сервера с ошибкой
+     */
+    showServerErrorBanner(server) {
+        const container = document.getElementById('table-container') || this.elements.tableContainer;
+        if (!container) return;
+
+        const timeAgo = this.formatTimeAgo(server.last_sync);
+        const failuresInfo = server.consecutive_failures > 0
+            ? `<div class="server-error-failures">Последовательных сбоев: ${server.consecutive_failures}</div>`
+            : '';
+
+        const banner = document.createElement('div');
+        banner.id = 'server-error-banner';
+        banner.className = 'server-error-banner';
+        banner.innerHTML = `
+            <div class="server-error-banner-content">
+                <span class="server-error-icon">⚠️</span>
+                <div class="server-error-details">
+                    <strong>Ошибка синхронизации сервера "${server.eureka_host}:${server.eureka_port}"</strong>
+                    <div class="server-error-message">${this.escapeHtml(server.last_error || 'Неизвестная ошибка')}</div>
+                    ${failuresInfo}
+                    <div class="server-error-time">Последняя синхронизация: ${timeAgo}</div>
+                </div>
+            </div>
+        `;
+
+        container.parentNode.insertBefore(banner, container);
+    },
+
+    /**
+     * Показать общий баннер об серверах с ошибками
+     * @param {Array} servers - Массив серверов с ошибками
+     */
+    showServersErrorSummaryBanner(servers) {
+        const container = document.getElementById('table-container') || this.elements.tableContainer;
+        if (!container) return;
+
+        const names = servers.map(s => `${s.eureka_host}:${s.eureka_port}`).join(', ');
+
+        const banner = document.createElement('div');
+        banner.id = 'server-error-banner';
+        banner.className = 'server-error-banner server-error-banner-summary';
+        banner.innerHTML = `
+            <div class="server-error-banner-content">
+                <span class="server-error-icon">⚠️</span>
+                <div class="server-error-details">
+                    <strong>${servers.length} сервер(ов) с ошибками синхронизации</strong>
+                    <div class="server-error-message">Серверы: ${this.escapeHtml(names)}</div>
+                </div>
+            </div>
+        `;
+
+        container.parentNode.insertBefore(banner, container);
+    },
+
+    /**
+     * Форматировать время в "X минут/часов назад"
+     * @param {string} isoDate - ISO дата
+     * @returns {string} Отформатированное время
+     */
+    formatTimeAgo(isoDate) {
+        if (!isoDate) return 'неизвестно';
+
+        const date = new Date(isoDate);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - date) / 60000);
+
+        if (diffMinutes < 1) {
+            return 'только что';
+        } else if (diffMinutes < 60) {
+            return `${diffMinutes} мин. назад`;
+        } else {
+            const diffHours = Math.floor(diffMinutes / 60);
+            if (diffHours < 24) {
+                return `${diffHours} ч. назад`;
+            } else {
+                const diffDays = Math.floor(diffHours / 24);
+                return `${diffDays} дн. назад`;
+            }
+        }
     },
 
     /**

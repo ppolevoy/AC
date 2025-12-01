@@ -392,8 +392,17 @@
             const modalContent = document.createElement('div');
             modalContent.className = 'update-modal-content';
 
-            // Загружаем оркестраторы
-            const orchestrators = await ApiService.loadOrchestrators(true);
+            // Загружаем оркестраторы и проверяем маппинги параллельно
+            const [orchestrators, mappingInfo] = await Promise.all([
+                ApiService.loadOrchestrators(true),
+                ApiService.checkMappings(appIds)
+            ]);
+
+            // Определяем значение оркестратора по умолчанию:
+            // Оркестратор только если ВСЕ приложения имеют маппинг одного типа
+            const defaultOrchestrator = (orchestrators.length > 0 && mappingInfo.canOrchestrate)
+                ? orchestrators[0].file_path
+                : 'none';
 
             // Функция для извлечения имени плейбука - всегда используем имя файла
             const getPlaybookDisplayName = (orch) => {
@@ -448,15 +457,12 @@
                         <div class="form-group">
                             <label for="orchestrator-playbook">Orchestrator playbook:</label>
                             <select id="orchestrator-playbook" name="orchestrator_playbook" class="form-control">
-                                <option value="none" ${orchestrators.length === 0 ? 'selected' : ''}>Без оркестрации</option>
-                                ${orchestrators.length > 0 ?
-                                    orchestrators.map((orch, index) => {
-                                        const displayName = getPlaybookDisplayName(orch);
-                                        const selected = index === 0 ? 'selected' : '';
-                                        return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
-                                    }).join('') :
-                                    ''
-                                }
+                                <option value="none" ${defaultOrchestrator === 'none' ? 'selected' : ''}>Без оркестрации</option>
+                                ${orchestrators.map(orch => {
+                                    const displayName = getPlaybookDisplayName(orch);
+                                    const selected = orch.file_path === defaultOrchestrator ? 'selected' : '';
+                                    return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
+                                }).join('')}
                             </select>
                         </div>
 
@@ -542,6 +548,17 @@
             // Загружаем оркестраторы заранее
             const orchestrators = await ApiService.loadOrchestrators(true);
 
+            // Проверяем маппинги для всех групп параллельно
+            const mappingChecks = await Promise.all(
+                Object.entries(appGroups).map(async ([groupName, apps]) => {
+                    const groupAppIds = apps.map(app => app.id);
+                    const mappingInfo = await ApiService.checkMappings(groupAppIds);
+                    return { groupName, mappingInfo };
+                })
+            );
+            // Преобразуем в Map для быстрого доступа
+            const mappingsByGroup = new Map(mappingChecks.map(m => [m.groupName, m.mappingInfo]));
+
             // Создаем вкладки
             const tabsContainer = document.createElement('div');
             tabsContainer.className = 'modal-tabs';
@@ -613,11 +630,19 @@
             Object.keys(appGroups).forEach((groupName, index) => {
                 const tab = createTab(groupName, index, index === 0);
                 tabsContainer.appendChild(tab);
-                
+
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
-                
-                
+
+                // Получаем информацию о маппингах для группы
+                const mappingInfo = mappingsByGroup.get(groupName) || { canOrchestrate: false };
+
+                // Определяем значение оркестратора по умолчанию:
+                // Оркестратор только если ВСЕ приложения группы имеют маппинг одного типа
+                const defaultOrchestrator = (orchestrators.length > 0 && mappingInfo.canOrchestrate)
+                    ? orchestrators[0].file_path
+                    : 'none';
+
                 groupStates[groupName] = {
                     appIds: apps.map(app => app.id),
                     distrUrl: firstApp?.distr_path || '',
@@ -625,10 +650,11 @@
                     artifactsLoaded: false,
                     customUrl: '',
                     isCustom: false,
-                    orchestratorPlaybook: orchestrators.length > 0 ? orchestrators[0].file_path : '',
-                    drainWaitTime: 5
+                    orchestratorPlaybook: defaultOrchestrator,
+                    drainWaitTime: 5,
+                    canOrchestrate: mappingInfo.canOrchestrate  // Сохраняем для UI
                 };
-                
+
                 this.groupContentLoaded[groupName] = false;
             });
             
@@ -801,19 +827,13 @@
                         <div class="form-group">
                             <label for="orchestrator-playbook">Orchestrator playbook:</label>
                             <select id="orchestrator-playbook" name="orchestrator_playbook" class="form-control">
-                                <option value="none" ${(!state.orchestratorPlaybook || state.orchestratorPlaybook === 'none') && orchestrators.length === 0 ? 'selected' : ''}>Без оркестрации</option>
-                                ${orchestrators.length > 0 ?
-                                    orchestrators.map((orch, index) => {
-                                        // Всегда используем имя файла без расширения
-                                        const displayName = orch.file_path.split('/').pop().replace(/\.(yml|yaml)$/i, '');
-                                        // Selected если: 1) явно выбран в state, 2) ИЛИ это первый и state не задан/none
-                                        const selected = (orch.file_path === state.orchestratorPlaybook) ||
-                                                        (index === 0 && (!state.orchestratorPlaybook || state.orchestratorPlaybook === 'none'))
-                                                        ? 'selected' : '';
-                                        return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
-                                    }).join('') :
-                                    ''
-                                }
+                                <option value="none" ${!state.orchestratorPlaybook || state.orchestratorPlaybook === 'none' ? 'selected' : ''}>Без оркестрации</option>
+                                ${orchestrators.map(orch => {
+                                    // Всегда используем имя файла без расширения
+                                    const displayName = orch.file_path.split('/').pop().replace(/\.(yml|yaml)$/i, '');
+                                    const selected = orch.file_path === state.orchestratorPlaybook ? 'selected' : '';
+                                    return `<option value="${orch.file_path}" ${selected}>${displayName}</option>`;
+                                }).join('')}
                             </select>
                         </div>
 

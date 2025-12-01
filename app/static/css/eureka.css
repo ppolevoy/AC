@@ -1024,3 +1024,108 @@ body.light-theme .failures-badge {
     color: #d97706;
     border: 1px solid rgba(245, 158, 11, 0.3);
 }
+
+/* ===== SERVER ERROR BANNER STYLES ===== */
+
+.server-error-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-left: 4px solid #ef4444;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+.server-error-banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.server-error-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.server-error-details {
+    flex: 1;
+}
+
+.server-error-details strong {
+    color: #ef4444;
+    font-size: 14px;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.server-error-message {
+    color: #fca5a5;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 6px;
+}
+
+.server-error-failures {
+    color: #f59e0b;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.server-error-time {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+}
+
+/* Summary banner variant */
+.server-error-banner-summary {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.08));
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-left: 4px solid #f59e0b;
+}
+
+.server-error-banner-summary .server-error-details strong {
+    color: #f59e0b;
+}
+
+.server-error-banner-summary .server-error-message {
+    color: #fcd34d;
+}
+
+/* Light theme */
+body.light-theme .server-error-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.04));
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-left: 4px solid #ef4444;
+}
+
+body.light-theme .server-error-details strong {
+    color: #dc2626;
+}
+
+body.light-theme .server-error-message {
+    color: #b91c1c;
+}
+
+body.light-theme .server-error-failures {
+    color: #d97706;
+}
+
+body.light-theme .server-error-time {
+    color: #6b7280;
+}
+
+body.light-theme .server-error-banner-summary {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-left: 4px solid #f59e0b;
+}
+
+body.light-theme .server-error-banner-summary .server-error-details strong {
+    color: #d97706;
+}
+
+body.light-theme .server-error-banner-summary .server-error-message {
+    color: #92400e;
+}
