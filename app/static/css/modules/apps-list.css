@@ -446,6 +446,13 @@
     opacity: 0.7;
 }
 
+/* Системные теги */
+.apps-tag.tag-system,
+.tag.tag-system {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
 .apps-tags-more {
     color: #888;
     font-size: 11px;
@@ -756,6 +763,62 @@ body.light-theme .tag-checkbox-label:hover {
 
 body.light-theme .tag-modal-description {
     color: #888;
+}
+
+/* Разделитель секции системных тегов */
+.tags-section-divider {
+    display: flex;
+    align-items: center;
+    margin: 16px 0 12px 0;
+    color: #888;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tags-section-divider::before,
+.tags-section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #454545;
+}
+
+body.light-theme .tags-section-divider::before,
+body.light-theme .tags-section-divider::after {
+    background: #ddd;
+}
+
+.tags-section-divider span {
+    padding: 0 12px;
+}
+
+/* Статус тега (унаследован, частично, авто) */
+.tag-status {
+    font-size: 11px;
+    color: #888;
+    margin-left: 4px;
+}
+
+.tag-status-system {
+    color: #5ca5e1;
+}
+
+/* Системные теги в модальном окне */
+.system-tag-label {
+    background-color: #2d3236 !important;
+}
+
+body.light-theme .system-tag-label {
+    background-color: #f5f8fa !important;
+}
+
+.system-tag-label:hover {
+    background-color: #353b40 !important;
+}
+
+body.light-theme .system-tag-label:hover {
+    background-color: #e8f0f5 !important;
 }
 
 /* Состояние выбранного чекбокса */

@@ -65,7 +65,8 @@ def create_tag():
         tag_type=data.get('tag_type', 'custom'),
         css_class=data.get('css_class'),
         border_color=data.get('border_color'),
-        text_color=data.get('text_color')
+        text_color=data.get('text_color'),
+        show_in_table=data.get('show_in_table', False)
     )
 
     db.session.add(tag)
@@ -93,8 +94,14 @@ def update_tag(tag_id):
     tag = Tag.query.get_or_404(tag_id)
     data = request.json
 
-    # Обновляем только переданные поля
-    for field in ['display_name', 'description', 'icon', 'css_class', 'border_color', 'text_color']:
+    # Для системных тегов разрешаем менять description, show_in_table и цвета
+    if tag.is_system:
+        allowed_fields = ['description', 'show_in_table', 'border_color', 'text_color']
+    else:
+        allowed_fields = ['display_name', 'description', 'icon', 'css_class', 'border_color', 'text_color', 'show_in_table']
+
+    # Обновляем только разрешённые поля
+    for field in allowed_fields:
         if field in data:
             setattr(tag, field, data[field])
 
@@ -110,6 +117,13 @@ def update_tag(tag_id):
 def delete_tag(tag_id):
     """Удалить тег"""
     tag = Tag.query.get_or_404(tag_id)
+
+    # Защита системных тегов от удаления
+    if tag.is_system:
+        return jsonify({
+            'success': False,
+            'error': 'Cannot delete system tag'
+        }), 403
 
     # Записываем в историю перед удалением
     for instance in tag.instances:
@@ -181,6 +195,72 @@ def remove_application_tag(app_id, tag_id):
     db.session.commit()
 
     return jsonify({'success': True})
+
+
+@bp.route('/applications/<int:app_id>/tags/<int:tag_id>/auto-assign', methods=['PUT'])
+def set_tag_auto_assign(app_id, tag_id):
+    """Управление автоназначением системного тега для приложения"""
+    from app.services.system_tags import SystemTagsService
+
+    app = ApplicationInstance.query.get_or_404(app_id)
+    tag = Tag.query.get_or_404(tag_id)
+
+    # Только для системных тегов
+    if not tag.is_system:
+        return jsonify({
+            'success': False,
+            'error': 'This endpoint is only for system tags'
+        }), 400
+
+    data = request.json
+    disabled = data.get('disabled', False)
+    user = data.get('user')
+
+    # Используем сервис для установки флага
+    success = SystemTagsService.set_auto_assign_disabled(app, tag.name, disabled, user)
+
+    if not success:
+        return jsonify({
+            'success': False,
+            'error': 'Failed to update auto_assign_disabled'
+        }), 500
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'auto_assign_disabled': disabled
+    })
+
+
+@bp.route('/applications/<int:app_id>/system-tags', methods=['GET'])
+def get_application_system_tags(app_id):
+    """Получить системные теги приложения с информацией об auto_assign_disabled"""
+    from app.models.tag import ApplicationInstanceTag
+
+    app = ApplicationInstance.query.get_or_404(app_id)
+
+    # Получаем все системные теги
+    system_tags = Tag.query.filter_by(is_system=True).all()
+
+    result = []
+    for tag in system_tags:
+        # Проверяем связь с приложением
+        link = ApplicationInstanceTag.query.filter_by(
+            application_id=app.id,
+            tag_id=tag.id
+        ).first()
+
+        result.append({
+            'tag': tag.to_dict(),
+            'assigned': link is not None,
+            'auto_assign_disabled': link.auto_assign_disabled if link else False
+        })
+
+    return jsonify({
+        'success': True,
+        'system_tags': result
+    })
 
 
 # ========== Application Group Tags ==========

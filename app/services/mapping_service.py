@@ -14,6 +14,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _assign_system_tag_on_mapping(application_id: int, entity_type: str):
+    """Назначить системный тег при создании маппинга (не блокирует основную операцию)"""
+    try:
+        from app.services.system_tags import SystemTagsService
+        app = ApplicationInstance.query.get(application_id)
+        if app:
+            SystemTagsService.on_mapping_created(app, entity_type)
+    except Exception as e:
+        logger.warning(f"Failed to assign system tag on mapping: {e}")
+
+
+def _remove_system_tag_on_mapping(application_id: int, entity_type: str):
+    """Удалить системный тег при удалении маппинга (не блокирует основную операцию)"""
+    try:
+        from app.services.system_tags import SystemTagsService
+        app = ApplicationInstance.query.get(application_id)
+        if app:
+            SystemTagsService.on_mapping_deleted(app, entity_type)
+    except Exception as e:
+        logger.warning(f"Failed to remove system tag on mapping: {e}")
+
+
 class MappingService:
     """Унифицированный сервис для управления маппингами приложений"""
 
@@ -65,6 +87,9 @@ class MappingService:
 
             db.session.commit()
             self._invalidate_cache(application_id)
+
+            # Назначение системного тега
+            _assign_system_tag_on_mapping(application_id, entity_type)
 
             logger.info(f"Created mapping: app={application_id}, type={entity_type}, entity={entity_id}")
             return mapping
@@ -129,6 +154,21 @@ class MappingService:
         db.session.commit()
         self._invalidate_cache(mapping.application_id)
 
+        # Обработка системных тегов при изменении статуса активности
+        if is_active is True and not old_values.get('is_active'):
+            # Маппинг активирован - назначаем тег
+            _assign_system_tag_on_mapping(mapping.application_id, mapping.entity_type)
+        elif is_active is False and old_values.get('is_active'):
+            # Маппинг деактивирован - проверяем нужно ли удалить тег
+            other_mappings = ApplicationMapping.query.filter(
+                ApplicationMapping.application_id == mapping.application_id,
+                ApplicationMapping.entity_type == mapping.entity_type,
+                ApplicationMapping.is_active == True,
+                ApplicationMapping.id != mapping.id
+            ).first()
+            if not other_mappings:
+                _remove_system_tag_on_mapping(mapping.application_id, mapping.entity_type)
+
         return mapping
 
     def delete_mapping(
@@ -152,8 +192,18 @@ class MappingService:
         )
 
         app_id = mapping.application_id
+        entity_type = mapping.entity_type
         db.session.delete(mapping)
         db.session.commit()
+
+        # Удаление системного тега если нет других активных маппингов этого типа
+        other_mappings = ApplicationMapping.query.filter_by(
+            application_id=app_id,
+            entity_type=entity_type,
+            is_active=True
+        ).first()
+        if not other_mappings:
+            _remove_system_tag_on_mapping(app_id, entity_type)
 
         self._invalidate_cache(app_id)
         return True
@@ -397,8 +447,10 @@ class MappingService:
         """Отвязать все маппинги для сущности"""
         mappings = self.get_mappings_for_entity(entity_type, entity_id, active_only=True)
         count = 0
+        affected_apps = set()
 
         for mapping in mappings:
+            affected_apps.add(mapping.application_id)
             self.update_mapping(
                 mapping.id,
                 is_active=False,
@@ -406,6 +458,16 @@ class MappingService:
                 notes=reason or "Unmapped"
             )
             count += 1
+
+        # Удаление системных тегов для приложений без активных маппингов этого типа
+        for app_id in affected_apps:
+            other_mappings = ApplicationMapping.query.filter_by(
+                application_id=app_id,
+                entity_type=entity_type,
+                is_active=True
+            ).first()
+            if not other_mappings:
+                _remove_system_tag_on_mapping(app_id, entity_type)
 
         return count
 

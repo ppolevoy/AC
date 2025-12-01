@@ -493,6 +493,14 @@
                                             <input type="text" id="new-tag-description" class="form-control" placeholder="Краткое описание тега">
                                         </div>
                                     </div>
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="checkbox-inline">
+                                                <input type="checkbox" id="new-tag-show-in-table">
+                                                Показывать в таблице приложений
+                                            </label>
+                                        </div>
+                                    </div>
                                     <button id="create-tag-btn" class="action-btn">Создать тег</button>
                                 </div>
                             </div>
@@ -1734,6 +1742,25 @@
         margin-bottom: 10px;
     }
 
+    .checkbox-inline {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #ccc;
+    }
+
+    body.light-theme .checkbox-inline {
+        color: #333;
+    }
+
+    .checkbox-inline input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+    }
+
     .tags-list-container {
         max-height: 400px;
         overflow-y: auto;
@@ -1970,7 +1997,289 @@
     .btn-delete-mailing-group:hover {
         background: rgba(244, 67, 54, 0.3);
     }
+
+    /* Edit Tag Modal Styles */
+    .edit-tag-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s, visibility 0.2s;
+    }
+
+    .edit-tag-modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .edit-tag-modal {
+        background: #2a2a2b;
+        border-radius: 8px;
+        padding: 24px;
+        width: 450px;
+        max-width: 90vw;
+        border: 1px solid #444;
+        transform: scale(0.9);
+        transition: transform 0.2s;
+    }
+
+    .edit-tag-modal-overlay.active .edit-tag-modal {
+        transform: scale(1);
+    }
+
+    body.light-theme .edit-tag-modal {
+        background: #fff;
+        border: 1px solid #ddd;
+    }
+
+    .edit-tag-modal h3 {
+        margin: 0 0 20px 0;
+        color: #5ca5e1;
+        font-size: 18px;
+    }
+
+    .edit-tag-modal .form-group {
+        margin-bottom: 16px;
+    }
+
+    .edit-tag-modal label {
+        display: block;
+        margin-bottom: 6px;
+        color: #aaa;
+        font-size: 13px;
+    }
+
+    body.light-theme .edit-tag-modal label {
+        color: #666;
+    }
+
+    .edit-tag-modal input[type="text"],
+    .edit-tag-modal textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #1e1e1f;
+        color: #ebe4da;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    body.light-theme .edit-tag-modal input[type="text"],
+    body.light-theme .edit-tag-modal textarea {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+
+    .edit-tag-modal textarea {
+        min-height: 60px;
+        resize: vertical;
+    }
+
+    .edit-tag-color-row {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+    }
+
+    .edit-tag-color-group {
+        flex: 1;
+    }
+
+    .edit-tag-color-picker {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .edit-tag-color-picker input[type="color"] {
+        width: 40px;
+        height: 32px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        background: transparent;
+    }
+
+    .edit-tag-color-picker .color-value {
+        font-family: monospace;
+        font-size: 13px;
+        color: #888;
+    }
+
+    .edit-tag-preview-section {
+        margin: 20px 0;
+        padding: 16px;
+        background: #1e1e1f;
+        border-radius: 6px;
+        text-align: center;
+    }
+
+    body.light-theme .edit-tag-preview-section {
+        background: #f5f5f5;
+    }
+
+    .edit-tag-preview-section label {
+        margin-bottom: 10px;
+    }
+
+    .edit-tag-checkbox-group {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #333;
+    }
+
+    body.light-theme .edit-tag-checkbox-group {
+        border-top: 1px solid #ddd;
+    }
+
+    .edit-tag-checkbox-group .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .edit-tag-checkbox-group .checkbox-label input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+    }
+
+    .edit-tag-checkbox-group .checkbox-hint {
+        font-size: 12px;
+        color: #888;
+        margin-top: 4px;
+        margin-left: 24px;
+    }
+
+    body.light-theme .edit-tag-checkbox-group .checkbox-hint {
+        color: #666;
+    }
+
+    .edit-tag-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid #333;
+    }
+
+    body.light-theme .edit-tag-modal-actions {
+        border-top: 1px solid #ddd;
+    }
+
+    .edit-tag-modal-actions button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .edit-tag-modal-actions .btn-cancel {
+        background: #444;
+        color: #ebe4da;
+    }
+
+    .edit-tag-modal-actions .btn-cancel:hover {
+        background: #555;
+    }
+
+    body.light-theme .edit-tag-modal-actions .btn-cancel {
+        background: #e0e0e0;
+        color: #333;
+    }
+
+    .edit-tag-modal-actions .btn-save {
+        background: #5ca5e1;
+        color: #fff;
+    }
+
+    .edit-tag-modal-actions .btn-save:hover {
+        background: #4a94d0;
+    }
+
+    .edit-tag-modal .system-tag-notice {
+        background: rgba(255, 193, 7, 0.1);
+        border: 1px solid rgba(255, 193, 7, 0.3);
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        color: #ffc107;
+        font-size: 13px;
+    }
 </style>
+
+<!-- Edit Tag Modal -->
+<div id="edit-tag-modal-overlay" class="edit-tag-modal-overlay">
+    <div class="edit-tag-modal">
+        <h3>Редактирование тега</h3>
+
+        <div id="edit-tag-system-notice" class="system-tag-notice" style="display: none;">
+            ⚠️ Системный тег: нельзя изменить отображаемое имя
+        </div>
+
+        <div class="form-group">
+            <label>Отображаемое имя:</label>
+            <input type="text" id="edit-tag-display-name" placeholder="Название тега">
+        </div>
+
+        <div class="form-group">
+            <label>Описание:</label>
+            <textarea id="edit-tag-description" placeholder="Описание тега (опционально)"></textarea>
+        </div>
+
+        <div class="edit-tag-color-row" id="edit-tag-colors-section">
+            <div class="edit-tag-color-group">
+                <label>Цвет рамки:</label>
+                <div class="edit-tag-color-picker">
+                    <input type="color" id="edit-tag-border-color" value="#3498db">
+                    <span class="color-value" id="edit-tag-border-color-value">#3498db</span>
+                </div>
+            </div>
+            <div class="edit-tag-color-group">
+                <label>Цвет текста:</label>
+                <div class="edit-tag-color-picker">
+                    <input type="color" id="edit-tag-text-color" value="#3498db">
+                    <span class="color-value" id="edit-tag-text-color-value">#3498db</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="edit-tag-preview-section">
+            <label>Предпросмотр:</label>
+            <div>
+                <span id="edit-tag-preview" class="tag" style="border-color: #3498db; color: #3498db;">Название</span>
+            </div>
+        </div>
+
+        <div class="form-group edit-tag-checkbox-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="edit-tag-show-in-table">
+                <span>Показывать в таблице приложений</span>
+            </label>
+            <div class="checkbox-hint">Тег будет отображаться рядом с именем приложения на странице Applications</div>
+        </div>
+
+        <div class="edit-tag-modal-actions">
+            <button class="btn-cancel" onclick="tagsManagement.closeEditModal()">Отмена</button>
+            <button class="btn-save" onclick="tagsManagement.saveTag()">Сохранить</button>
+        </div>
+    </div>
+</div>
 
 <script>
 // Глобальный объект с доступными переменными
@@ -2219,6 +2528,7 @@ const tagsManagement = {
         const borderColor = document.getElementById('new-tag-border-color').value;
         const textColor = document.getElementById('new-tag-text-color').value;
         const description = document.getElementById('new-tag-description').value.trim();
+        const showInTable = document.getElementById('new-tag-show-in-table').checked;
 
         if (!name) {
             showError('Введите имя тега');
@@ -2235,7 +2545,8 @@ const tagsManagement = {
                     tag_type: tagType,
                     border_color: borderColor,
                     text_color: textColor,
-                    description: description || null
+                    description: description || null,
+                    show_in_table: showInTable
                 })
             });
 
@@ -2249,6 +2560,7 @@ const tagsManagement = {
                 document.getElementById('new-tag-description').value = '';
                 document.getElementById('new-tag-border-color').value = '#3498db';
                 document.getElementById('new-tag-text-color').value = '#3498db';
+                document.getElementById('new-tag-show-in-table').checked = false;
                 // Сброс предпросмотра
                 document.getElementById('tag-preview').style.borderColor = '#3498db';
                 document.getElementById('tag-preview').style.color = '#3498db';
@@ -2266,21 +2578,102 @@ const tagsManagement = {
         }
     },
 
+    // Текущий редактируемый тег
+    currentEditTag: null,
+
     async editTag(tagId) {
-        const newName = prompt('Введите новое отображаемое имя:');
-        if (!newName) return;
+        try {
+            // Загружаем данные тега
+            const response = await fetch(`/api/tags/${tagId}`);
+            const data = await response.json();
+
+            if (!data.success || !data.tag) {
+                showError('Не удалось загрузить данные тега');
+                return;
+            }
+
+            const tag = data.tag;
+            this.currentEditTag = tag;
+
+            // Заполняем форму
+            document.getElementById('edit-tag-display-name').value = tag.display_name || '';
+            document.getElementById('edit-tag-description').value = tag.description || '';
+            document.getElementById('edit-tag-border-color').value = tag.border_color || '#3498db';
+            document.getElementById('edit-tag-text-color').value = tag.text_color || '#3498db';
+            document.getElementById('edit-tag-border-color-value').textContent = tag.border_color || '#3498db';
+            document.getElementById('edit-tag-text-color-value').textContent = tag.text_color || '#3498db';
+
+            // Обновляем предпросмотр
+            const preview = document.getElementById('edit-tag-preview');
+            preview.textContent = tag.display_name || tag.name;
+            preview.style.borderColor = tag.border_color || '#3498db';
+            preview.style.color = tag.text_color || '#3498db';
+
+            // Заполняем чекбокс show_in_table
+            document.getElementById('edit-tag-show-in-table').checked = tag.show_in_table || false;
+
+            // Показываем/скрываем уведомление о системном теге
+            const systemNotice = document.getElementById('edit-tag-system-notice');
+            const displayNameInput = document.getElementById('edit-tag-display-name');
+
+            if (tag.is_system) {
+                systemNotice.style.display = 'block';
+                displayNameInput.disabled = true;
+            } else {
+                systemNotice.style.display = 'none';
+                displayNameInput.disabled = false;
+            }
+
+            // Показываем модальное окно
+            document.getElementById('edit-tag-modal-overlay').classList.add('active');
+
+        } catch (error) {
+            console.error('Error loading tag:', error);
+            showError('Ошибка загрузки данных тега');
+        }
+    },
+
+    closeEditModal() {
+        document.getElementById('edit-tag-modal-overlay').classList.remove('active');
+        this.currentEditTag = null;
+    },
+
+    async saveTag() {
+        if (!this.currentEditTag) return;
+
+        const tagId = this.currentEditTag.id;
+        const isSystem = this.currentEditTag.is_system;
+
+        // Собираем данные для обновления (общие поля для всех тегов)
+        const updateData = {
+            description: document.getElementById('edit-tag-description').value.trim() || null,
+            show_in_table: document.getElementById('edit-tag-show-in-table').checked,
+            border_color: document.getElementById('edit-tag-border-color').value,
+            text_color: document.getElementById('edit-tag-text-color').value
+        };
+
+        // Для не-системных тегов добавляем display_name
+        if (!isSystem) {
+            updateData.display_name = document.getElementById('edit-tag-display-name').value.trim();
+
+            if (!updateData.display_name) {
+                showError('Введите отображаемое имя');
+                return;
+            }
+        }
 
         try {
             const response = await fetch(`/api/tags/${tagId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ display_name: newName })
+                body: JSON.stringify(updateData)
             });
 
             const data = await response.json();
 
             if (data.success) {
                 showNotification('Тег обновлен');
+                this.closeEditModal();
                 this.loadTags();
             } else {
                 showError(data.error || 'Ошибка обновления');
@@ -2289,6 +2682,44 @@ const tagsManagement = {
             console.error('Error updating tag:', error);
             showError('Ошибка обновления тега');
         }
+    },
+
+    initEditModalEvents() {
+        // Обработчики изменения цвета
+        const borderColorInput = document.getElementById('edit-tag-border-color');
+        const textColorInput = document.getElementById('edit-tag-text-color');
+        const preview = document.getElementById('edit-tag-preview');
+
+        borderColorInput.addEventListener('input', (e) => {
+            const color = e.target.value;
+            document.getElementById('edit-tag-border-color-value').textContent = color;
+            preview.style.borderColor = color;
+        });
+
+        textColorInput.addEventListener('input', (e) => {
+            const color = e.target.value;
+            document.getElementById('edit-tag-text-color-value').textContent = color;
+            preview.style.color = color;
+        });
+
+        // Обновление предпросмотра при изменении имени
+        document.getElementById('edit-tag-display-name').addEventListener('input', (e) => {
+            preview.textContent = e.target.value || 'Название';
+        });
+
+        // Закрытие по клику на оверлей
+        document.getElementById('edit-tag-modal-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-tag-modal-overlay') {
+                this.closeEditModal();
+            }
+        });
+
+        // Закрытие по Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('edit-tag-modal-overlay').classList.contains('active')) {
+                this.closeEditModal();
+            }
+        });
     },
 
     async deleteTag(tagId, tagName) {
@@ -2317,6 +2748,11 @@ const tagsManagement = {
 };
 
 window.tagsManagement = tagsManagement;
+
+// Инициализация событий модального окна редактирования тега
+document.addEventListener('DOMContentLoaded', () => {
+    tagsManagement.initEditModalEvents();
+});
 
 // Mailing Groups Management Object
 const mailingGroupsManagement = {

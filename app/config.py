@@ -124,6 +124,16 @@ class Config:
     REPORT_DEFAULT_RECIPIENTS = os.environ.get('REPORT_DEFAULT_RECIPIENTS', '')  # email-адреса или группы через запятую
     SENDMAIL_PATH = os.environ.get('SENDMAIL_PATH', '/usr/sbin/sendmail')
 
+    # Настройки системных тегов
+    SYSTEM_TAGS_ENABLED = os.environ.get('SYSTEM_TAGS_ENABLED', 'true').lower() == 'true'
+
+    # Автоназначение тегов по типам
+    AUTO_TAG_HAPROXY_ENABLED = os.environ.get('AUTO_TAG_HAPROXY_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_EUREKA_ENABLED = os.environ.get('AUTO_TAG_EUREKA_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_DOCKER_ENABLED = os.environ.get('AUTO_TAG_DOCKER_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_SMF_ENABLED = os.environ.get('AUTO_TAG_SMF_ENABLED', 'false').lower() == 'true'
+    AUTO_TAG_SYSCTL_ENABLED = os.environ.get('AUTO_TAG_SYSCTL_ENABLED', 'false').lower() == 'true'
+
     @staticmethod
     def init_app(app):
         # Создание директории для логов, если её нет

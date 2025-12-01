@@ -17,6 +17,15 @@ from app.models.application_version_history import ApplicationVersionHistory
 
 logger = logging.getLogger(__name__)
 
+
+def _sync_system_tags(instance):
+    """Синхронизация системных тегов на основе app_type (не блокирует основную операцию)"""
+    try:
+        from app.services.system_tags import SystemTagsService
+        SystemTagsService.on_app_synced(instance)
+    except Exception as e:
+        logger.warning(f"Failed to sync system tags for {instance.instance_name}: {e}")
+
 # Разрешённые статусы для ApplicationInstance (соответствуют CHECK constraint в БД)
 ALLOWED_STATUSES = {'online', 'offline', 'unknown', 'starting', 'stopping', 'no_data'}
 
@@ -457,9 +466,12 @@ class AgentService:
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
 
+                    # Синхронизация системных тегов (docker tag)
+                    _sync_system_tags(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
-            
+
             # Обрабатываем site-приложения
             if 'site-app' in server_data and 'applications' in server_data['site-app']:
                 site_apps = server_data['site-app']['applications']
@@ -518,6 +530,9 @@ class AgentService:
 
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
+
+                    # Синхронизация системных тегов
+                    _sync_system_tags(instance)
 
                     if instance.id:
                         updated_app_ids.add(instance.id)
@@ -581,9 +596,12 @@ class AgentService:
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
 
+                    # Синхронизация системных тегов
+                    _sync_system_tags(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
-            
+
             # Находим экземпляры, которые были в БД, но отсутствуют в ответе агента
             deleted_app_ids = existing_app_ids - updated_app_ids
             if deleted_app_ids:
