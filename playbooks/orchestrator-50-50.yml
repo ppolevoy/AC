@@ -27,8 +27,9 @@
   gather_facts: no
   vars:
     log_dir: "/site/ansible/log"
-    wait_after_update: "{{ wait_after_update | default(180) }}"
-    update_playbook_name: "{{ update_playbook | default('update_multiple_instances_v1_9-latest.yaml') }}"
+    # Используем префикс _ чтобы избежать рекурсии при определении defaults
+    _wait_after_update: "{{ wait_after_update | default(180) }}"
+    _update_playbook_name: "{{ update_playbook | default('update_multiple_instances_v1_9-latest.yaml') }}"
     haproxy_command_timeout: 10
 
   tasks:
@@ -64,8 +65,8 @@
           App instances: {{ app_instances }}
           Distribution URL: {{ distr_url }}
           Drain delay: {{ drain_delay }}s
-          Wait after update: {{ wait_after_update }}s
-          Update playbook: {{ update_playbook_name }}
+          Wait after update: {{ _wait_after_update }}s
+          Update playbook: {{ _update_playbook_name }}
           ==========================================
 
         dest: "{{ log_file }}"
@@ -347,14 +348,14 @@
             batch_name: "Batch 1"
 
         # Шаг 5: Ожидание восстановления
-        - name: "Batch 1: Wait for applications to start ({{ wait_after_update }}s)"
+        - name: "Batch 1: Wait for applications to start ({{ _wait_after_update }}s)"
           pause:
-            seconds: "{{ wait_after_update }}"
+            seconds: "{{ _wait_after_update }}"
           delegate_to: localhost
 
         - name: Log wait completion
           shell: |
-            echo "Batch 1 - Wait after update completed ({{ wait_after_update }}s)" >> {{ log_file }}
+            echo "Batch 1 - Wait after update completed ({{ _wait_after_update }}s)" >> {{ log_file }}
           delegate_to: localhost
 
         # Шаг 6: Возврат в READY
@@ -529,14 +530,14 @@
             batch_name: "Batch 2"
 
         # Шаг 5: Ожидание восстановления
-        - name: "Batch 2: Wait for applications to start ({{ wait_after_update }}s)"
+        - name: "Batch 2: Wait for applications to start ({{ _wait_after_update }}s)"
           pause:
-            seconds: "{{ wait_after_update }}"
+            seconds: "{{ _wait_after_update }}"
           delegate_to: localhost
 
         - name: Log wait completion
           shell: |
-            echo "Batch 2 - Wait after update completed ({{ wait_after_update }}s)" >> {{ log_file }}
+            echo "Batch 2 - Wait after update completed ({{ _wait_after_update }}s)" >> {{ log_file }}
           delegate_to: localhost
 
         # Шаг 6: Возврат в READY

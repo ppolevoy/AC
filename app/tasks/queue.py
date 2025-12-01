@@ -844,7 +844,7 @@ class TaskQueue:
                 # Формируем строку с параметрами в фигурных скобках
                 # Для параметров с известным значением (кастомные) используем {param=value}
                 # Для динамических параметров используем {param}
-                # ВАЖНО: optional параметры без значений НЕ включаем (плейбук должен обработать их отсутствие)
+                # ВАЖНО: optional параметры без значений и без default НЕ включаем
                 params_parts = []
                 for param in all_params:
                     if param in param_values:
@@ -856,15 +856,19 @@ class TaskQueue:
                         else:
                             # Динамический параметр с известным значением
                             params_parts.append(f'{{{param}}}')
+                    elif param in optional_param_names:
+                        # Optional параметр без значения - пропускаем
+                        # Плейбук сам обработает default через {{ param | default(value) }}
+                        # Если нужно переопределить - укажут в настройках приложения как {param=value}
+                        logger.info(f"Optional параметр '{param}' пропущен (плейбук использует свой default)")
                     elif param in required_param_names:
                         # Required параметр без значения - добавляем как динамический,
                         # плейбук выдаст понятную ошибку
                         logger.warning(f"Required параметр '{param}' не имеет значения!")
                         params_parts.append(f'{{{param}}}')
                     else:
-                        # Optional параметр без значения - пропускаем
-                        # Плейбук должен использовать свои defaults или пропустить шаги
-                        logger.info(f"Optional параметр '{param}' пропущен (нет значения)")
+                        # Неизвестный параметр - пропускаем
+                        logger.warning(f"Неизвестный параметр '{param}' пропущен")
 
                 params_string = ' '.join(params_parts)
                 playbook_path = f"{orchestrator_playbook} {params_string}"
@@ -872,44 +876,16 @@ class TaskQueue:
                 logger.info(f"Сформирован playbook_path с параметрами: {playbook_path}")
 
                 # Формируем extra_params только для тех параметров, для которых есть значения
-                # ВАЖНО: передаем только значения, без описаний
+                # Optional параметры без значения пропускаем - плейбук сам обработает default
                 extra_params = {}
-                missing_params = []
 
                 for param in all_params:
                     if param in param_values:
-                        # Берем только значение, игнорируя описания из БД
                         extra_params[param] = param_values[param]
-                    else:
-                        # Параметр есть в БД, но нет значения
-                        missing_params.append(param)
-                        # Для optional параметров можно попробовать взять default из БД
-                        if param in optional_params:
-                            param_info = optional_params[param]
-                            if isinstance(param_info, dict) and 'default' in param_info:
-                                default_value = param_info['default']
-
-                                # Для wait_after_update пытаемся извлечь число секунд из строки типа "300 сек = 30 мин"
-                                if param == 'wait_after_update' and isinstance(default_value, str):
-                                    # Ищем первое число в строке
-                                    match = re.search(r'(\d+)', default_value)
-                                    if match:
-                                        parsed_value = int(match.group(1))
-                                        logger.info(f"Используется default для '{param}': извлечено {parsed_value} из '{default_value}'")
-                                        extra_params[param] = parsed_value
-                                    else:
-                                        logger.warning(f"Не удалось извлечь число из default для '{param}': {default_value}")
-                                        extra_params[param] = default_value
-                                else:
-                                    logger.info(f"Используется default значение для '{param}': {default_value}")
-                                    extra_params[param] = default_value
-                            else:
-                                logger.warning(f"Optional параметр '{param}' не имеет значения и default")
-                        else:
-                            logger.warning(f"Required параметр '{param}' не имеет значения!")
-
-                if missing_params:
-                    logger.warning(f"Параметры без значений: {missing_params}")
+                    elif param in required_param_names:
+                        # Required параметр без значения - warning
+                        logger.warning(f"Required параметр '{param}' не имеет значения!")
+                    # Optional параметры без значения просто пропускаем (уже залогировано выше)
 
                 logger.info(f"Финальные значения extra_params (только значения, без описаний):")
                 for key, value in extra_params.items():

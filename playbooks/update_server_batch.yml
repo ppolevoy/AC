@@ -9,9 +9,9 @@
     echo "  [{{ current_server }}] Distribution URL: {{ distr_url }}" >> {{ log_file }}
   delegate_to: localhost
 
-- name: "{{ batch_name }}: Execute {{ update_playbook_name }} on {{ current_server }}"
+- name: "{{ batch_name }}: Execute {{ _update_playbook_name }} on {{ current_server }}"
   command: >
-    ansible-playbook {{ update_playbook_name }}
+    ansible-playbook {{ _update_playbook_name }}
     -e "server={{ current_server }}"
     -e "app={{ apps_to_update | join(',') }}"
     -e "distr_url={{ distr_url }}"
@@ -20,10 +20,10 @@
   failed_when: update_result.rc != 0
   delegate_to: localhost
 
-- name: "{{ batch_name }}: Log {{ update_playbook_name }} output for {{ current_server }}"
+- name: "{{ batch_name }}: Log {{ _update_playbook_name }} output for {{ current_server }}"
   copy:
     content: |
-      [{{ current_server }}] {{ update_playbook_name }} execution:
+      [{{ current_server }}] {{ _update_playbook_name }} execution:
       {{ update_result.stdout | default('') }}
       {% if update_result.stderr is defined and update_result.stderr != '' %}
       [{{ current_server }}] STDERR:
