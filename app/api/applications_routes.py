@@ -8,6 +8,7 @@ from app.models.server import Server
 from app.models.application_instance import ApplicationInstance
 from app.models.application_group import ApplicationGroup
 from app.models.event import Event
+from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag
 from app.tasks.queue import task_queue
 from app.models.task import Task
 from app.api import bp
@@ -44,8 +45,7 @@ def get_applications():
         group_ids = {app.group_id for app in applications if app.group_id}
 
         # Предзагружаем теги приложений одним запросом
-        from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag
-        app_tags_map = {}
+        app_tags_map = defaultdict(list)
         if app_ids:
             app_tags_query = db.session.query(
                 ApplicationInstanceTag.application_id,
@@ -53,12 +53,10 @@ def get_applications():
             ).join(Tag).filter(ApplicationInstanceTag.application_id.in_(app_ids))
 
             for app_id, tag in app_tags_query:
-                if app_id not in app_tags_map:
-                    app_tags_map[app_id] = []
                 app_tags_map[app_id].append(tag)
 
         # Предзагружаем теги групп одним запросом
-        group_tags_map = {}
+        group_tags_map = defaultdict(list)
         if group_ids:
             group_tags_query = db.session.query(
                 ApplicationGroupTag.group_id,
@@ -66,8 +64,6 @@ def get_applications():
             ).join(Tag).filter(ApplicationGroupTag.group_id.in_(group_ids))
 
             for group_id, tag in group_tags_query:
-                if group_id not in group_tags_map:
-                    group_tags_map[group_id] = []
                 group_tags_map[group_id].append(tag)
 
         result = []
@@ -75,15 +71,9 @@ def get_applications():
             # Используем уже загруженные данные (eager loading)
             server = app.server
 
-            # Получаем теги приложения из предзагруженного map
-            tags = []
-            if app.id in app_tags_map:
-                tags = [t.to_dict(include_usage_count=False) for t in app_tags_map[app.id]]
-
-            # Получаем теги группы из предзагруженного map
-            group_tags = []
-            if app.group_id and app.group_id in group_tags_map:
-                group_tags = [t.to_dict(include_usage_count=False) for t in group_tags_map[app.group_id]]
+            # Получаем теги из предзагруженных map (defaultdict возвращает [] для отсутствующих ключей)
+            tags = [t.to_dict(include_usage_count=False) for t in app_tags_map[app.id]]
+            group_tags = [t.to_dict(include_usage_count=False) for t in group_tags_map.get(app.group_id, [])]
 
             result.append({
                 'id': app.id,
