@@ -412,6 +412,16 @@
                 return fileName.replace(/\.(yml|yaml)$/i, '');
             };
 
+            // Функция для извлечения имени плейбука из пути
+            const getPlaybookNameFromPath = (path) => {
+                if (!path) return 'не задан';
+                const fileName = path.split('/').pop();
+                return fileName.replace(/\.(yml|yaml)$/i, '');
+            };
+
+            // Получаем имя плейбука
+            const playbookName = getPlaybookNameFromPath(firstApp.effective_playbook_path);
+
             modalContent.innerHTML = `
                 <form id="update-form" class="modal-form">
                     <input type="hidden" name="app_ids" value="${appIds.join(',')}">
@@ -480,6 +490,11 @@
                             </div>
                             <small class="form-help-text">Время ожидания после вывода инстанса из балансировки (0-60 минут)</small>
                         </div>
+                    </div>
+
+                    <div class="playbook-info">
+                        <span class="playbook-label">Плейбук:</span>
+                        <span class="playbook-name">${playbookName}</span>
                     </div>
 
                     <div class="form-actions">
@@ -578,6 +593,13 @@
             // Очищаем кэши при открытии нового модального окна
             this.groupContentCache = {};
             this.groupContentLoaded = {};
+
+            // Функция для извлечения имени плейбука из пути
+            const getPlaybookNameFromPath = (path) => {
+                if (!path) return 'не задан';
+                const fileName = path.split('/').pop();
+                return fileName.replace(/\.(yml|yaml)$/i, '');
+            };
 
             // Функция создания вкладки
             const createTab = (groupName, index, isActive) => {
@@ -851,6 +873,11 @@
                             </div>
                             <small class="form-help-text">Время ожидания после вывода инстанса из балансировки (0-60 минут)</small>
                         </div>
+                    </div>
+
+                    <div class="playbook-info animated-fade-in" style="animation-delay: 0.35s">
+                        <span class="playbook-label">Плейбук:</span>
+                        <span class="playbook-name">${getPlaybookNameFromPath(firstApp.effective_playbook_path)}</span>
                     </div>
 
                     <div class="group-apps-info animated-fade-in" style="animation-delay: 0.4s">

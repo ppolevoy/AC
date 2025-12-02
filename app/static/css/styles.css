@@ -2920,6 +2920,43 @@ body.light-theme .modal-form select option {
     50% { opacity: 0.5; }
 }
 
+/* Информация о плейбуке */
+.playbook-info {
+    margin-top: 15px;
+    padding: 10px 15px;
+    background-color: rgba(92, 165, 225, 0.05);
+    border-radius: 6px;
+    border: 1px solid rgba(92, 165, 225, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.playbook-info .playbook-label {
+    font-size: 13px;
+    color: #888;
+}
+
+.playbook-info .playbook-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #5ca5e1;
+    font-family: monospace;
+}
+
+body.light-theme .playbook-info {
+    background-color: rgba(92, 165, 225, 0.08);
+    border-color: rgba(92, 165, 225, 0.2);
+}
+
+body.light-theme .playbook-info .playbook-label {
+    color: #666;
+}
+
+body.light-theme .playbook-info .playbook-name {
+    color: #1976d2;
+}
+
 /* Информация о приложениях в группе */
 .group-apps-info {
     margin-top: 20px;

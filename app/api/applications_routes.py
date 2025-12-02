@@ -89,7 +89,8 @@ def get_applications():
                 'instance_number': app.instance_number,
                 'start_time': app.start_time.isoformat() if app.start_time else None,
                 'tags': tags,
-                'group_tags': group_tags
+                'group_tags': group_tags,
+                'effective_playbook_path': app.get_effective_playbook_path()
             })
 
         return jsonify({
