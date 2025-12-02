@@ -41,7 +41,12 @@ class Tag(db.Model):
         lazy='dynamic'
     )
 
-    def to_dict(self):
+    def to_dict(self, include_usage_count=True):
+        """Сериализация тега в словарь.
+
+        Args:
+            include_usage_count: Включать ли подсчёт использования (дорогая операция - 2 COUNT запроса)
+        """
         result = {
             'id': self.id,
             'name': self.name,
@@ -54,9 +59,12 @@ class Tag(db.Model):
             'text_color': self.text_color,
             'is_system': self.is_system,
             'show_in_table': self.show_in_table,
-            'usage_count': self.get_usage_count(),
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+        # usage_count только если запрошен (дорогая операция)
+        if include_usage_count:
+            result['usage_count'] = self.get_usage_count()
 
         # Добавляем trigger_type для системных тегов
         if self.is_system:
