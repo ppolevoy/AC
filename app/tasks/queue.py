@@ -411,7 +411,7 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                success, message = loop.run_until_complete(
+                success, message, output = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
                         app_name=app_name,
@@ -423,7 +423,8 @@ class TaskQueue:
                 if not success:
                     raise Exception(message)
 
-                return message
+                # Возвращаем вывод Ansible для отображения в task.result
+                return output if output else message
         finally:
             # Закрываем event loop
             loop.close()
@@ -474,7 +475,7 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                success, message = loop.run_until_complete(
+                success, message, output = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
                         app_name=app_name,
@@ -486,7 +487,8 @@ class TaskQueue:
                 if not success:
                     raise Exception(message)
 
-                return message
+                # Возвращаем вывод Ansible для отображения в task.result
+                return output if output else message
         finally:
             # Закрываем event loop
             loop.close()
@@ -537,7 +539,7 @@ class TaskQueue:
         try:
             # Запускаем асинхронную функцию внутри event loop
             with self.app.app_context():
-                success, message = loop.run_until_complete(
+                success, message, output = loop.run_until_complete(
                     AnsibleService.manage_application(
                         server_name=server_name,
                         app_name=app_name,
@@ -549,7 +551,8 @@ class TaskQueue:
                 if not success:
                     raise Exception(message)
 
-                return message
+                # Возвращаем вывод Ansible для отображения в task.result
+                return output if output else message
         finally:
             # Закрываем event loop
             loop.close()

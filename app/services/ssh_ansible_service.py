@@ -61,6 +61,7 @@ class SSHAnsibleService:
         'server': 'Имя сервера',
         'app': 'Имя приложения',
         'app_name': 'Имя приложения (алиас для app)',
+        'action': 'Действие для управления приложением (start, stop, restart)',
         'image_url': 'URL до docker image (для docker-приложений, алиас для distr_url если не указан явно)',
         'distr_url': 'URL артефакта/дистрибутива',
         'mode': 'Режим обновления (deliver, immediate, night-restart)',
@@ -654,28 +655,162 @@ class SSHAnsibleService:
     
     async def manage_application(self,
                                 server_name: str,
-                                app_name: str, 
+                                app_name: str,
                                 app_id: int,
                                 action: str,
-                                playbook_path: Optional[str] = None) -> Tuple[bool, str]:
+                                playbook_path: Optional[str] = None,
+                                task_id: Optional[str] = None) -> Tuple[bool, str, str]:
         """
         Управление приложением (start/stop/restart) через Ansible playbook
-        
+
         Args:
             server_name: Имя сервера
             app_name: Имя приложения
             app_id: ID приложения в БД
             action: Действие (start/stop/restart)
             playbook_path: Путь к playbook с параметрами (опционально)
-            
+            task_id: ID задачи для возможности отмены (опционально)
+
         Returns:
-            Tuple[bool, str]: (успех операции, информация о результате)
+            Tuple[bool, str, str]: (успех операции, информация о результате, вывод Ansible)
         """
-        # Здесь аналогичная логика для других операций
-        # Используем те же методы parse_playbook_config, validate_parameters, build_extra_vars
-        # Код опущен для краткости, но следует той же логике что и update_application
-        pass
-    
+        # Валидация действия
+        valid_actions = ['start', 'stop', 'restart']
+        if action not in valid_actions:
+            error_msg = f"Некорректное действие: {action}. Допустимые значения: {', '.join(valid_actions)}"
+            logger.error(error_msg)
+            return False, error_msg, ""
+
+        # Путь к playbook по умолчанию
+        if not playbook_path:
+            playbook_path = getattr(Config, 'APP_CONTROL_PLAYBOOK',
+                                   f"{self.ssh_config.ansible_path}/app_control.yml")
+
+        # Формируем полный путь к playbook
+        if not playbook_path.startswith('/'):
+            playbook_full_path = os.path.join(self.ssh_config.ansible_path, playbook_path)
+        else:
+            playbook_full_path = playbook_path
+
+        try:
+            # Получаем сервер по имени
+            from app.models.server import Server
+
+            server = Server.query.filter_by(name=server_name).first()
+            if not server:
+                error_msg = f"Сервер с именем {server_name} не найден"
+                logger.error(error_msg)
+                return False, error_msg, ""
+
+            # Проверяем SSH-соединение
+            connection_ok, connection_msg = await self.test_connection()
+            if not connection_ok:
+                await self._create_event(
+                    event_type=action,
+                    description=f"Ошибка SSH-подключения при {action} {app_name} на {server_name}: {connection_msg}",
+                    status='failed',
+                    server_id=server.id,
+                    instance_id=app_id
+                )
+                return False, f"SSH-соединение не удалось: {connection_msg}", ""
+
+            # Записываем событие о начале операции
+            await self._create_event(
+                event_type=action,
+                description=f"Запуск {action} для приложения {app_name} на сервере {server_name}",
+                status='pending',
+                server_id=server.id,
+                instance_id=app_id
+            )
+
+            # Проверяем существование playbook на удаленном хосте
+            if not await self._remote_file_exists(playbook_full_path):
+                error_msg = f"Ansible playbook не найден на удаленном хосте: {playbook_full_path}"
+                logger.error(error_msg)
+
+                await self._create_event(
+                    event_type=action,
+                    description=f"Ошибка {action} {app_name} на {server_name}: {error_msg}",
+                    status='failed',
+                    server_id=server.id,
+                    instance_id=app_id
+                )
+                return False, error_msg, ""
+
+            # Формируем extra_vars для playbook
+            extra_vars = {
+                'server': server_name,
+                'app_name': app_name,
+                'action': action
+            }
+
+            # Формируем команду для запуска Ansible
+            ansible_cmd = self.build_ansible_command(
+                playbook_full_path,
+                extra_vars,
+                verbose=True
+            )
+
+            logger.info(f"Запуск Ansible ({action}) через SSH: {' '.join(ansible_cmd)}")
+
+            # Выполняем команду
+            success, output, error_output = await self._execute_ansible_command(
+                ansible_cmd, server.id, app_id, app_name, server_name, action, task_id
+            )
+
+            if success:
+                result_msg = f"{action} для приложения {app_name} на сервере {server_name} выполнен успешно"
+                logger.info(result_msg)
+
+                await self._create_event(
+                    event_type=action,
+                    description=f"{action} {app_name} на {server_name} завершен успешно",
+                    status='success',
+                    server_id=server.id,
+                    instance_id=app_id
+                )
+
+                # TODO: Реализовать активную проверку статуса приложения после действия
+                # Сейчас статус обновится на следующем polling цикле (до POLLING_INTERVAL сек)
+                # Для мгновенной обратной связи можно принудительно опросить FAgent:
+                #
+                # from app.services.agent_service import AgentService
+                # await AgentService.poll_server(server)
+                #
+                # Это обновит статус приложения сразу после выполнения action
+
+                return True, result_msg, output
+            else:
+                error_msg = f"Ошибка при {action} {app_name} на {server_name}: {error_output}"
+                logger.error(error_msg)
+
+                await self._create_event(
+                    event_type=action,
+                    description=f"Ошибка {action} {app_name} на {server_name}: {error_output}",
+                    status='failed',
+                    server_id=server.id,
+                    instance_id=app_id
+                )
+
+                return False, error_msg, output
+
+        except Exception as e:
+            error_msg = f"Исключение при {action} {app_name} на {server_name}: {str(e)}"
+            logger.error(error_msg)
+
+            try:
+                await self._create_event(
+                    event_type=action,
+                    description=f"Критическая ошибка {action} {app_name} на {server_name}: {str(e)}",
+                    status='failed',
+                    server_id=server.id if 'server' in locals() else None,
+                    instance_id=app_id
+                )
+            except:
+                pass
+
+            return False, error_msg, ""
+
     # Вспомогательные методы (остаются без изменений)
     async def test_connection(self) -> Tuple[bool, str]:
         """Проверка SSH-соединения с хостом"""

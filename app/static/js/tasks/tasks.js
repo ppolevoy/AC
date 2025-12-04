@@ -383,6 +383,14 @@ document.addEventListener('DOMContentLoaded', function() {
 					content: displaySummaryHtml
 				};
 				sections.push(displaySummarySection);
+			} else if (task.result && task.status === 'completed') {
+				// Fallback: показываем raw result если нет распарсенных summaries
+				const resultSection = {
+					title: 'Вывод Ansible',
+					type: 'html',
+					content: `<pre class="task-result">${escapeHtml(task.result)}</pre>`
+				};
+				sections.push(resultSection);
 			}
 
 			// Добавляем секцию с PLAY RECAP (если есть)

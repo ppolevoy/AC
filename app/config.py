@@ -58,6 +58,7 @@ class Config:
     # Настройки Ansible
     ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
     DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
+    APP_CONTROL_PLAYBOOK = os.environ.get('APP_CONTROL_PLAYBOOK') or '/etc/ansible/app_control.yml'
 
     # Настройки для Orchestrator Playbooks
     # Используется тот же ANSIBLE_PATH что и для обычных playbook-ов

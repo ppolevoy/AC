@@ -533,7 +533,11 @@ def manage_application(app_id):
         # Создаем задачу и добавляем ее в очередь
         task = Task(
             task_type=action,
-            params={},
+            params={
+                'action': action,
+                'server_name': server.name,
+                'app_name': app.instance_name
+            },
             server_id=server.id,
             instance_id=app.id
         )
@@ -605,7 +609,11 @@ def bulk_manage_applications():
             # Создаем задачу и добавляем ее в очередь
             task = Task(
                 task_type=action,
-                params={},
+                params={
+                    'action': action,
+                    'server_name': server.name,
+                    'app_name': app.instance_name
+                },
                 server_id=server.id,
                 instance_id=app.id
             )
@@ -614,9 +622,9 @@ def bulk_manage_applications():
 
             results.append({
                 'app_id': app_id,
-                'app_name': app.name,
+                'app_name': app.instance_name,
                 'success': True,
-                'message': f"{action} для приложения {app.name} поставлен в очередь",
+                'message': f"{action} для приложения {app.instance_name} поставлен в очередь",
                 'task_id': task.id
             })
 

@@ -302,7 +302,8 @@ def get_task(task_id):
             task_data['current_task'] = None
 
         # Парсим данные из результата Ansible для отображения
-        if task.result and task.task_type == 'update':
+        # Поддерживаем все типы задач: update, start, stop, restart
+        if task.result:
             # PLAY RECAP - статистика выполнения
             task_data['ansible_summary'] = parse_ansible_summary(task.result)
             # Display summary tasks - читаемые сводки из плейбуков
@@ -310,6 +311,15 @@ def get_task(task_id):
         else:
             task_data['ansible_summary'] = []
             task_data['display_summaries'] = []
+
+        # Добавляем параметры запуска для start/stop/restart задач
+        if task.task_type in ['start', 'stop', 'restart']:
+            task_data['action'] = task.task_type
+            task_data['playbook_params'] = {
+                'server': task_data.get('server_name'),
+                'app_name': task_data.get('application_name'),
+                'action': task.task_type
+            }
 
         return jsonify({
             'success': True,
