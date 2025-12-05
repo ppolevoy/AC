@@ -1001,7 +1001,7 @@ body.light-theme .modal-header h3 {
 
 .modal-body {
     padding: 20px;
-    max-height: 70vh;
+    max-height: 80vh;
     overflow-y: auto;
 }
 
@@ -1209,6 +1209,12 @@ body.light-theme .modal-tab:hover {
 
 body.light-theme .modal-tab.active {
     background-color: rgba(92, 165, 225, 0.1);
+}
+
+/* Модальные окна обновления приложений - увеличенная ширина */
+.modal-content:has(.update-modal-content),
+.modal-content:has(.modal-tabs) {
+    max-width: 650px;
 }
 
 /* Модальное окно информации о приложении */
@@ -2850,7 +2856,7 @@ body.light-theme .version-indicator.snapshot {
 
 /* Улучшенные стили для формы в модальном окне */
 .modal-form {
-    max-height: 60vh;
+    max-height: 70vh;
     overflow-y: auto;
     padding-right: 10px;
 }
@@ -2955,62 +2961,6 @@ body.light-theme .playbook-info .playbook-label {
 
 body.light-theme .playbook-info .playbook-name {
     color: #1976d2;
-}
-
-/* Информация о приложениях в группе */
-.group-apps-info {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: rgba(92, 165, 225, 0.05);
-    border-radius: 6px;
-    border: 1px solid rgba(92, 165, 225, 0.2);
-}
-
-.group-apps-info label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: 600;
-    color: #5ca5e1;
-}
-
-.group-apps-info .apps-list {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.app-badge {
-    display: inline-block;
-    flex-shrink: 0;
-    flex-grow: 0;
-    width: fit-content;
-    padding: 4px 10px;
-    background-color: #333336;
-    border-radius: 4px;
-    font-size: 13px;
-    color: #ebe4da;
-    border: 1px solid #454545;
-    position: relative;
-    animation: fadeInScale 0.3s ease forwards;
-    opacity: 0;
-}
-
-body.light-theme .app-badge {
-    background-color: #f0f0f0;
-    color: #333;
-    border: 1px solid #ddd;
-}
-
-@keyframes fadeInScale {
-    from {
-        opacity: 0;
-        transform: scale(0.9);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
 }
 
 /* Счетчик приложений в табах */

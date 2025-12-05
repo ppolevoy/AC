@@ -25,7 +25,7 @@
 .apps-group-header,
 .apps-row-header {
     display: grid;
-    grid-template-columns: 60px 1fr 120px 100px 150px 80px;
+    grid-template-columns: 60px 1fr 120px 100px 180px 80px;
     align-items: stretch; /* Все колонки одинаковой высоты */
     gap: 0;
 }
