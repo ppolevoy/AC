@@ -178,7 +178,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const shortId = task.id.substring(0, 8) + '...';
             
             // Определяем, можно ли отменить задачу
-            const canCancel = task.status === 'processing' && task.can_cancel;
+            // can_cancel = true для pending задач и для processing задач с PID
+            const canCancel = task.can_cancel;
             const cancelBtn = canCancel
                 ? `<button class="task-action-btn cancel-task-btn" data-task-id="${task.id}" title="Отменить задачу">×</button>`
                 : '';

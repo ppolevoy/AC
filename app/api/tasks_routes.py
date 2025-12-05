@@ -336,9 +336,11 @@ def get_task(task_id):
 @bp.route('/tasks/<task_id>/cancel', methods=['POST'])
 def cancel_task(task_id):
     """
-    Отмена выполняющейся задачи.
+    Отмена задачи.
 
-    Отправляет SIGTERM процессу Ansible, что приводит к прерыванию выполнения плейбука.
+    Поддерживает отмену:
+    - pending задач: помечает как отмененную, worker пропустит при обработке
+    - processing задач: отправляет SIGTERM процессу Ansible
     """
     try:
         # Получаем задачу из БД
@@ -349,39 +351,55 @@ def cancel_task(task_id):
                 'error': f"Задача {task_id} не найдена"
             }), 404
 
-        # Проверяем, можно ли отменить задачу
-        if task.status != 'processing':
-            return jsonify({
-                'success': False,
-                'error': f"Задача не выполняется (статус: {task.status})"
-            }), 400
-
         if task.cancelled:
             return jsonify({
                 'success': False,
                 'error': "Задача уже отменена"
             }), 400
 
-        # Пытаемся отменить процесс через SSHAnsibleService
-        success, message = SSHAnsibleService.cancel_task(task_id)
+        # Обработка в зависимости от статуса задачи
+        if task.status == 'pending':
+            # Отмена ожидающей задачи через TaskQueue
+            success, message = task_queue.cancel_pending_task(task_id)
 
-        if success:
-            # Помечаем задачу как отмененную
-            task.cancelled = True
-            task.status = 'failed'
-            task.error = 'Задача отменена пользователем'
-            db.session.commit()
+            if success:
+                logger.info(f"Задача {task_id} (pending) отменена пользователем")
+                return jsonify({
+                    'success': True,
+                    'message': 'Задача отменена'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 400
 
-            logger.info(f"Задача {task_id} отменена пользователем")
+        elif task.status == 'processing':
+            # Отмена выполняющейся задачи через SSHAnsibleService
+            success, message = SSHAnsibleService.cancel_task(task_id)
 
-            return jsonify({
-                'success': True,
-                'message': 'Задача отменена'
-            })
+            if success:
+                # Помечаем задачу как отмененную
+                task.cancelled = True
+                task.status = 'failed'
+                task.error = 'Задача отменена пользователем'
+                db.session.commit()
+
+                logger.info(f"Задача {task_id} (processing) отменена пользователем")
+
+                return jsonify({
+                    'success': True,
+                    'message': 'Задача отменена'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 400
         else:
             return jsonify({
                 'success': False,
-                'error': message
+                'error': f"Невозможно отменить задачу в статусе '{task.status}'"
             }), 400
 
     except Exception as e:

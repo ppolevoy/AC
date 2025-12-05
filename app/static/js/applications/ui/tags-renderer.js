@@ -35,7 +35,7 @@
             }
 
             if (allTags.length === 0) {
-                return '<span class="no-tags">—</span>';
+                return '';
             }
 
             return this._buildContainer(allTags, maxVisible);

@@ -389,6 +389,24 @@
             }
 
             summary.innerHTML = html;
+        },
+
+        filterSelectOptions(selectId, searchTerm) {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+
+            const term = searchTerm.toLowerCase().trim();
+            const options = select.querySelectorAll('option');
+
+            options.forEach(option => {
+                if (option.value === '') {
+                    // Опция "Все" всегда видна
+                    option.style.display = '';
+                    return;
+                }
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(term) ? '' : 'none';
+            });
         }
     };
 
@@ -498,6 +516,13 @@
             document.getElementById('catalog-filter').selectedIndex = 0;
             document.getElementById('date-from').value = '';
             document.getElementById('date-to').value = '';
+
+            // Очищаем поле поиска по приложениям
+            const catalogSearch = document.getElementById('catalog-search');
+            if (catalogSearch) {
+                catalogSearch.value = '';
+                UI.filterSelectOptions('catalog-filter', '');
+            }
 
             state.filters = { serverIds: [], catalogIds: [], dateFrom: null, dateTo: null };
 
@@ -733,6 +758,14 @@
         document.getElementById('catalog-filter').addEventListener('change', () => {
             UI.updateFilterSummary('catalog-filter', 'catalog-filter-summary');
         });
+
+        // Обработчик поиска по приложениям
+        const catalogSearchInput = document.getElementById('catalog-search');
+        if (catalogSearchInput) {
+            catalogSearchInput.addEventListener('input', (e) => {
+                UI.filterSelectOptions('catalog-filter', e.target.value);
+            });
+        }
 
         // Обработчик группировки
         document.getElementById('group-by-server').addEventListener('change',

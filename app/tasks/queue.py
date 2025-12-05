@@ -178,6 +178,56 @@ class TaskQueue:
             from app.models.task import Task
             return Task.query.get(task_id)
 
+    def cancel_pending_task(self, task_id):
+        """
+        Отмена задачи в статусе pending.
+
+        Задача помечается как cancelled и failed в БД.
+        При обработке очереди worker пропустит отмененную задачу.
+
+        Args:
+            task_id: ID задачи
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        if not self.app:
+            return False, "TaskQueue не инициализирован"
+
+        try:
+            with self.app.app_context():
+                from app import db
+                from app.models.task import Task
+
+                task = Task.query.get(task_id)
+                if not task:
+                    return False, f"Задача {task_id} не найдена"
+
+                if task.status != 'pending':
+                    return False, f"Задача не в статусе ожидания (текущий статус: {task.status})"
+
+                if task.cancelled:
+                    return False, "Задача уже была отменена"
+
+                # Помечаем задачу как отмененную
+                task.cancelled = True
+                task.status = 'failed'
+                task.completed_at = datetime.utcnow()
+                task.error = 'Задача отменена пользователем'
+                db.session.commit()
+
+                logger.info(f"Задача {task_id[:8]}... ({task.task_type}) отменена пользователем")
+                return True, "Задача успешно отменена"
+
+        except Exception as e:
+            logger.error(f"Ошибка при отмене задачи {task_id}: {str(e)}")
+            try:
+                from app import db
+                db.session.rollback()
+            except:
+                pass
+            return False, str(e)
+
     def clear_completed_tasks(self, days_old: int = 365):
         """
         Очистка старых завершённых задач из БД.
@@ -297,6 +347,11 @@ class TaskQueue:
                     task = Task.query.get(task_id)
                     if not task:
                         logger.warning(f"Задача {task_id} не найдена в БД")
+                        continue
+
+                    # Проверяем, не была ли задача отменена или уже обработана
+                    if task.status != 'pending' or task.cancelled:
+                        logger.info(f"Задача {task_id[:8]}... пропущена (статус: {task.status}, отменена: {task.cancelled})")
                         continue
 
                     # Сохраняем тип задачи для использования вне контекста
@@ -557,6 +612,97 @@ class TaskQueue:
             # Закрываем event loop
             loop.close()
 
+    def _sort_instances_for_cross_server_splitting(self, apps):
+        """
+        Сортирует экземпляры для корректного разделения на EVEN/ODD батчи.
+
+        Гарантирует, что парные экземпляры одного приложения на разных серверах
+        получат соседние индексы и попадут в разные батчи при делении по чёт/нечёт.
+
+        Алгоритм:
+        1. Группируем экземпляры по имени приложения (instance_name)
+        2. Для каждой группы сортируем по имени сервера
+        3. Чередуем распределение: первый сервер → EVEN, второй → ODD (toggle для балансировки)
+        4. Формируем финальный список чередованием: even[0], odd[0], even[1], odd[1]...
+
+        Args:
+            apps: Список объектов ApplicationInstance
+
+        Returns:
+            list: Отсортированный список ApplicationInstance
+        """
+        from app.models.server import Server
+
+        if len(apps) <= 1:
+            return list(apps)
+
+        # Группируем по instance_name
+        groups = {}
+        for app in apps:
+            name = app.instance_name
+            if name not in groups:
+                groups[name] = []
+            groups[name].append(app)
+
+        # Формируем два списка для чередования
+        even_list = []
+        odd_list = []
+        toggle = False
+
+        for name in sorted(groups.keys()):
+            instances = groups[name]
+
+            # Сортируем по имени сервера для консистентности
+            instances_with_servers = []
+            for inst in instances:
+                server = Server.query.get(inst.server_id)
+                server_name = server.name if server else ''
+                instances_with_servers.append((inst, server_name))
+
+            instances_with_servers.sort(key=lambda x: x[1])
+            sorted_instances = [x[0] for x in instances_with_servers]
+
+            if len(sorted_instances) >= 2:
+                # Парные экземпляры - чередуем распределение для балансировки
+                if toggle:
+                    even_list.append(sorted_instances[1])
+                    odd_list.append(sorted_instances[0])
+                else:
+                    even_list.append(sorted_instances[0])
+                    odd_list.append(sorted_instances[1])
+                toggle = not toggle
+
+                # Если больше 2 экземпляров, распределяем остальные
+                for i, inst in enumerate(sorted_instances[2:], start=2):
+                    if i % 2 == 0:
+                        even_list.append(inst)
+                    else:
+                        odd_list.append(inst)
+            else:
+                # Один экземпляр - кладём в менее заполненный список
+                if len(even_list) <= len(odd_list):
+                    even_list.append(sorted_instances[0])
+                else:
+                    odd_list.append(sorted_instances[0])
+
+        # Формируем финальный список чередованием: even[0], odd[0], even[1], odd[1]...
+        result = []
+        for i in range(max(len(even_list), len(odd_list))):
+            if i < len(even_list):
+                result.append(even_list[i])
+            if i < len(odd_list):
+                result.append(odd_list[i])
+
+        # Логируем результат сортировки
+        logger.info("Cross-server sorting for EVEN/ODD splitting:")
+        for idx, app in enumerate(result):
+            server = Server.query.get(app.server_id)
+            server_name = server.name.split('.')[0] if server else 'unknown'
+            batch = "EVEN" if idx % 2 == 0 else "ODD"
+            logger.info(f"  [{idx}] {batch}: {server_name}::{app.instance_name}")
+
+        return result
+
     def _prepare_orchestrator_instances_with_haproxy(self, apps):
         """
         Формирует список instances с HAProxy маппингом.
@@ -575,12 +721,15 @@ class TaskQueue:
         from app.models.server import Server
         from flask import current_app
 
+        # Сортируем для корректного cross-server разделения на EVEN/ODD
+        sorted_apps = self._sort_instances_for_cross_server_splitting(apps)
+
         instances = []
         backend_info = {}
         haproxy_api_url = None
         unmapped_count = 0
 
-        for app in apps:
+        for app in sorted_apps:
             server = Server.query.get(app.server_id)
             if not server:
                 logger.warning(f"Server not found for app {app.instance_name}")
@@ -805,7 +954,8 @@ class TaskQueue:
                     'app_instances': app_instances_list,  # Новый параметр вместо app_name и target_servers
                     'drain_delay': drain_delay_seconds,
                     'update_playbook': update_playbook_name,
-                    'distr_url': distr_url
+                    'distr_url': distr_url,
+                    'image_url': distr_url  # Алиас для docker оркестратора
                 }
 
                 # Добавляем кастомные параметры из playbook_path (например {unpack=true})

@@ -94,5 +94,18 @@ class Task(db.Model):
 
     @property
     def can_cancel(self):
-        """Проверка возможности отмены задачи"""
-        return self.status == 'processing' and self.pid is not None and not self.cancelled
+        """
+        Проверка возможности отмены задачи.
+
+        Задачу можно отменить если:
+        - Она в статусе 'pending' (ещё не начала выполнение)
+        - Она в статусе 'processing' и имеет PID процесса
+        - Она ещё не была отменена ранее
+        """
+        if self.cancelled:
+            return False
+        if self.status == 'pending':
+            return True
+        if self.status == 'processing' and self.pid is not None:
+            return True
+        return False

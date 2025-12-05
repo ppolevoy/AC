@@ -177,7 +177,7 @@
             const systemLabel = isAutoAssigned && !isInherited ? ' <span class="tag-status tag-status-system">(авто)</span>' : '';
 
             const shortDescription = tag.description
-                ? (tag.description.length > 40 ? tag.description.substring(0, 40) + '...' : tag.description)
+                ? (tag.description.length > 55 ? tag.description.substring(0, 55) + '...' : tag.description)
                 : '';
             const descriptionHtml = shortDescription
                 ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
@@ -315,10 +315,19 @@
                 if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
                 const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
                 const checked = groupTagNames.has(tag.name) ? 'checked' : '';
+
+                const shortDescription = tag.description
+                    ? (tag.description.length > 55 ? tag.description.substring(0, 55) + '...' : tag.description)
+                    : '';
+                const descriptionHtml = shortDescription
+                    ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
+                    : '';
+
                 return `
                     <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
                         <input type="checkbox" value="${tag.name}" class="group-tag-checkbox" data-tag-id="${tag.id}" ${checked}>
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
+                        ${descriptionHtml}
                     </label>
                 `;
             }).join('');

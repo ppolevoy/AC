@@ -754,7 +754,7 @@ body.light-theme .tag-checkbox-label:hover {
     color: #777;
     margin-left: auto;
     padding-left: 12px;
-    max-width: 180px;
+    max-width: 400px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

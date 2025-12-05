@@ -63,9 +63,9 @@
 }
 
 .filter-select {
-    min-width: 180px;
-    max-width: 250px;
-    height: 80px;
+    min-width: 200px;
+    max-width: 280px;
+    height: 180px;
     padding: 6px 8px;
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
@@ -80,12 +80,33 @@
     color: var(--color-text-primary);
 }
 
+/* Поле поиска для фильтров */
+.filter-search-input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.filter-search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.filter-search-input::placeholder {
+    color: var(--color-text-tertiary);
+}
+
 /* Отображение выбранных значений фильтров */
 .filter-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    max-width: 250px;
+    max-width: 280px;
     margin-top: 4px;
     min-height: 20px;
 }
