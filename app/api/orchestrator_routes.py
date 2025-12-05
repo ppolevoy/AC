@@ -4,8 +4,10 @@ API endpoints для управления orchestrator playbooks
 """
 
 from flask import jsonify, request
+from sqlalchemy import func
 import logging
 
+from app import db
 from app.api import bp
 from app.services.orchestrator_scanner import (
     scan_orchestrators,
@@ -206,7 +208,8 @@ def validate_haproxy_mapping():
             # Проверяем маппинг
             mapping = ApplicationMapping.query.filter_by(
                 application_id=app_id,
-                service_type='haproxy'
+                entity_type='haproxy_server',
+                is_active=True
             ).first()
 
             detail = {
@@ -219,8 +222,8 @@ def validate_haproxy_mapping():
                 'instance_string': None
             }
 
-            if mapping and mapping.external_server_id:
-                haproxy_server = HAProxyServer.query.get(mapping.external_server_id)
+            if mapping and mapping.entity_id:
+                haproxy_server = HAProxyServer.query.get(mapping.entity_id)
                 if haproxy_server:
                     detail['mapped'] = True
                     detail['haproxy_server'] = haproxy_server.name
@@ -234,7 +237,7 @@ def validate_haproxy_mapping():
                     detail['instance_string'] = f"{short_name}::{app.instance_name}::{haproxy_server.name}"
                     result['mapped'] += 1
                 else:
-                    detail['error'] = f"HAProxy server {mapping.external_server_id} not found"
+                    detail['error'] = f"HAProxy server {mapping.entity_id} not found"
                     detail['instance_string'] = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
                     result['unmapped'] += 1
             else:
@@ -257,4 +260,78 @@ def validate_haproxy_mapping():
 
     except Exception as e:
         logger.error(f"Error validating HAProxy mapping: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/orchestrators/validate-mappings', methods=['POST'])
+def validate_mappings():
+    """
+    Проверяет наличие маппингов (HAProxy или Eureka) для списка приложений.
+    Используется для определения значения оркестратора по умолчанию.
+
+    Условие для оркестрации: ВСЕ приложения должны иметь маппинг одного типа.
+
+    Request body:
+    {
+        "application_ids": [1, 2, 3]
+    }
+
+    Response:
+    {
+        "total": 3,
+        "haproxy_mapped": 3,
+        "eureka_mapped": 0,
+        "all_haproxy": true,
+        "all_eureka": false,
+        "can_orchestrate": true
+    }
+    """
+    try:
+        data = request.get_json()
+        app_ids = data.get('application_ids', [])
+
+        if not app_ids:
+            return jsonify({
+                'total': 0,
+                'haproxy_mapped': 0,
+                'eureka_mapped': 0,
+                'all_haproxy': False,
+                'all_eureka': False,
+                'can_orchestrate': False
+            })
+
+        total = len(app_ids)
+
+        # Один запрос с GROUP BY - подсчёт уникальных app_id по типам
+        counts = db.session.query(
+            ApplicationMapping.entity_type,
+            func.count(func.distinct(ApplicationMapping.application_id))
+        ).filter(
+            ApplicationMapping.application_id.in_(app_ids),
+            ApplicationMapping.is_active == True
+        ).group_by(ApplicationMapping.entity_type).all()
+
+        # Преобразуем в словарь
+        counts_dict = {entity_type: count for entity_type, count in counts}
+        haproxy_count = counts_dict.get('haproxy_server', 0)
+        eureka_count = counts_dict.get('eureka_instance', 0)
+
+        # Условие: ВСЕ приложения имеют маппинг одного типа
+        all_haproxy = (haproxy_count == total)
+        all_eureka = (eureka_count == total)
+        can_orchestrate = all_haproxy or all_eureka
+
+        logger.debug(f"Mapping check for {total} apps: haproxy={haproxy_count}, eureka={eureka_count}, can_orchestrate={can_orchestrate}")
+
+        return jsonify({
+            'total': total,
+            'haproxy_mapped': haproxy_count,
+            'eureka_mapped': eureka_count,
+            'all_haproxy': all_haproxy,
+            'all_eureka': all_eureka,
+            'can_orchestrate': can_orchestrate
+        })
+
+    except Exception as e:
+        logger.error(f"Error validating mappings: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

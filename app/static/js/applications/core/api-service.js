@@ -213,6 +213,39 @@
                 this._showError('Не удалось загрузить список оркестраторов');
                 return [];
             }
+        },
+
+        /**
+         * Проверяет наличие маппингов (HAProxy/Eureka) для приложений.
+         * Используется для определения значения оркестратора по умолчанию.
+         *
+         * @param {Array<number>} appIds - массив ID приложений
+         * @returns {Promise<{canOrchestrate: boolean, total: number, haproxyMapped: number, eurekaMapped: number}>}
+         */
+        async checkMappings(appIds) {
+            try {
+                const response = await fetch('/api/orchestrators/validate-mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ application_ids: appIds })
+                });
+
+                if (!response.ok) {
+                    console.error('Ошибка проверки маппингов:', response.status);
+                    return { canOrchestrate: false, total: appIds.length, haproxyMapped: 0, eurekaMapped: 0 };
+                }
+
+                const data = await response.json();
+                return {
+                    canOrchestrate: data.can_orchestrate,
+                    total: data.total,
+                    haproxyMapped: data.haproxy_mapped,
+                    eurekaMapped: data.eureka_mapped
+                };
+            } catch (error) {
+                console.error('Ошибка проверки маппингов:', error);
+                return { canOrchestrate: false, total: appIds.length, haproxyMapped: 0, eurekaMapped: 0 };
+            }
         }
     };
 

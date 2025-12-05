@@ -51,6 +51,7 @@ const ModalUtils = {
                     tr.appendChild(labelTd);
                     
                     const valueTd = document.createElement('td');
+                    valueTd.className = 'info-value';
                     valueTd.innerHTML = row.value;
                     tr.appendChild(valueTd);
                     

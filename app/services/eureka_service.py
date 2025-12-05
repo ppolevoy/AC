@@ -80,12 +80,16 @@ class EurekaService:
             logger.debug(f"Очищено {len(keys_to_remove)} записей кэша для Eureka server_id={server_id}")
 
     @staticmethod
-    def _parse_instance_id(instance_id: str) -> Tuple[str, str, int]:
+    def _parse_instance_id(instance_id: str, app_name: str = None) -> Tuple[str, str, int]:
         """
-        Парсинг instance_id формата IP:service-name:port.
+        Парсинг instance_id различных форматов:
+        - IP:service-name:port (например: 192.168.1.10:jurws:8080)
+        - hostname:service-name:port (например: fdse.f.ftc.ru:platform-signature-verifier:19600)
+        - IP:port (например: 192.168.115.231:9988)
 
         Args:
             instance_id: Строка instance_id
+            app_name: Имя приложения (используется как service_name если не удалось извлечь)
 
         Returns:
             Tuple[ip_address, service_name, port]
@@ -93,7 +97,12 @@ class EurekaService:
         try:
             parts = instance_id.split(':')
             if len(parts) == 3:
+                # Формат: host:service:port
                 return parts[0], parts[1], int(parts[2])
+            elif len(parts) == 2:
+                # Формат: host:port (service_name берём из app_name)
+                service_name = app_name.lower() if app_name else 'unknown'
+                return parts[0], service_name, int(parts[1])
             else:
                 logger.error(f"Некорректный формат instance_id: {instance_id}")
                 return None, None, None
@@ -556,14 +565,22 @@ class EurekaService:
             # Словарь для отслеживания существующих instance_id
             seen_instance_ids = set()
 
-            # Обрабатываем каждое приложение
-            for app_data in applications_data:
-                app_name = app_data.get('app_name')
-                instances = app_data.get('instances', [])
+            # Словарь для группировки инстансов по app_name
+            apps_dict = {}
 
+            # FAgent возвращает плоский список, где каждый элемент - это инстанс
+            # Группируем по app_name
+            for inst_data in applications_data:
+                app_name = inst_data.get('app_name')
                 if not app_name:
                     continue
 
+                if app_name not in apps_dict:
+                    apps_dict[app_name] = []
+                apps_dict[app_name].append(inst_data)
+
+            # Обрабатываем каждое приложение
+            for app_name, instances in apps_dict.items():
                 # Находим или создаем EurekaApplication
                 eureka_app = EurekaApplication.query.filter_by(
                     eureka_server_id=eureka_server.id,
@@ -583,14 +600,22 @@ class EurekaService:
                     for inst_data in instances:
                         instance_id = inst_data.get('instance_id')
                         if not instance_id:
+                            logger.warning(f"Пропуск инстанса без instance_id для приложения {app_name}")
                             continue
 
                         seen_instance_ids.add(instance_id)
 
-                        # Парсим instance_id
-                        ip_address, service_name, port = EurekaService._parse_instance_id(instance_id)
+                        # Парсим instance_id (передаём app_name для формата IP:port)
+                        ip_address, service_name, port = EurekaService._parse_instance_id(instance_id, app_name)
+
+                        # Если парсинг не удался, пробуем взять ip и port напрямую из данных
                         if not ip_address or not port:
-                            continue
+                            ip_address = inst_data.get('ip')
+                            port = inst_data.get('port')
+                            service_name = app_name.lower() if app_name else 'unknown'
+                            if not ip_address or not port:
+                                logger.warning(f"Не удалось получить ip/port для инстанса {instance_id}")
+                                continue
 
                         # Находим или создаем EurekaInstance
                         eureka_instance = EurekaInstance.query.filter_by(instance_id=instance_id).first()
@@ -611,7 +636,7 @@ class EurekaService:
                         eureka_instance.update_status(new_status, reason='sync', changed_by='system')
                         eureka_instance.instance_metadata = inst_data.get('metadata')
                         eureka_instance.health_check_url = inst_data.get('health_check_url')
-                        eureka_instance.home_page_url = inst_data.get('home_page_url')
+                        eureka_instance.home_page_url = inst_data.get('home_page_url') or inst_data.get('home_page_uri')
                         eureka_instance.status_page_url = inst_data.get('status_page_url')
                         eureka_instance.last_seen = datetime.utcnow()
 

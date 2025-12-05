@@ -39,7 +39,7 @@ class ApplicationMapping(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    application = db.relationship('ApplicationInstance', backref=db.backref('mappings', lazy='dynamic'))
+    application = db.relationship('ApplicationInstance', backref=db.backref('mappings', lazy='dynamic', passive_deletes=True))
 
     def get_entity(self):
         """Получить связанную сущность"""

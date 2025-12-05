@@ -33,7 +33,7 @@
                             <input type="radio" name="mode" value="deliver" ${selectedMode === 'deliver' ? 'checked' : ''}> Доставить
                         </label>
                         <label class="radio-label">
-                            <input type="radio" name="mode" value="immediate" ${selectedMode === 'immediate' ? 'checked' : ''}> Сейчас
+                            <input type="radio" name="mode" value="update" ${selectedMode === 'update' ? 'checked' : ''}> Сейчас
                         </label>
                         <label class="radio-label">
                             <input type="radio" name="mode" value="night-restart" ${selectedMode === 'night-restart' ? 'checked' : ''}> В рестарт
@@ -48,7 +48,7 @@
          */
         createImmediateModeFields(orchestrators, state = {}) {
             const { orchestratorPlaybook = '', drainWaitTime = 5, restartMode = 'deliver' } = state;
-            const display = restartMode === 'immediate' ? 'block' : 'none';
+            const display = restartMode === 'update' ? 'block' : 'none';
 
             return `
                 <div id="immediate-mode-fields" style="display: ${display};" class="animated-fade-in">
@@ -92,7 +92,7 @@
 
             modeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
-                    if (this.value === 'immediate') {
+                    if (this.value === 'update') {
                         immediateModeFields.style.display = 'block';
                         immediateModeFields.classList.add('animated-slide-down');
                     } else {

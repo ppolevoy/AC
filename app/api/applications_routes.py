@@ -1,13 +1,16 @@
 from flask import jsonify, request
 import logging
 from collections import defaultdict
+from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
 from app.models.server import Server
 from app.models.application_instance import ApplicationInstance
 from app.models.application_group import ApplicationGroup
 from app.models.event import Event
-from app.tasks.queue import task_queue, Task
+from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag
+from app.tasks.queue import task_queue
+from app.models.task import Task
 from app.api import bp
 
 # Алиас для обратной совместимости
@@ -23,8 +26,12 @@ def get_applications():
         server_id = request.args.get('server_id', type=int)
         app_type = request.args.get('type')
 
-        # Формируем базовый запрос
-        query = Application.query
+        # Формируем базовый запрос с eager loading для server и group
+        # Примечание: tags используют lazy='dynamic', поэтому загружаем отдельно
+        query = Application.query.options(
+            joinedload(Application.server),
+            joinedload(Application.group)
+        )
 
         # Применяем фильтры, если они указаны
         if server_id:
@@ -34,18 +41,39 @@ def get_applications():
             query = query.filter_by(app_type=app_type)
 
         applications = query.all()
+        app_ids = [app.id for app in applications]
+        group_ids = {app.group_id for app in applications if app.group_id}
+
+        # Предзагружаем теги приложений одним запросом
+        app_tags_map = defaultdict(list)
+        if app_ids:
+            app_tags_query = db.session.query(
+                ApplicationInstanceTag.application_id,
+                Tag
+            ).join(Tag).filter(ApplicationInstanceTag.application_id.in_(app_ids))
+
+            for app_id, tag in app_tags_query:
+                app_tags_map[app_id].append(tag)
+
+        # Предзагружаем теги групп одним запросом
+        group_tags_map = defaultdict(list)
+        if group_ids:
+            group_tags_query = db.session.query(
+                ApplicationGroupTag.group_id,
+                Tag
+            ).join(Tag).filter(ApplicationGroupTag.group_id.in_(group_ids))
+
+            for group_id, tag in group_tags_query:
+                group_tags_map[group_id].append(tag)
+
         result = []
-
         for app in applications:
-            server = Server.query.get(app.server_id)
+            # Используем уже загруженные данные (eager loading)
+            server = app.server
 
-            # Получаем теги приложения
-            tags = [t.to_dict() for t in app.tags.all()] if hasattr(app, 'tags') else []
-
-            # Получаем теги группы
-            group_tags = []
-            if hasattr(app, 'group') and app.group and hasattr(app.group, 'tags'):
-                group_tags = [t.to_dict() for t in app.group.tags.all()]
+            # Получаем теги из предзагруженных map (defaultdict возвращает [] для отсутствующих ключей)
+            tags = [t.to_dict(include_usage_count=False) for t in app_tags_map[app.id]]
+            group_tags = [t.to_dict(include_usage_count=False) for t in group_tags_map.get(app.group_id, [])]
 
             result.append({
                 'id': app.id,
@@ -61,7 +89,8 @@ def get_applications():
                 'instance_number': app.instance_number,
                 'start_time': app.start_time.isoformat() if app.start_time else None,
                 'tags': tags,
-                'group_tags': group_tags
+                'group_tags': group_tags,
+                'effective_playbook_path': app.get_effective_playbook_path()
             })
 
         return jsonify({
@@ -255,7 +284,7 @@ def update_application(app_id):
                 'playbook_path': playbook_path
             },
             server_id=server.id,
-            application_id=app.id
+            instance_id=app.id
         )
 
         # Добавляем задачу в очередь для асинхронной обработки
@@ -427,7 +456,7 @@ def batch_update_applications():
                     'drain_wait_time': drain_wait_time
                 },
                 server_id=first_app.server_id,
-                application_id=grouped_app_ids[0]
+                instance_id=grouped_app_ids[0]
             )
 
             # Добавляем задачу в очередь
@@ -504,9 +533,13 @@ def manage_application(app_id):
         # Создаем задачу и добавляем ее в очередь
         task = Task(
             task_type=action,
-            params={},
+            params={
+                'action': action,
+                'server_name': server.name,
+                'app_name': app.instance_name
+            },
             server_id=server.id,
-            application_id=app.id
+            instance_id=app.id
         )
 
         task_queue.add_task(task)
@@ -576,18 +609,22 @@ def bulk_manage_applications():
             # Создаем задачу и добавляем ее в очередь
             task = Task(
                 task_type=action,
-                params={},
+                params={
+                    'action': action,
+                    'server_name': server.name,
+                    'app_name': app.instance_name
+                },
                 server_id=server.id,
-                application_id=app.id
+                instance_id=app.id
             )
 
             task_queue.add_task(task)
 
             results.append({
                 'app_id': app_id,
-                'app_name': app.name,
+                'app_name': app.instance_name,
                 'success': True,
-                'message': f"{action} для приложения {app.name} поставлен в очередь",
+                'message': f"{action} для приложения {app.instance_name} поставлен в очередь",
                 'task_id': task.id
             })
 

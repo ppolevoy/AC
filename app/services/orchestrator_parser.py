@@ -120,6 +120,9 @@ def parse_simple_metadata(comment_block, filename=None):
     description_lines = []
     for line in comment_block.split('\n'):
         line = line.strip()
+        # Пропускаем shebang строку (#!/...)
+        if line.startswith('#!'):
+            continue
         if line.startswith('#') and not any(keyword in line for keyword in
             ['параметры:', 'params:', 'Использование:', 'Usage:', '---', '===']):
             cleaned = line.lstrip('#').strip()

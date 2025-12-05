@@ -50,13 +50,15 @@ class Config:
     # Настройки для хранения информации о серверах и приложениях
     MAX_EVENTS_PER_APP = int(os.environ.get('MAX_EVENTS_PER_APP') or 100)
     CLEAN_EVENTS_OLDER_THAN = int(os.environ.get('CLEAN_EVENTS_OLDER_THAN') or 30)  # в днях
-    
+    CLEAN_TASKS_OLDER_THAN = int(os.environ.get('CLEAN_TASKS_OLDER_THAN') or 365)  # в днях
+
     # Настройки для группировки приложений
     APP_GROUP_PATTERN = r'(.+)_(\d+)$'  # Шаблон для определения группы и номера экземпляра
 
     # Настройки Ansible
     ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
     DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
+    APP_CONTROL_PLAYBOOK = os.environ.get('APP_CONTROL_PLAYBOOK') or '/etc/ansible/app_control.yml'
 
     # Настройки для Orchestrator Playbooks
     # Используется тот же ANSIBLE_PATH что и для обычных playbook-ов
@@ -115,6 +117,23 @@ class Config:
     # Хранение истории
     EUREKA_HISTORY_RETENTION_DAYS = int(os.environ.get('EUREKA_HISTORY_RETENTION_DAYS', '30'))  # дней хранения истории
     EUREKA_MAX_HISTORY_RECORDS = int(os.environ.get('EUREKA_MAX_HISTORY_RECORDS', '10000'))  # максимальное количество записей
+
+    # Настройки рассылки отчётов по email
+    REPORT_EMAIL_ENABLED = os.environ.get('REPORT_EMAIL_ENABLED', 'true').lower() == 'true'
+    REPORT_EMAIL_FROM = os.environ.get('REPORT_EMAIL_FROM', 'ac-reports@localhost')
+    REPORT_EMAIL_SUBJECT_PREFIX = os.environ.get('REPORT_EMAIL_SUBJECT_PREFIX', '[AC Report]')
+    REPORT_DEFAULT_RECIPIENTS = os.environ.get('REPORT_DEFAULT_RECIPIENTS', '')  # email-адреса или группы через запятую
+    SENDMAIL_PATH = os.environ.get('SENDMAIL_PATH', '/usr/sbin/sendmail')
+
+    # Настройки системных тегов
+    SYSTEM_TAGS_ENABLED = os.environ.get('SYSTEM_TAGS_ENABLED', 'true').lower() == 'true'
+
+    # Автоназначение тегов по типам
+    AUTO_TAG_HAPROXY_ENABLED = os.environ.get('AUTO_TAG_HAPROXY_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_EUREKA_ENABLED = os.environ.get('AUTO_TAG_EUREKA_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_DOCKER_ENABLED = os.environ.get('AUTO_TAG_DOCKER_ENABLED', 'true').lower() == 'true'
+    AUTO_TAG_SMF_ENABLED = os.environ.get('AUTO_TAG_SMF_ENABLED', 'false').lower() == 'true'
+    AUTO_TAG_SYSCTL_ENABLED = os.environ.get('AUTO_TAG_SYSCTL_ENABLED', 'false').lower() == 'true'
 
     @staticmethod
     def init_app(app):

@@ -123,46 +123,76 @@
          * @private
          */
         _renderTagCheckboxes(tags, selectedApps, ownTagCounts, inheritedTags, initialState) {
-            return tags.map(tag => {
-                const tagStyle = [];
-                if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
-                if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
-                const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+            // Разделяем теги на системные и кастомные
+            const systemTags = tags.filter(t => t.is_system);
+            const customTags = tags.filter(t => !t.is_system);
 
-                const count = ownTagCounts[tag.name] || 0;
-                const isOwned = count === selectedApps.length;
-                const isPartial = count > 0 && count < selectedApps.length;
-                const isInherited = inheritedTags.has(tag.name);
+            let html = '';
 
-                if (isOwned) {
-                    initialState[tag.name] = 'all';
-                } else if (isPartial) {
-                    initialState[tag.name] = 'partial';
-                } else {
-                    initialState[tag.name] = 'none';
-                }
+            // Сначала кастомные теги
+            if (customTags.length > 0) {
+                html += customTags.map(tag => this._renderTagCheckbox(tag, selectedApps, ownTagCounts, inheritedTags, initialState)).join('');
+            }
 
-                const checked = isOwned || isInherited ? 'checked' : '';
-                const disabled = isInherited ? 'disabled' : '';
-                const inheritedLabel = isInherited ? ' <span>(от группы)</span>' : '';
-                const partialLabel = isPartial && !isInherited ? ` <span>(${count}/${selectedApps.length})</span>` : '';
+            // Затем системные теги с разделителем
+            if (systemTags.length > 0) {
+                html += '<div class="tags-section-divider"><span>Системные теги</span></div>';
+                html += systemTags.map(tag => this._renderTagCheckbox(tag, selectedApps, ownTagCounts, inheritedTags, initialState, true)).join('');
+            }
 
-                const shortDescription = tag.description
-                    ? (tag.description.length > 40 ? tag.description.substring(0, 40) + '...' : tag.description)
-                    : '';
-                const descriptionHtml = shortDescription
-                    ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
-                    : '';
+            return html;
+        },
 
-                return `
-                    <label class="tag-checkbox-label">
-                        <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled}
-                               data-initial="${initialState[tag.name]}" data-changed="false">
-                        <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}
-                        ${descriptionHtml}
-                    </label>
-                `;
-            }).join('');
+        /**
+         * Рендерит один чекбокс тега
+         * @private
+         */
+        _renderTagCheckbox(tag, selectedApps, ownTagCounts, inheritedTags, initialState, isSystemSection = false) {
+            const tagStyle = [];
+            if (tag.border_color) tagStyle.push(`border-color: ${tag.border_color}`);
+            if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
+            const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
+
+            const count = ownTagCounts[tag.name] || 0;
+            const isOwned = count === selectedApps.length;
+            const isPartial = count > 0 && count < selectedApps.length;
+            const isInherited = inheritedTags.has(tag.name);
+
+            if (isOwned) {
+                initialState[tag.name] = 'all';
+            } else if (isPartial) {
+                initialState[tag.name] = 'partial';
+            } else {
+                initialState[tag.name] = 'none';
+            }
+
+            const checked = isOwned || isInherited ? 'checked' : '';
+            // Унаследованные теги нельзя изменять (управляются на уровне группы)
+            // Системные теги можно назначать/снимать вручную
+            const disabled = isInherited ? 'disabled' : '';
+            const inheritedLabel = isInherited ? ' <span class="tag-status">(от группы)</span>' : '';
+            const partialLabel = isPartial && !isInherited ? ` <span class="tag-status">(${count}/${selectedApps.length})</span>` : '';
+            // Метка "(авто)" только для системных тегов с авто-назначением (не manual)
+            const isAutoAssigned = tag.is_system && tag.trigger_type && tag.trigger_type !== 'manual';
+            const systemLabel = isAutoAssigned && !isInherited ? ' <span class="tag-status tag-status-system">(авто)</span>' : '';
+
+            const shortDescription = tag.description
+                ? (tag.description.length > 55 ? tag.description.substring(0, 55) + '...' : tag.description)
+                : '';
+            const descriptionHtml = shortDescription
+                ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
+                : '';
+
+            const tagClass = tag.is_system ? 'tag tag-system' : `tag ${tag.css_class || ''}`;
+
+            return `
+                <label class="tag-checkbox-label${tag.is_system ? ' system-tag-label' : ''}">
+                    <input type="checkbox" value="${tag.name}" class="batch-tag-checkbox" ${checked} ${disabled}
+                           data-initial="${initialState[tag.name]}" data-changed="false" data-is-system="${tag.is_system || false}">
+                    <span class="${tagClass}" ${styleAttr}>${tag.display_name || tag.name}</span>${inheritedLabel}${partialLabel}${systemLabel}
+                    ${descriptionHtml}
+                </label>
+            `;
         },
 
         /**
@@ -285,10 +315,19 @@
                 if (tag.text_color) tagStyle.push(`color: ${tag.text_color}`);
                 const styleAttr = tagStyle.length ? `style="${tagStyle.join('; ')}"` : '';
                 const checked = groupTagNames.has(tag.name) ? 'checked' : '';
+
+                const shortDescription = tag.description
+                    ? (tag.description.length > 55 ? tag.description.substring(0, 55) + '...' : tag.description)
+                    : '';
+                const descriptionHtml = shortDescription
+                    ? `<span class="tag-modal-description" title="${tag.description || ''}">${shortDescription}</span>`
+                    : '';
+
                 return `
                     <label class="tag-checkbox-label" style="display: block; margin: 5px 0;">
                         <input type="checkbox" value="${tag.name}" class="group-tag-checkbox" data-tag-id="${tag.id}" ${checked}>
                         <span class="tag ${tag.css_class || ''}" ${styleAttr}>${tag.display_name || tag.name}</span>
+                        ${descriptionHtml}
                     </label>
                 `;
             }).join('');

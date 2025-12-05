@@ -13,15 +13,29 @@
          * @param {Object} options - Опции
          * @param {Array} options.groupTags - Унаследованные теги от группы
          * @param {number} options.maxVisible - Максимальное количество видимых тегов (по умолчанию 4)
+         * @param {boolean} options.tableMode - Если true, показывать только теги с show_in_table=true
          * @returns {string} HTML строка с тегами
          */
         render(ownTags, options = {}) {
-            const { groupTags = null, maxVisible = 4 } = options;
+            const { groupTags = null, maxVisible = 4, tableMode = true } = options;
 
-            const allTags = this._mergeTags(ownTags, groupTags);
+            let allTags = this._mergeTags(ownTags, groupTags);
+
+            // В режиме таблицы показываем только теги с show_in_table=true
+            // (для системных тегов) или все кастомные теги
+            if (tableMode) {
+                allTags = allTags.filter(tag => {
+                    // Если это системный тег - проверяем show_in_table
+                    if (tag.is_system) {
+                        return tag.show_in_table === true;
+                    }
+                    // Кастомные теги показываем всегда
+                    return true;
+                });
+            }
 
             if (allTags.length === 0) {
-                return '<span class="no-tags">—</span>';
+                return '';
             }
 
             return this._buildContainer(allTags, maxVisible);
@@ -85,10 +99,22 @@
          */
         _createTagElement(tag) {
             const span = document.createElement('span');
-            span.className = `tag ${tag.css_class || ''}${tag.inherited ? ' tag-inherited' : ''}`.trim();
 
+            // Формируем классы
+            let classes = ['tag'];
+            if (tag.css_class) classes.push(tag.css_class);
+            if (tag.inherited) classes.push('tag-inherited');
+            if (tag.is_system) classes.push('tag-system');
+
+            span.className = classes.join(' ');
+
+            // Формируем title
+            let title = tag.description || '';
             if (tag.inherited) {
-                span.title = 'Унаследован от группы';
+                title = title ? `${title} (Унаследован от группы)` : 'Унаследован от группы';
+            }
+            if (title) {
+                span.title = title;
             }
 
             // Применяем цвета из настроек тега

@@ -287,7 +287,7 @@ async function toggleHAProxyNode(serverId, isEnabled) {
 
         if (data.success) {
             if (isEnabled) {
-                showNotification('✓ HAProxy узел активирован. Нажмите "Обнаружить instances" для поиска instances.');
+                showNotification('✓ HAProxy узел активирован');
             } else {
                 showNotification('Статус HAProxy узла снят');
             }
@@ -610,9 +610,16 @@ function showHAProxyManagementModal(instances) {
                     second: '2-digit'
                 }) :
                 'Нет данных';
-            const statusBadge = instance.is_active ?
-                '<span class="status-badge active" style="padding: 4px 10px; border-radius: 4px; font-size: 11px; background: rgba(76, 175, 80, 0.2); color: #4CAF50; font-weight: 500; text-transform: uppercase;">Активен</span>' :
-                '<span class="status-badge inactive" style="padding: 4px 10px; border-radius: 4px; font-size: 11px; background: rgba(158, 158, 158, 0.2); color: #9e9e9e; font-weight: 500; text-transform: uppercase;">Неактивен</span>';
+
+            // Определяем статус с учетом реального состояния синхронизации
+            let statusBadge;
+            if (!instance.is_active) {
+                statusBadge = '<span class="status-badge inactive" style="padding: 4px 10px; border-radius: 4px; font-size: 11px; background: rgba(158, 158, 158, 0.2); color: #9e9e9e; font-weight: 500; text-transform: uppercase;">Неактивен</span>';
+            } else if (instance.last_sync_status === 'failed') {
+                statusBadge = '<span class="status-badge error" style="padding: 4px 10px; border-radius: 4px; font-size: 11px; background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 500; text-transform: uppercase;" title="' + (instance.last_sync_error || 'Ошибка синхронизации').replace(/"/g, '&quot;') + '">Ошибка</span>';
+            } else {
+                statusBadge = '<span class="status-badge active" style="padding: 4px 10px; border-radius: 4px; font-size: 11px; background: rgba(76, 175, 80, 0.2); color: #4CAF50; font-weight: 500; text-transform: uppercase;">Активен</span>';
+            }
 
             modalHtml += `
                 <div style="border: 1px solid #374151; border-radius: 6px; overflow: hidden; background: #252525; margin-bottom: 8px;">

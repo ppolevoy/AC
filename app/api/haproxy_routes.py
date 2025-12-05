@@ -976,6 +976,22 @@ def delete_haproxy_instance(instance_id):
         backends_count = instance.backends.count()
         servers_count = sum(backend.servers.count() for backend in instance.backends)
 
+        # Собираем ID всех серверов для очистки маппингов
+        server_ids = []
+        for backend in instance.backends:
+            for server in backend.servers:
+                server_ids.append(server.id)
+
+        # Удаляем маппинги на эти серверы (orphaned mappings prevention)
+        mappings_deleted = 0
+        if server_ids:
+            from app.models.application_mapping import ApplicationMapping, MappingType
+            mappings_deleted = ApplicationMapping.query.filter(
+                ApplicationMapping.entity_type == MappingType.HAPROXY_SERVER.value,
+                ApplicationMapping.entity_id.in_(server_ids)
+            ).delete(synchronize_session=False)
+            logger.info(f"Cleaned up {mappings_deleted} orphaned mappings for HAProxy instance {instance_name}")
+
         db.session.delete(instance)
         db.session.commit()
 

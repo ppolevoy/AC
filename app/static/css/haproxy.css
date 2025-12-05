@@ -1186,3 +1186,105 @@ body.light-theme .backend-error-message {
 body.light-theme .backend-error-time {
     color: #999;
 }
+
+/* ===== Instance Error Banner ===== */
+.instance-error-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-left: 4px solid #ef4444;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+body.light-theme .instance-error-banner {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-left: 4px solid #ef4444;
+}
+
+.instance-error-banner-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.instance-error-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.instance-error-details {
+    flex: 1;
+}
+
+.instance-error-details strong {
+    display: block;
+    color: #ef4444;
+    font-size: 1em;
+    margin-bottom: 4px;
+}
+
+.instance-error-message {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+body.light-theme .instance-error-message {
+    color: #555;
+}
+
+.instance-error-time {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+body.light-theme .instance-error-time {
+    color: #888;
+}
+
+.instance-error-sync-btn {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.instance-error-sync-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: #ef4444;
+}
+
+body.light-theme .instance-error-sync-btn {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+body.light-theme .instance-error-sync-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+/* Summary banner for multiple instances */
+.instance-error-banner-summary {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.08));
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-left: 4px solid #f59e0b;
+}
+
+body.light-theme .instance-error-banner-summary {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-left: 4px solid #f59e0b;
+}
+
+.instance-error-banner-summary .instance-error-details strong {
+    color: #f59e0b;
+}

@@ -19,3 +19,5 @@ from app.api import haproxy_routes
 from app.api import eureka_routes
 from app.api import mappings_routes
 from app.api import tags_routes
+from app.api import reports_routes
+from app.api import mailing_groups_routes

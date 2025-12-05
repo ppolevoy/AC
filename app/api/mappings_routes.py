@@ -344,3 +344,80 @@ def get_application_mapping_history(application_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@bp.route('/mappings/cleanup-orphaned', methods=['POST'])
+def cleanup_orphaned_mappings():
+    """
+    Очистка orphaned маппингов - маппингов, ссылающихся на несуществующие сущности.
+
+    Это необходимо, так как ApplicationMapping использует полиморфную связь (entity_id)
+    без FK constraint, и при удалении HAProxy/Eureka сущностей маппинги могут остаться.
+
+    Returns:
+        {
+            "success": true,
+            "cleaned": {
+                "haproxy_server": 5,
+                "eureka_instance": 2
+            },
+            "total": 7
+        }
+    """
+    from app import db
+    from app.models.haproxy import HAProxyServer
+    from app.models.eureka import EurekaInstance
+
+    try:
+        cleaned = {
+            'haproxy_server': 0,
+            'eureka_instance': 0
+        }
+
+        # Получаем все активные маппинги
+        all_mappings = ApplicationMapping.query.filter_by(is_active=True).all()
+
+        orphaned_ids = []
+
+        for mapping in all_mappings:
+            is_orphaned = False
+
+            if mapping.entity_type == 'haproxy_server':
+                entity = HAProxyServer.query.get(mapping.entity_id)
+                if not entity or entity.removed_at is not None:
+                    is_orphaned = True
+                    cleaned['haproxy_server'] += 1
+
+            elif mapping.entity_type == 'eureka_instance':
+                entity = EurekaInstance.query.get(mapping.entity_id)
+                if not entity or entity.removed_at is not None:
+                    is_orphaned = True
+                    cleaned['eureka_instance'] += 1
+
+            if is_orphaned:
+                orphaned_ids.append(mapping.id)
+
+        # Удаляем orphaned маппинги
+        if orphaned_ids:
+            ApplicationMapping.query.filter(
+                ApplicationMapping.id.in_(orphaned_ids)
+            ).delete(synchronize_session=False)
+            db.session.commit()
+
+        total = cleaned['haproxy_server'] + cleaned['eureka_instance']
+
+        logger.info(f"Cleaned up {total} orphaned mappings: {cleaned}")
+
+        return jsonify({
+            'success': True,
+            'cleaned': cleaned,
+            'total': total
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error cleaning up orphaned mappings: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

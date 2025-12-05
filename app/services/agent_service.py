@@ -13,8 +13,113 @@ from app.models.event import Event
 from app.config import Config
 
 from app.services.application_group_service import ApplicationGroupService
+from app.models.application_version_history import ApplicationVersionHistory
 
 logger = logging.getLogger(__name__)
+
+
+def _sync_system_tags(instance):
+    """Синхронизация системных тегов на основе app_type (не блокирует основную операцию)"""
+    try:
+        from app.services.system_tags import SystemTagsService
+        SystemTagsService.on_app_synced(instance)
+    except Exception as e:
+        logger.warning(f"Failed to sync system tags for {instance.instance_name}: {e}")
+
+# Разрешённые статусы для ApplicationInstance (соответствуют CHECK constraint в БД)
+ALLOWED_STATUSES = {'online', 'offline', 'unknown', 'starting', 'stopping', 'no_data'}
+
+# Маппинг нестандартных статусов на разрешённые
+STATUS_MAPPING = {
+    'disabled': 'offline',
+    'enabled': 'online',
+    'running': 'online',
+    'stopped': 'offline',
+    'down': 'offline',
+    'up': 'online',
+    'active': 'online',
+    'inactive': 'offline',
+    'paused': 'stopping',
+    'pending': 'starting',
+}
+
+
+def _normalize_status(status):
+    """
+    Нормализует статус от агента к разрешённым значениям.
+
+    Args:
+        status: Статус от агента (может быть любым)
+
+    Returns:
+        str: Один из разрешённых статусов (online, offline, unknown, starting, stopping, no_data)
+    """
+    if not status:
+        return 'unknown'
+
+    status_lower = status.lower().strip()
+
+    # Если статус уже разрешён - возвращаем как есть
+    if status_lower in ALLOWED_STATUSES:
+        return status_lower
+
+    # Пробуем маппинг
+    if status_lower in STATUS_MAPPING:
+        return STATUS_MAPPING[status_lower]
+
+    # Неизвестный статус - логируем и возвращаем unknown
+    logger.warning(f"Неизвестный статус '{status}', используется 'unknown'")
+    return 'unknown'
+
+
+def _record_version_change(instance, new_version, new_tag=None, new_image=None, new_distr_path=None):
+    """
+    Записывает изменение версии в историю, если версия изменилась.
+
+    Args:
+        instance: Экземпляр ApplicationInstance
+        new_version: Новая версия
+        new_tag: Новый Docker тег (опционально)
+        new_image: Новый Docker образ (опционально)
+        new_distr_path: Новый путь к дистрибутиву (опционально)
+
+    Returns:
+        True если запись создана, False если версия не изменилась
+    """
+    # Проверяем, изменилась ли версия
+    old_version = instance.version
+    old_tag = instance.tag
+    old_image = instance.image
+    old_distr_path = instance.distr_path
+
+    # Если это новый экземпляр или версия не изменилась - не записываем
+    if not instance.id or (old_version == new_version and old_tag == new_tag):
+        return False
+
+    # Если новая версия None или пустая - не записываем
+    if not new_version and not new_tag:
+        return False
+
+    try:
+        history_entry = ApplicationVersionHistory(
+            instance_id=instance.id,
+            old_version=old_version,
+            new_version=new_version or new_tag,
+            old_distr_path=old_distr_path,
+            new_distr_path=new_distr_path,
+            old_tag=old_tag,
+            new_tag=new_tag,
+            old_image=old_image,
+            new_image=new_image,
+            changed_by='agent',
+            change_source='polling'
+        )
+        db.session.add(history_entry)
+        logger.info(f"Записана история версии для {instance.instance_name}: {old_version} -> {new_version or new_tag}")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка записи истории версии для {instance.instance_name}: {e}")
+        return False
 
 # Алиас для обратной совместимости с кодом
 Application = ApplicationInstance
@@ -325,13 +430,24 @@ class AgentService:
                     instance.port = app_data.get('port')
                     instance.pid = app_data.get('pid')
 
+                    # Записываем историю изменения версии (до обновления полей)
+                    new_tag = app_data.get('tag')
+                    new_image = app_data.get('image')
+                    if instance.id:  # Только для существующих экземпляров
+                        _record_version_change(
+                            instance,
+                            new_version=new_tag,
+                            new_tag=new_tag,
+                            new_image=new_image
+                        )
+
                     # Docker-специфичные поля
-                    instance.image = app_data.get('image')
-                    instance.tag = app_data.get('tag')
+                    instance.image = new_image
+                    instance.tag = new_tag
                     instance.eureka_registered = app_data.get('eureka_registered', False)
 
                     # Устанавливаем version из tag (версия Docker образа)
-                    instance.version = app_data.get('tag')
+                    instance.version = new_tag
 
                     # Устанавливаем path из compose_project_dir
                     instance.path = app_data.get('compose_project_dir')
@@ -343,16 +459,19 @@ class AgentService:
                         except (ValueError, AttributeError) as e:
                             logger.warning(f"Некорректный формат времени запуска для docker-экземпляра {container_name}: {app_data['start_time']}")
 
-                    # Используем статус от агента, если он указан, иначе считаем online
-                    instance.status = app_data.get('status', 'online')
+                    # Используем статус от агента с нормализацией
+                    instance.status = _normalize_status(app_data.get('status', 'online'))
                     instance.last_seen = datetime.utcnow()
 
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
 
+                    # Синхронизация системных тегов (docker tag)
+                    _sync_system_tags(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
-            
+
             # Обрабатываем site-приложения
             if 'site-app' in server_data and 'applications' in server_data['site-app']:
                 site_apps = server_data['site-app']['applications']
@@ -383,14 +502,24 @@ class AgentService:
                     else:
                         logger.debug(f"Обновление существующего site-экземпляра {name} на сервере {server.name}")
 
+                    # Записываем историю изменения версии (до обновления полей)
+                    new_version = app_data.get('version')
+                    new_distr_path = app_data.get('distr_path')
+                    if instance.id:  # Только для существующих экземпляров
+                        _record_version_change(
+                            instance,
+                            new_version=new_version,
+                            new_distr_path=new_distr_path
+                        )
+
                     # Обновляем данные экземпляра
                     instance.path = app_data.get('path')
                     instance.log_path = app_data.get('log_path')
-                    instance.version = app_data.get('version')
-                    instance.distr_path = app_data.get('distr_path')
+                    instance.version = new_version
+                    instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
-                    instance.status = app_data.get('status') or 'unknown'
+                    instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
 
                     if 'start_time' in app_data and app_data['start_time']:
@@ -402,9 +531,12 @@ class AgentService:
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
 
+                    # Синхронизация системных тегов
+                    _sync_system_tags(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
-            
+
             # Обрабатываем service-приложения
             if 'service-app' in server_data and 'applications' in server_data['service-app']:
                 service_apps = server_data['service-app']['applications']
@@ -435,14 +567,24 @@ class AgentService:
                     else:
                         logger.debug(f"Обновление существующего service-экземпляра {name} на сервере {server.name}")
 
+                    # Записываем историю изменения версии (до обновления полей)
+                    new_version = app_data.get('version')
+                    new_distr_path = app_data.get('distr_path')
+                    if instance.id:  # Только для существующих экземпляров
+                        _record_version_change(
+                            instance,
+                            new_version=new_version,
+                            new_distr_path=new_distr_path
+                        )
+
                     # Обновляем данные экземпляра
                     instance.path = app_data.get('path')
                     instance.log_path = app_data.get('log_path')
-                    instance.version = app_data.get('version')
-                    instance.distr_path = app_data.get('distr_path')
+                    instance.version = new_version
+                    instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
-                    instance.status = app_data.get('status') or 'unknown'
+                    instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
 
                     if 'start_time' in app_data and app_data['start_time']:
@@ -454,9 +596,12 @@ class AgentService:
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
 
+                    # Синхронизация системных тегов
+                    _sync_system_tags(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
-            
+
             # Находим экземпляры, которые были в БД, но отсутствуют в ответе агента
             deleted_app_ids = existing_app_ids - updated_app_ids
             if deleted_app_ids:

@@ -22,6 +22,10 @@ class Tag(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Системные теги
+    is_system = db.Column(db.Boolean, default=False, nullable=False)  # Системный тег (нельзя удалить)
+    show_in_table = db.Column(db.Boolean, default=False, nullable=False)  # Показывать в таблице приложений
+
     # Связи many-to-many
     instances = db.relationship(
         'ApplicationInstance',
@@ -37,8 +41,13 @@ class Tag(db.Model):
         lazy='dynamic'
     )
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_usage_count=True):
+        """Сериализация тега в словарь.
+
+        Args:
+            include_usage_count: Включать ли подсчёт использования (дорогая операция - 2 COUNT запроса)
+        """
+        result = {
             'id': self.id,
             'name': self.name,
             'display_name': self.display_name or self.name,
@@ -48,9 +57,26 @@ class Tag(db.Model):
             'css_class': self.css_class,
             'border_color': self.border_color,
             'text_color': self.text_color,
-            'usage_count': self.get_usage_count(),
+            'is_system': self.is_system,
+            'show_in_table': self.show_in_table,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+        # usage_count только если запрошен (дорогая операция)
+        if include_usage_count:
+            result['usage_count'] = self.get_usage_count()
+
+        # Добавляем trigger_type для системных тегов
+        if self.is_system:
+            try:
+                from app.services.system_tags import get_tag_definition
+                tag_def = get_tag_definition(self.name)
+                if tag_def:
+                    result['trigger_type'] = tag_def.trigger_type.value
+            except ImportError:
+                pass
+
+        return result
 
     def get_usage_count(self):
         """Подсчет использования тега"""
@@ -69,6 +95,8 @@ class ApplicationInstanceTag(db.Model):
     tag_id = db.Column(db.Integer, db.ForeignKey('tags.id', ondelete='CASCADE'), nullable=False)
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
     assigned_by = db.Column(db.String(64))
+    # Переопределение автоназначения для системных тегов
+    auto_assign_disabled = db.Column(db.Boolean, default=False, nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint('application_id', 'tag_id', name='uq_app_instance_tag'),
@@ -126,6 +154,7 @@ def update_tags_cache_after_flush(session, flush_context):
     """
     Автоматически обновлять tags_cache при изменении связей тегов.
     Срабатывает после flush сессии.
+    Использует прямой SQL запрос чтобы избежать повторного flush.
     """
     instance_ids = set()
     group_ids = set()
@@ -142,16 +171,41 @@ def update_tags_cache_after_flush(session, flush_context):
         elif isinstance(obj, ApplicationGroupTag):
             group_ids.add(obj.group_id)
 
-    if instance_ids:
-        from app.models.application_instance import ApplicationInstance
-        for instance in session.query(ApplicationInstance).filter(
-            ApplicationInstance.id.in_(instance_ids)
-        ):
-            instance.tags_cache = ','.join(sorted([t.name for t in instance.tags]))
+    # Используем connection напрямую чтобы избежать повторного flush
+    if instance_ids or group_ids:
+        from sqlalchemy import text
+        connection = session.connection()
 
-    if group_ids:
-        from app.models.application_group import ApplicationGroup
-        for group in session.query(ApplicationGroup).filter(
-            ApplicationGroup.id.in_(group_ids)
-        ):
-            group.tags_cache = ','.join(sorted([t.name for t in group.tags]))
+        for app_id in instance_ids:
+            # Получаем имена тегов через прямой SQL
+            result = connection.execute(text("""
+                SELECT t.name FROM tags t
+                JOIN application_instance_tags ait ON t.id = ait.tag_id
+                WHERE ait.application_id = :app_id
+                ORDER BY t.name
+            """), {'app_id': app_id})
+            tag_names = [row[0] for row in result]
+            tags_cache = ','.join(tag_names)
+
+            # Обновляем tags_cache напрямую
+            connection.execute(text("""
+                UPDATE application_instances SET tags_cache = :tags_cache
+                WHERE id = :app_id
+            """), {'tags_cache': tags_cache, 'app_id': app_id})
+
+        for group_id in group_ids:
+            # Получаем имена тегов через прямой SQL
+            result = connection.execute(text("""
+                SELECT t.name FROM tags t
+                JOIN application_group_tags agt ON t.id = agt.tag_id
+                WHERE agt.group_id = :group_id
+                ORDER BY t.name
+            """), {'group_id': group_id})
+            tag_names = [row[0] for row in result]
+            tags_cache = ','.join(tag_names)
+
+            # Обновляем tags_cache напрямую
+            connection.execute(text("""
+                UPDATE application_groups SET tags_cache = :tags_cache
+                WHERE id = :group_id
+            """), {'tags_cache': tags_cache, 'group_id': group_id})

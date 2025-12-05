@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Отчёты | Faktura Apps{% endblock %}
+
+{% block page_title %}Отчёты{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modules/reports.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="reports-container">
+    <!-- Табы для переключения отчётов -->
+    <div class="reports-tabs">
+        <button class="tab-btn active" data-tab="current-versions">
+            Текущие версии
+        </button>
+        <button class="tab-btn" data-tab="version-history">
+            История изменений
+        </button>
+    </div>
+
+    <!-- Панель фильтров -->
+    <div class="filters-panel">
+        <div class="filter-group">
+            <label for="server-filter">Серверы:</label>
+            <select id="server-filter" multiple class="filter-select">
+                <!-- Загружается динамически -->
+            </select>
+            <div id="server-filter-summary" class="filter-summary"></div>
+        </div>
+
+        <div class="filter-group">
+            <label for="catalog-filter">Приложения:</label>
+            <input type="text" id="catalog-search" class="filter-search-input" placeholder="Поиск приложений...">
+            <select id="catalog-filter" multiple class="filter-select">
+                <!-- Загружается динамически -->
+            </select>
+            <div id="catalog-filter-summary" class="filter-summary"></div>
+        </div>
+
+        <div class="filter-group date-filter-group" id="date-filter-group" style="display: none;">
+            <label>Период:</label>
+            <div class="date-inputs">
+                <input type="date" id="date-from" class="date-input">
+                <span class="date-separator">—</span>
+                <input type="date" id="date-to" class="date-input">
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button id="apply-filters-btn" class="action-btn primary">Применить</button>
+            <button id="clear-filters-btn" class="action-btn secondary">Сбросить</button>
+        </div>
+    </div>
+
+    <!-- Панель настроек отображения и экспорта -->
+    <div class="toolbar-panel">
+        <div class="display-options">
+            <label class="checkbox-label">
+                <input type="checkbox" id="group-by-server">
+                <span>Группировать по серверам</span>
+            </label>
+        </div>
+        <div class="export-buttons">
+            <button id="export-csv-btn" class="export-btn">
+                <span class="export-icon">📄</span> CSV
+            </button>
+            <button id="export-json-btn" class="export-btn">
+                <span class="export-icon">📋</span> JSON
+            </button>
+            <button id="send-email-btn" class="export-btn email-btn">
+                <span class="export-icon">✉️</span> Отправить
+            </button>
+        </div>
+    </div>
+
+    <!-- Контейнер для отчёта "Текущие версии" -->
+    <div id="current-versions-tab" class="tab-content active">
+        <div class="report-table-container">
+            <table class="report-table" id="current-versions-table">
+                <thead>
+                    <tr>
+                        <th class="col-name sortable" data-sort="name">Приложение <span class="sort-icon"></span></th>
+                        <th class="col-type">Тип</th>
+                        <th class="col-server sortable" data-sort="server">Сервер <span class="sort-icon"></span></th>
+                        <th class="col-version">Версия</th>
+                        <th class="col-date sortable" data-sort="updated">Обновлено <span class="sort-icon"></span></th>
+                    </tr>
+                </thead>
+                <tbody id="current-versions-body">
+                    <!-- Данные загружаются динамически -->
+                </tbody>
+            </table>
+        </div>
+        <div class="table-info" id="current-versions-info"></div>
+    </div>
+
+    <!-- Контейнер для отчёта "История изменений" -->
+    <div id="version-history-tab" class="tab-content" style="display: none;">
+        <div class="report-table-container">
+            <table class="report-table" id="version-history-table">
+                <thead>
+                    <tr>
+                        <th class="col-name sortable" data-sort="name">Приложение <span class="sort-icon"></span></th>
+                        <th class="col-server sortable" data-sort="server">Сервер <span class="sort-icon"></span></th>
+                        <th class="col-version">Старая версия</th>
+                        <th class="col-version">Новая версия</th>
+                        <th class="col-date sortable" data-sort="changed_at">Дата изменения <span class="sort-icon"></span></th>
+                        <th class="col-source">Источник</th>
+                    </tr>
+                </thead>
+                <tbody id="version-history-body">
+                    <!-- Данные загружаются динамически -->
+                </tbody>
+            </table>
+        </div>
+        <div class="table-info" id="version-history-info"></div>
+    </div>
+
+    <!-- Индикатор загрузки -->
+    <div id="loading-indicator" class="loading-indicator" style="display: none;">
+        <div class="spinner"></div>
+        <span>Загрузка данных...</span>
+    </div>
+
+    <!-- Сообщение об отсутствии данных -->
+    <div id="no-data-message" class="no-data-message" style="display: none;">
+        <span class="no-data-icon">📭</span>
+        <span>Нет данных для отображения</span>
+    </div>
+</div>
+
+<!-- Модальное окно отправки отчёта по email -->
+<div id="send-email-modal" class="modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Отправить отчёт по email</h3>
+            <button class="modal-close" id="close-email-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="email-recipients">Получатели:</label>
+                <input type="text" id="email-recipients" class="form-input"
+                       placeholder="email@example.com, группа_рассылки">
+                <small class="form-hint">Укажите email-адреса или имена групп рассылки через запятую</small>
+            </div>
+
+            <div class="form-group">
+                <label>Тип отчёта:</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="report-type" value="current_versions" checked>
+                        <span>Текущие версии</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="report-type" value="version_history">
+                        <span>История изменений</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group" id="email-period-group" style="display: none;">
+                <label>Период для истории:</label>
+                <div class="date-inputs">
+                    <input type="date" id="email-date-from" class="date-input">
+                    <span class="date-separator">—</span>
+                    <input type="date" id="email-date-to" class="date-input">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="email-use-filters" checked>
+                    <span>Применить текущие фильтры</span>
+                </label>
+            </div>
+
+            <div id="email-error" class="error-message" style="display: none;"></div>
+            <div id="email-success" class="success-message" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-email-btn" class="btn-secondary">Отмена</button>
+            <button id="confirm-send-btn" class="btn-primary">Отправить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/reports/reports.js') }}"></script>
+{% endblock %}
