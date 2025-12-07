@@ -14,59 +14,46 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-def parse_custom_params_from_playbook_path(playbook_path_with_params: str) -> dict:
-    """
-    Извлекает кастомные параметры вида {param=value} из строки playbook_path.
-
-    Args:
-        playbook_path_with_params: Строка вида "playbook.yml {server} {app} {unpack=true}"
-
-    Returns:
-        dict: Словарь кастомных параметров {param_name: param_value}
-
-    Examples:
-        "playbook.yml {server} {unpack=true}" -> {"unpack": True}
-        "playbook.yml {mode} {env=prod}" -> {"env": "prod"}
-    """
-    if not playbook_path_with_params:
-        return {}
-
-    custom_params = {}
-    param_pattern = r'\{([^}]+)\}'
-
-    for match in re.findall(param_pattern, playbook_path_with_params):
-        if '=' in match:
-            parts = match.split('=', 1)
-            param_name = parts[0].strip()
-            param_value = parts[1].strip() if len(parts) > 1 else ""
-
-            # Преобразуем булевы значения
-            if param_value.lower() == 'true':
-                param_value = True
-            elif param_value.lower() == 'false':
-                param_value = False
-
-            custom_params[param_name] = param_value
-
-    return custom_params
-
-
 class TaskQueue:
     """
     Класс для управления очередью задач.
     Задачи хранятся в БД, очередь используется только для обработки.
+
+    Поддерживает DI для SSHAnsibleService (для тестирования).
     """
 
-    def __init__(self, app=None):
+    def __init__(self, app=None, ansible_service=None):
+        """
+        Args:
+            app: Flask application instance
+            ansible_service: Опциональный SSHAnsibleService для DI (используется в тестах)
+        """
         self.queue = queue.Queue()
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = None
         self.app = app
+        self._ansible_service = ansible_service  # DI: для тестирования
 
         # Если приложение уже передано, инициализируем с ним
         if app:
             self.init_app(app)
+
+    def _get_ansible_service(self):
+        """
+        Получает SSHAnsibleService для выполнения задач.
+
+        Поддерживает DI: если сервис был передан в конструктор, использует его.
+        Иначе создаёт новый из конфигурации.
+
+        Returns:
+            SSHAnsibleService instance
+        """
+        if self._ansible_service:
+            return self._ansible_service
+
+        from app.services.ssh_ansible_service import SSHAnsibleService
+        return SSHAnsibleService.from_config()
 
     def init_app(self, app):
         """Инициализация с приложением Flask"""
@@ -228,7 +215,11 @@ class TaskQueue:
                 pass
             return False, str(e)
 
-    def clear_completed_tasks(self, days_old: int = 365):
+    def clear_completed_tasks(self, days_old: int = None):
+        # Используем константу по умолчанию
+        if days_old is None:
+            from app.config import TaskQueueDefaults
+            days_old = TaskQueueDefaults.HISTORY_RETENTION_DAYS
         """
         Очистка старых завершённых задач из БД.
 
@@ -324,7 +315,8 @@ class TaskQueue:
 
         logger.info("Останавливаем обработчик задач...")
         self.stop_event.set()
-        self.thread.join(timeout=30)
+        from app.config import TaskQueueDefaults
+        self.thread.join(timeout=TaskQueueDefaults.SHUTDOWN_TIMEOUT)
         logger.info("Обработчик задач остановлен")
 
     def _process_tasks(self):
@@ -612,185 +604,13 @@ class TaskQueue:
             # Закрываем event loop
             loop.close()
 
-    def _sort_instances_for_cross_server_splitting(self, apps):
-        """
-        Сортирует экземпляры для корректного разделения на EVEN/ODD батчи.
-
-        Гарантирует, что парные экземпляры одного приложения на разных серверах
-        получат соседние индексы и попадут в разные батчи при делении по чёт/нечёт.
-
-        Алгоритм:
-        1. Группируем экземпляры по имени приложения (instance_name)
-        2. Для каждой группы сортируем по имени сервера
-        3. Чередуем распределение: первый сервер → EVEN, второй → ODD (toggle для балансировки)
-        4. Формируем финальный список чередованием: even[0], odd[0], even[1], odd[1]...
-
-        Args:
-            apps: Список объектов ApplicationInstance
-
-        Returns:
-            list: Отсортированный список ApplicationInstance
-        """
-        from app.models.server import Server
-
-        if len(apps) <= 1:
-            return list(apps)
-
-        # Группируем по instance_name
-        groups = {}
-        for app in apps:
-            name = app.instance_name
-            if name not in groups:
-                groups[name] = []
-            groups[name].append(app)
-
-        # Формируем два списка для чередования
-        even_list = []
-        odd_list = []
-        toggle = False
-
-        for name in sorted(groups.keys()):
-            instances = groups[name]
-
-            # Сортируем по имени сервера для консистентности
-            instances_with_servers = []
-            for inst in instances:
-                server = Server.query.get(inst.server_id)
-                server_name = server.name if server else ''
-                instances_with_servers.append((inst, server_name))
-
-            instances_with_servers.sort(key=lambda x: x[1])
-            sorted_instances = [x[0] for x in instances_with_servers]
-
-            if len(sorted_instances) >= 2:
-                # Парные экземпляры - чередуем распределение для балансировки
-                if toggle:
-                    even_list.append(sorted_instances[1])
-                    odd_list.append(sorted_instances[0])
-                else:
-                    even_list.append(sorted_instances[0])
-                    odd_list.append(sorted_instances[1])
-                toggle = not toggle
-
-                # Если больше 2 экземпляров, распределяем остальные
-                for i, inst in enumerate(sorted_instances[2:], start=2):
-                    if i % 2 == 0:
-                        even_list.append(inst)
-                    else:
-                        odd_list.append(inst)
-            else:
-                # Один экземпляр - кладём в менее заполненный список
-                if len(even_list) <= len(odd_list):
-                    even_list.append(sorted_instances[0])
-                else:
-                    odd_list.append(sorted_instances[0])
-
-        # Формируем финальный список чередованием: even[0], odd[0], even[1], odd[1]...
-        result = []
-        for i in range(max(len(even_list), len(odd_list))):
-            if i < len(even_list):
-                result.append(even_list[i])
-            if i < len(odd_list):
-                result.append(odd_list[i])
-
-        # Логируем результат сортировки
-        logger.info("Cross-server sorting for EVEN/ODD splitting:")
-        for idx, app in enumerate(result):
-            server = Server.query.get(app.server_id)
-            server_name = server.name.split('.')[0] if server else 'unknown'
-            batch = "EVEN" if idx % 2 == 0 else "ODD"
-            logger.info(f"  [{idx}] {batch}: {server_name}::{app.instance_name}")
-
-        return result
-
-    def _prepare_orchestrator_instances_with_haproxy(self, apps):
-        """
-        Формирует список instances с HAProxy маппингом.
-
-        Args:
-            apps: Список объектов ApplicationInstance для обновления
-
-        Returns:
-            tuple: (instances_list, backend_info, haproxy_api_url)
-            - instances_list: Список строк вида "server::app::haproxy_server"
-            - backend_info: Словарь с информацией о backends
-            - haproxy_api_url: URL для HAProxy API (или None)
-        """
-        from app.models.application_mapping import ApplicationMapping
-        from app.models.haproxy import HAProxyServer, HAProxyBackend, HAProxyInstance
-        from app.models.server import Server
-        from flask import current_app
-
-        # Сортируем для корректного cross-server разделения на EVEN/ODD
-        sorted_apps = self._sort_instances_for_cross_server_splitting(apps)
-
-        instances = []
-        backend_info = {}
-        haproxy_api_url = None
-        unmapped_count = 0
-
-        for app in sorted_apps:
-            server = Server.query.get(app.server_id)
-            if not server:
-                logger.warning(f"Server not found for app {app.instance_name}")
-                continue
-
-            # Извлекаем короткое имя из FQDN
-            short_name = server.name.split('.')[0] if '.' in server.name else server.name
-
-            # Получаем HAProxy маппинг из таблицы ApplicationMapping
-            mapping = ApplicationMapping.query.filter_by(
-                application_id=app.id,
-                entity_type='haproxy_server'
-            ).first()
-
-            if mapping and mapping.entity_id:
-                # Есть маппинг - используем его
-                haproxy_server = HAProxyServer.query.get(mapping.entity_id)
-                if haproxy_server:
-                    instance = f"{short_name}::{app.instance_name}::{haproxy_server.server_name}"
-
-                    # Собираем информацию о backend
-                    if haproxy_server.backend_id:
-                        backend = HAProxyBackend.query.get(haproxy_server.backend_id)
-                        if backend:
-                            backend_info[backend.backend_name] = {
-                                'name': backend.backend_name,
-                                'instance_id': backend.haproxy_instance_id
-                            }
-
-                            # Получаем API URL из HAProxy Instance
-                            if not haproxy_api_url and backend.haproxy_instance_id:
-                                haproxy_instance = HAProxyInstance.query.get(backend.haproxy_instance_id)
-                                if haproxy_instance and haproxy_instance.server:
-                                    # Формируем URL: http://{server_ip}:{agent_port}/api/v1/haproxy/{instance_name}
-                                    # Порт берём из сервера (agent port), не из глобального конфига
-                                    agent_port = haproxy_instance.server.port
-                                    haproxy_api_url = f"http://{haproxy_instance.server.ip}:{agent_port}/api/v1/haproxy/{haproxy_instance.name}"
-                                    logger.info(f"HAProxy API URL: {haproxy_api_url}")
-
-                    logger.info(f"App {app.instance_name} mapped to HAProxy server {haproxy_server.server_name}")
-                else:
-                    # Маппинг есть, но HAProxy сервер не найден
-                    instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
-                    unmapped_count += 1
-                    logger.warning(f"HAProxy server {mapping.entity_id} not found for app {app.instance_name}")
-            else:
-                # Нет маппинга - используем стандартное именование
-                instance = f"{short_name}::{app.instance_name}::{short_name}_{app.instance_name}"
-                unmapped_count += 1
-                logger.info(f"No HAProxy mapping for app {app.instance_name}, using default naming")
-
-            instances.append(instance)
-
-        if unmapped_count > 0:
-            logger.warning(f"Total unmapped applications: {unmapped_count} of {len(apps)}")
-
-        return instances, backend_info, haproxy_api_url
-
     def _process_update_task(self, task_id):
         """
         Обработка задачи обновления приложения через SSH Ansible сервис.
+
+        Использует:
+        - UpdateTaskContextProvider для загрузки контекста из БД
+        - OrchestratorExecutor для подготовки параметров orchestrator
 
         Args:
             task_id: ID задачи
@@ -803,330 +623,164 @@ class TaskQueue:
         if not self.app:
             raise RuntimeError("Отсутствует контекст приложения для работы с базой данных")
 
-        # Получаем данные внутри контекста приложения
-        with self.app.app_context():
-            from app.models.application_instance import ApplicationInstance
-            from app.models.server import Server
-            from app.models.task import Task
-            from app.services.ssh_ansible_service import SSHAnsibleService
-            from app import db
-
-            task = Task.query.get(task_id)
-            if not task:
-                raise ValueError(f"Задача {task_id} не найдена")
-
-            # Проверяем, является ли задача групповой (по наличию app_ids в params)
-            app_ids = task.params.get("app_ids") if task.params else None
-            is_batch_task = app_ids is not None and isinstance(app_ids, list) and len(app_ids) >= 1
-
-            if is_batch_task:
-                # Групповая задача - загружаем все приложения по ID
-                apps = ApplicationInstance.query.filter(ApplicationInstance.id.in_(app_ids)).all()
-
-                if not apps:
-                    raise ValueError(f"Приложения с ID {app_ids} не найдены")
-
-                if len(apps) != len(app_ids):
-                    found_ids = [app.id for app in apps]
-                    missing_ids = set(app_ids) - set(found_ids)
-                    logger.warning(f"Некоторые приложения не найдены: {missing_ids}")
-
-                # Формируем список имен через запятую
-                app_name = ','.join([app.instance_name for app in apps])
-
-                # Берем данные из первого приложения
-                first_app = apps[0]
-                server = Server.query.get(first_app.server_id)
-                if not server:
-                    raise ValueError(f"Сервер для приложения {first_app.instance_name} не найден")
-
-                server_id = server.id
-                server_name = server.name
-                app_type = first_app.app_type
-                app_id = first_app.id  # Для логирования используем первый ID
-
-            else:
-                # Одиночная задача - используем instance_id
-                app = ApplicationInstance.query.get(task.instance_id)
-                if not app:
-                    raise ValueError(f"Приложение с id {task.instance_id} не найдено")
-
-                server = Server.query.get(app.server_id)
-                if not server:
-                    raise ValueError(f"Сервер для приложения {app.instance_name} не найден")
-
-                app_id = app.id
-                app_name = app.instance_name
-                app_type = app.app_type
-                server_id = server.id
-                server_name = server.name
-
-            # Общие параметры для обеих типов задач
-            params = task.params or {}
-            distr_url = params.get("distr_url")
-            if not distr_url:
-                raise ValueError("URL дистрибутива не указан")
-
-            mode = params.get("mode", params.get("restart_mode", "immediate"))
-            playbook_path = params.get("playbook_path")
-
-            if not playbook_path:
-                raise ValueError("Путь к playbook не указан в параметрах задачи")
-
-            # Получаем параметры для orchestrator playbook
-            orchestrator_playbook = params.get("orchestrator_playbook")
-            drain_wait_time = params.get("drain_wait_time")
-
-            # Подготовка параметров для orchestrator (если режим update/immediate и orchestrator указан)
-            # Игнорируем специальное значение "none" (Без оркестрации)
-            # ВАЖНО: фронтенд отправляет 'update' для режима "Сейчас", поддерживаем оба значения
-            extra_params = {}
-            if mode in ('update', 'immediate') and orchestrator_playbook and orchestrator_playbook != 'none' and is_batch_task:
-                logger.info(f"Режим orchestrator активирован: {orchestrator_playbook}")
-
-                # Загружаем метаданные orchestrator playbook из БД
-                from app.models.orchestrator_playbook import OrchestratorPlaybook
-                orchestrator = OrchestratorPlaybook.query.filter_by(
-                    file_path=orchestrator_playbook,
-                    is_active=True
-                ).first()
-
-                if not orchestrator:
-                    raise ValueError(f"Orchestrator playbook не найден в БД: {orchestrator_playbook}")
-
-                logger.info(f"Загружен orchestrator: {orchestrator.name} v{orchestrator.version}")
-
-                # Сохраняем оригинальный playbook для передачи в orchestrator
-                original_playbook_path = playbook_path
-
-                # Формируем составные имена server::app::haproxy_server для передачи в orchestrator
-                # Используем расширенный формат с HAProxy маппингом
-                composite_names, haproxy_backend_info, haproxy_api_url = self._prepare_orchestrator_instances_with_haproxy(apps)
-
-                # Формируем servers_apps_map для логирования
-                servers_apps_map = {}
-                for comp in composite_names:
-                    parts = comp.split('::')
-                    short_name = parts[0]
-                    comp_app_name = parts[1]
-                    if short_name not in servers_apps_map:
-                        servers_apps_map[short_name] = []
-                    servers_apps_map[short_name].append(comp_app_name)
-
-                logger.info(f"Сформированы составные имена для orchestrator (расширенный формат с HAProxy):")
-                for comp in composite_names:
-                    logger.info(f"  {comp}")
-
-                logger.info(f"Mapping серверов и приложений:")
-                for srv, app_list in sorted(servers_apps_map.items()):
-                    logger.info(f"  {srv}: {', '.join(app_list)}")
-
-                # Логируем информацию о HAProxy backends
-                if haproxy_backend_info:
-                    logger.info(f"HAProxy backends: {', '.join(haproxy_backend_info.keys())}")
-                else:
-                    logger.warning("No HAProxy backend information available, will use app_mapping.yml")
-
-                # Формируем строку для передачи в orchestrator
-                app_instances_list = ','.join(composite_names)
-
-                # Конвертируем drain_wait_time из минут в секунды
-                drain_delay_seconds = int(drain_wait_time * 60) if drain_wait_time else 300
-
-                # Извлекаем только имя файла из оригинального playbook
-                # Убираем параметры в фигурных скобках если они есть
-                playbook_filename = original_playbook_path.split('/')[-1]
-                update_playbook_name = re.sub(r'\s*\{[^}]+\}', '', playbook_filename).strip()
-
-                # Извлекаем кастомные параметры из playbook_path (например {unpack=true})
-                custom_params_from_db = parse_custom_params_from_playbook_path(original_playbook_path)
-                if custom_params_from_db:
-                    logger.info(f"Извлечены кастомные параметры из playbook_path: {custom_params_from_db}")
-
-                # Определяем backend (берем первый, если несколько)
-                haproxy_backend = None
-                if haproxy_backend_info:
-                    haproxy_backend = next(iter(haproxy_backend_info.keys()))
-                    logger.info(f"Using HAProxy backend '{haproxy_backend}' from database mapping")
-
-                # Формируем словарь значений параметров
-                param_values = {
-                    'app_instances': app_instances_list,  # Новый параметр вместо app_name и target_servers
-                    'drain_delay': drain_delay_seconds,
-                    'update_playbook': update_playbook_name,
-                    'distr_url': distr_url,
-                    'image_url': distr_url  # Алиас для docker оркестратора
-                }
-
-                # Добавляем кастомные параметры из playbook_path (например {unpack=true})
-                # Эти параметры предназначены для вложенного плейбука и обычно
-                # не пересекаются с базовыми параметрами оркестратора
-                for param_name, param_value in custom_params_from_db.items():
-                    param_values[param_name] = param_value
-                    logger.info(f"Добавлен параметр из playbook_path: {param_name}={param_value}")
-
-                # Добавляем HAProxy параметры из автоматического mapping'а (таблица ApplicationMapping)
-                # Эти значения имеют приоритет над ручными настройками в playbook_path,
-                # т.к. mapping синхронизируется с реальным состоянием HAProxy
-                if haproxy_backend:
-                    param_values['haproxy_backend'] = haproxy_backend
-
-                if haproxy_api_url:
-                    param_values['haproxy_api_url'] = haproxy_api_url
-                else:
-                    logger.warning("HAProxy API URL not found in database mappings")
-
-                # Формируем список параметров для playbook на основе required_params из БД
-                # Структура в БД:
-                # required_params: {"param_name": "description"}
-                # optional_params: {"param_name": {"description": "...", "default": "..."}}
-                required_params = orchestrator.required_params or {}
-                optional_params = orchestrator.optional_params or {}
-
-                # Извлекаем только имена параметров (ключи), игнорируя описания
-                required_param_names = list(required_params.keys())
-                optional_param_names = list(optional_params.keys())
-
-                # Объединяем required и optional параметры (используем dict.fromkeys для сохранения порядка и уникальности)
-                all_params = list(dict.fromkeys(required_param_names + optional_param_names))
-
-                logger.info(f"Параметры orchestrator из БД:")
-                logger.info(f"  Required: {required_param_names}")
-                logger.info(f"  Optional: {optional_param_names}")
-
-                # Формируем строку с параметрами в фигурных скобках
-                # Для параметров с известным значением (кастомные) используем {param=value}
-                # Для динамических параметров используем {param}
-                # ВАЖНО: optional параметры без значений и без default НЕ включаем
-                params_parts = []
-                for param in all_params:
-                    if param in param_values:
-                        value = param_values[param]
-                        # Для булевых значений и кастомных параметров используем формат {param=value}
-                        if isinstance(value, bool) or param in custom_params_from_db:
-                            formatted_value = str(value).lower() if isinstance(value, bool) else str(value)
-                            params_parts.append(f'{{{param}={formatted_value}}}')
-                        else:
-                            # Динамический параметр с известным значением
-                            params_parts.append(f'{{{param}}}')
-                    elif param in optional_param_names:
-                        # Optional параметр без значения - пропускаем
-                        # Плейбук сам обработает default через {{ param | default(value) }}
-                        # Если нужно переопределить - укажут в настройках приложения как {param=value}
-                        logger.info(f"Optional параметр '{param}' пропущен (плейбук использует свой default)")
-                    elif param in required_param_names:
-                        # Required параметр без значения - добавляем как динамический,
-                        # плейбук выдаст понятную ошибку
-                        logger.warning(f"Required параметр '{param}' не имеет значения!")
-                        params_parts.append(f'{{{param}}}')
-                    else:
-                        # Неизвестный параметр - пропускаем
-                        logger.warning(f"Неизвестный параметр '{param}' пропущен")
-
-                params_string = ' '.join(params_parts)
-                playbook_path = f"{orchestrator_playbook} {params_string}"
-
-                logger.info(f"Сформирован playbook_path с параметрами: {playbook_path}")
-
-                # Формируем extra_params только для тех параметров, для которых есть значения
-                # Optional параметры без значения пропускаем - плейбук сам обработает default
-                extra_params = {}
-
-                for param in all_params:
-                    if param in param_values:
-                        extra_params[param] = param_values[param]
-                    elif param in required_param_names:
-                        # Required параметр без значения - warning
-                        logger.warning(f"Required параметр '{param}' не имеет значения!")
-                    # Optional параметры без значения просто пропускаем (уже залогировано выше)
-
-                logger.info(f"Финальные значения extra_params (только значения, без описаний):")
-                for key, value in extra_params.items():
-                    logger.info(f"  {key} = {value} (type: {type(value).__name__})")
-
-        # Создаем event loop внутри метода
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
-            # Запускаем асинхронное обновление через SSH Ansible внутри контекста приложения
-            # Это необходимо, так как ssh_service.update_application создает события в БД
+            # Единый app_context для всей операции - предотвращает detached ORM objects
             with self.app.app_context():
                 from app import db
-                from app.models.application_instance import ApplicationInstance
+                from app.services.update_task_context import UpdateTaskContextProvider
 
-                # Создаем SSH Ansible сервис внутри контекста
-                ssh_service = SSHAnsibleService.from_config()
+                # 1. ЗАГРУЗКА КОНТЕКСТА
+                context = UpdateTaskContextProvider.load(task_id)
+
+                # 2. ПОДГОТОВКА ПАРАМЕТРОВ
+                playbook_path = context.playbook_path
+                extra_params = {}
+
+                if UpdateTaskContextProvider.should_use_orchestrator(context):
+                    logger.info(f"Режим orchestrator активирован: {context.orchestrator_playbook}")
+
+                    # Загружаем метаданные orchestrator из БД
+                    metadata = UpdateTaskContextProvider.load_orchestrator_metadata(
+                        context.orchestrator_playbook
+                    )
+
+                    # Создаем контекст и executor для orchestrator
+                    from app.services.orchestrator_executor import (
+                        OrchestratorContext,
+                        create_orchestrator_executor
+                    )
+
+                    orch_context = OrchestratorContext(
+                        task_id=task_id,
+                        apps=context.apps,
+                        distr_url=context.distr_url,
+                        orchestrator_playbook=context.orchestrator_playbook,
+                        original_playbook_path=context.playbook_path,
+                        drain_wait_time=context.drain_wait_time,
+                        required_params=metadata['required_params'],
+                        optional_params=metadata['optional_params']
+                    )
+
+                    executor = create_orchestrator_executor(orch_context)
+                    playbook_path, extra_params = executor.prepare()
+
+                # 3. ВЫПОЛНЕНИЕ ANSIBLE
+                ssh_service = self._get_ansible_service()
 
                 success, message, ansible_output = loop.run_until_complete(
                     ssh_service.update_application(
-                        server_name=server_name,
-                        app_name=app_name,
-                        app_id=app_id,
-                        distr_url=distr_url,
-                        mode=mode,
+                        server_name=context.server_name,
+                        app_name=context.app_name,
+                        app_id=context.app_id,
+                        distr_url=context.distr_url,
+                        mode=context.mode,
                         playbook_path=playbook_path,
                         extra_params=extra_params if extra_params else None,
                         task_id=task_id
                     )
                 )
 
-                # Обновляем информацию о приложении при успешном обновлении
-                # Только для одиночных задач (не для групповых)
-                if success and not is_batch_task:
-                    app = ApplicationInstance.query.get(app_id)
-                    if app:
-                        # Сохраняем старые значения для истории
-                        old_version = app.version
-                        old_distr_path = app.distr_path
-                        old_tag = app.tag
-                        old_image = app.image
+                # 4. ПОСТОБРАБОТКА: обновляем версию приложения (только single tasks)
+                # Best-effort: ошибка обновления версии НЕ должна влиять на статус задачи,
+                # т.к. Ansible уже успешно выполнился и приложение обновлено на сервере
+                if success and not context.is_batch:
+                    try:
+                        self._update_app_version_after_success(
+                            context.app_id,
+                            context.app_name,
+                            context.app_type,
+                            context.distr_url,
+                            task_id,
+                            db
+                        )
+                    except Exception as version_update_error:
+                        logger.error(
+                            f"Не удалось обновить версию приложения {context.app_name} в БД "
+                            f"(задача {task_id[:8]}... будет отмечена успешной, т.к. Ansible выполнился): "
+                            f"{version_update_error}"
+                        )
+                        # Пытаемся откатить незакоммиченные изменения
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
 
-                        # Обновляем данные
-                        app.distr_path = distr_url
+                if not success:
+                    raise Exception(message)
 
-                        # Для Docker приложений пытаемся извлечь версию из тега
-                        if app_type == 'docker' and ':' in distr_url:
-                            app.version = distr_url.split(':')[-1]
-                        else:
-                            # Для обычных приложений пытаемся извлечь версию из URL
-                            version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
-                            if version_match:
-                                app.version = version_match.group(1)
-
-                        # Записываем историю изменения версии
-                        if old_version != app.version or old_distr_path != distr_url:
-                            from app.models.application_version_history import ApplicationVersionHistory
-                            history_entry = ApplicationVersionHistory(
-                                instance_id=app.id,
-                                old_version=old_version,
-                                new_version=app.version,
-                                old_distr_path=old_distr_path,
-                                new_distr_path=distr_url,
-                                old_tag=old_tag,
-                                new_tag=app.tag,
-                                old_image=old_image,
-                                new_image=app.image,
-                                changed_by='user',
-                                change_source='update_task',
-                                task_id=task_id
-                            )
-                            db.session.add(history_entry)
-                            logger.info(f"Записана история версии для {app_name}: {old_version} -> {app.version}")
-
-                        db.session.commit()
-                        logger.info(f"Обновлена информация о приложении {app_name}: distr_path={distr_url}, version={app.version}")
-
-            if not success:
-                raise Exception(message)
-
-            # Возвращаем вывод Ansible для сохранения в task.result
-            # Если ansible_output пустой, возвращаем message
-            return ansible_output if ansible_output else message
+                return ansible_output if ansible_output else message
 
         finally:
-            # Закрываем event loop
             loop.close()
+
+    def _update_app_version_after_success(
+        self,
+        app_id: int,
+        app_name: str,
+        app_type: str,
+        distr_url: str,
+        task_id: str,
+        db
+    ) -> None:
+        """
+        Обновляет версию приложения после успешного обновления.
+
+        Args:
+            app_id: ID приложения
+            app_name: Имя приложения (для логирования)
+            app_type: Тип приложения (docker, service, etc.)
+            distr_url: URL дистрибутива
+            task_id: ID задачи
+            db: SQLAlchemy db session
+        """
+        from app.models.application_instance import ApplicationInstance
+
+        app = ApplicationInstance.query.get(app_id)
+        if not app:
+            return
+
+        # Сохраняем старые значения для истории
+        old_version = app.version
+        old_distr_path = app.distr_path
+        old_tag = app.tag
+        old_image = app.image
+
+        # Обновляем данные
+        app.distr_path = distr_url
+
+        # Извлекаем версию из URL
+        if app_type == 'docker' and ':' in distr_url:
+            app.version = distr_url.split(':')[-1]
+        else:
+            version_match = re.search(r'(\d+\.[\d\.]+)', distr_url)
+            if version_match:
+                app.version = version_match.group(1)
+
+        # Записываем историю изменения версии
+        if old_version != app.version or old_distr_path != distr_url:
+            from app.models.application_version_history import ApplicationVersionHistory
+            history_entry = ApplicationVersionHistory(
+                instance_id=app.id,
+                old_version=old_version,
+                new_version=app.version,
+                old_distr_path=old_distr_path,
+                new_distr_path=distr_url,
+                old_tag=old_tag,
+                new_tag=app.tag,
+                old_image=old_image,
+                new_image=app.image,
+                changed_by='user',
+                change_source='update_task',
+                task_id=task_id
+            )
+            db.session.add(history_entry)
+            logger.info(f"Записана история версии для {app_name}: {old_version} -> {app.version}")
+
+        db.session.commit()
+        logger.info(f"Обновлена информация о приложении {app_name}: distr_path={distr_url}, version={app.version}")
 
 
 # Создаем глобальный экземпляр очереди задач

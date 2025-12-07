@@ -25,8 +25,9 @@ def parse_orchestrator_metadata(file_content, filename):
         dict с метаданными или None, если парсинг не удался
     """
     try:
-        # Извлечь блок комментариев из начала файла (первые 150 строк)
-        lines = file_content.split('\n')[:150]
+        # Извлечь блок комментариев из начала файла
+        from app.config import OrchestratorDefaults
+        lines = file_content.split('\n')[:OrchestratorDefaults.METADATA_SCAN_LINES]
         comment_block = '\n'.join(lines)
 
         # Попытка парсинга структурированного формата
@@ -43,7 +44,7 @@ def parse_orchestrator_metadata(file_content, filename):
 
         # Сохранить необработанный блок для отладки
         metadata['raw_metadata'] = {
-            'comment_block': comment_block[:500]  # первые 500 символов
+            'comment_block': comment_block[:OrchestratorDefaults.METADATA_MAX_CHARS]
         }
 
         return metadata
@@ -132,8 +133,9 @@ def parse_simple_metadata(comment_block, filename=None):
             break
 
     if description_lines:
+        from app.config import OrchestratorDefaults
         metadata['description'] = ' '.join(description_lines[:2])  # первые 2 строки
-        metadata['name'] = description_lines[0][:128]  # первая строка как имя
+        metadata['name'] = description_lines[0][:OrchestratorDefaults.NAME_MAX_LENGTH]  # первая строка как имя
 
     # Извлечь версию из имени файла если filename передан
     # Например: orchestrator-50-50.v1.1.yml -> 1.1

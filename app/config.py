@@ -146,6 +146,42 @@ class Config:
             os.makedirs(ssh_dir, mode=0o700)
 
 
+class OrchestratorDefaults:
+    """
+    Константы для оркестраторов.
+    Устраняет магические числа в коде обработки orchestrator playbooks.
+    """
+    # Время ожидания после drain в секундах (5 минут по умолчанию)
+    DRAIN_DELAY_SECONDS = int(os.environ.get('ORCHESTRATOR_DRAIN_DELAY_SECONDS', '300'))
+
+    # Количество строк для парсинга метаданных из playbook файла
+    METADATA_SCAN_LINES = int(os.environ.get('ORCHESTRATOR_METADATA_SCAN_LINES', '150'))
+
+    # Максимум символов для хранения raw metadata
+    METADATA_MAX_CHARS = int(os.environ.get('ORCHESTRATOR_METADATA_MAX_CHARS', '500'))
+
+    # Максимальная длина имени orchestrator playbook
+    NAME_MAX_LENGTH = int(os.environ.get('ORCHESTRATOR_NAME_MAX_LENGTH', '128'))
+
+    # Время ожидания после обновления в секундах (по умолчанию)
+    WAIT_AFTER_UPDATE_SECONDS = int(os.environ.get('ORCHESTRATOR_WAIT_AFTER_UPDATE', '60'))
+
+
+class TaskQueueDefaults:
+    """
+    Константы для очереди задач.
+    Устраняет магические числа в коде TaskQueue.
+    """
+    # Таймаут на остановку потока обработки задач (секунды)
+    SHUTDOWN_TIMEOUT = int(os.environ.get('TASK_QUEUE_SHUTDOWN_TIMEOUT', '30'))
+
+    # Срок хранения истории задач (дни)
+    HISTORY_RETENTION_DAYS = int(os.environ.get('TASK_QUEUE_HISTORY_RETENTION_DAYS', '365'))
+
+    # Интервал проверки очереди (секунды)
+    POLL_INTERVAL = int(os.environ.get('TASK_QUEUE_POLL_INTERVAL', '1'))
+
+
 class DevelopmentConfig(Config):
     DEBUG = True
     # Используем настройки из базового класса

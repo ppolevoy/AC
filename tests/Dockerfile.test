@@ -1,0 +1,18 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Устанавливаем зависимости для тестов
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-asyncio
+
+# Копируем requirements если есть
+COPY requirements.txt* /app/
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+
+# Рабочая директория
+WORKDIR /app
+
+CMD ["python", "-m", "pytest", "-v"]

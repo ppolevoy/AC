@@ -36,14 +36,24 @@ class SSHConfig:
 
 @dataclass
 class PlaybookParameter:
-    """Параметр playbook"""
+    """
+    Параметр playbook.
+
+    DEPRECATED: Используйте app.core.playbook_parameters.PlaybookParameter
+    Оставлено для обратной совместимости с существующими методами SSHAnsibleService.
+    """
     name: str  # Имя параметра
     value: Optional[str] = None  # Значение (None для динамических параметров)
     is_custom: bool = False  # True для кастомных параметров с явным значением
 
 @dataclass
 class PlaybookConfig:
-    """Конфигурация playbook с параметрами"""
+    """
+    Конфигурация playbook с параметрами.
+
+    DEPRECATED: Используйте app.core.playbook_parameters.ParsedPlaybookConfig
+    Оставлено для обратной совместимости с существующими методами SSHAnsibleService.
+    """
     path: str  # Путь к playbook файлу
     parameters: List[PlaybookParameter]  # Список параметров (динамических и кастомных)
 
@@ -165,68 +175,43 @@ class SSHAnsibleService:
     
     def parse_playbook_config(self, playbook_path_with_params: str) -> PlaybookConfig:
         """
-        Парсит путь к playbook с параметрами
-        Поддерживает два формата параметров:
-        - Динамические: {param} - значение берется из контекста
-        - Кастомные: {param=value} - используется явное значение
-        
+        Парсит путь к playbook с параметрами.
+
+        ВНУТРЕННЯЯ РЕАЛИЗАЦИЯ: Использует PlaybookParameterParser из app.core
+        и конвертирует результат в старую структуру для обратной совместимости.
+
         Args:
             playbook_path_with_params: Строка вида "/path/playbook.yml {param1} {param2=value}"
-            
+
         Returns:
             PlaybookConfig: Конфигурация с путем и параметрами
-            
+
         Examples:
             "/playbook.yml {server} {app}" -> параметры без значений (динамические)
             "/playbook.yml {server} {onlydeliver=true}" -> смешанные параметры
-            "/playbook.yml {env=prod} {timeout=30}" -> параметры с явными значениями
         """
-        # Регулярное выражение для поиска параметров в фигурных скобках
-        # Поддерживает как {param}, так и {param=value}
-        param_pattern = r'\{([^}]+)\}'
-        
-        # Находим все параметры
-        param_matches = re.findall(param_pattern, playbook_path_with_params)
-        
+        from app.core.playbook_parameters import PlaybookParameterParser
+
+        # Используем единый парсер из app.core
+        parsed = PlaybookParameterParser.parse(playbook_path_with_params)
+
+        # Конвертируем в старую структуру для обратной совместимости
         parameters = []
-        for match in param_matches:
-            # Проверяем, содержит ли параметр знак равенства
-            if '=' in match:
-                # Кастомный параметр с явным значением
-                parts = match.split('=', 1)  # Разбиваем только по первому '='
-                param_name = parts[0].strip()
-                param_value = parts[1].strip() if len(parts) > 1 else ""
-                
-                # Преобразуем значения булевого типа
-                if param_value.lower() in ['true', 'false']:
-                    param_value = param_value.lower()
-                
-                parameters.append(PlaybookParameter(
-                    name=param_name,
-                    value=param_value,
-                    is_custom=True
-                ))
-                logger.info(f"Обнаружен кастомный параметр: {param_name}={param_value}")
+        for param in parsed.parameters:
+            parameters.append(PlaybookParameter(
+                name=param.name,
+                value=param.value,
+                is_custom=param.is_explicit  # Маппинг is_explicit -> is_custom
+            ))
+            if param.is_explicit:
+                logger.info(f"Обнаружен кастомный параметр: {param.name}={param.value}")
             else:
-                # Динамический параметр (значение из контекста)
-                param_name = match.strip()
-                parameters.append(PlaybookParameter(
-                    name=param_name,
-                    value=None,
-                    is_custom=False
-                ))
-                logger.info(f"Обнаружен динамический параметр: {param_name}")
-        
-        # Удаляем параметры из пути, оставляя только путь к файлу
-        playbook_path = re.sub(param_pattern, '', playbook_path_with_params).strip()
-        
-        # Убираем лишние пробелы
-        playbook_path = ' '.join(playbook_path.split())
-        
-        logger.info(f"Parsed playbook config: path='{playbook_path}', parameters={[p.name for p in parameters]}")
-        
+                logger.info(f"Обнаружен динамический параметр: {param.name}")
+
+        logger.info(f"Parsed playbook config: path='{parsed.path}', parameters={[p.name for p in parameters]}")
+
         return PlaybookConfig(
-            path=playbook_path,
+            path=parsed.path,
             parameters=parameters
         )
     
@@ -457,17 +442,214 @@ class SSHAnsibleService:
         
         return cmd
     
-    async def update_application(self,
-                               server_name: str,
-                               app_name: str,
-                               app_id: int,
-                               distr_url: str,
-                               mode: str,
-                               playbook_path: Optional[str] = None,
-                               extra_params: Optional[Dict] = None,
-                               task_id: Optional[str] = None) -> Tuple[bool, str, str]:
+    async def _prepare_update_context(
+        self,
+        server_name: str,
+        app_name: str,
+        app_id: int,
+        distr_url: str,
+        mode: str,
+        playbook_path: Optional[str],
+        extra_params: Optional[Dict]
+    ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
-        Запуск Ansible playbook для обновления приложения через SSH
+        Подготавливает контекст для обновления приложения.
+
+        Выполняет:
+        - Парсинг и валидацию playbook конфигурации
+        - Получение данных из БД (сервер, приложение)
+        - Проверку SSH-соединения
+        - Проверку существования playbook
+        - Формирование context_vars и extra_vars
+
+        Args:
+            server_name: Имя сервера
+            app_name: Имя приложения
+            app_id: ID приложения в БД
+            distr_url: URL дистрибутива
+            mode: Режим обновления
+            playbook_path: Путь к playbook с параметрами
+            extra_params: Дополнительные параметры для orchestrator
+
+        Returns:
+            Tuple[bool, str, Optional[Dict]]:
+                - success: True если подготовка успешна
+                - message: Сообщение об ошибке или пустая строка
+                - context: Словарь с подготовленными данными или None при ошибке
+        """
+        from app.models.server import Server
+        from app.models.application_instance import ApplicationInstance
+
+        # Извлекаем параметры orchestrator
+        orchestrator_params = {}
+        if extra_params:
+            orchestrator_params = {
+                'app_instances': extra_params.get('app_instances'),
+                'drain_delay': extra_params.get('drain_delay'),
+                'update_playbook': extra_params.get('update_playbook'),
+                'haproxy_api_url': extra_params.get('haproxy_api_url'),
+                'haproxy_backend': extra_params.get('haproxy_backend'),
+                'wait_after_update': extra_params.get('wait_after_update'),
+            }
+            logger.info(f"Получены extra_params для orchestrator: {extra_params}")
+
+        # Playbook по умолчанию
+        if not playbook_path:
+            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
+
+        # Парсим и валидируем конфигурацию playbook
+        playbook_config = self.parse_playbook_config(playbook_path)
+        is_valid, invalid_params = self.validate_parameters(playbook_config.parameters)
+        if not is_valid:
+            error_msg = f"Недопустимые параметры в playbook path: {', '.join(invalid_params)}"
+            logger.error(error_msg)
+            return False, error_msg, None
+
+        # Полный путь к playbook
+        playbook_full_path = os.path.join(
+            self.ssh_config.ansible_path,
+            playbook_config.path.lstrip('/')
+        )
+
+        # Получаем сервер из БД
+        server = Server.query.filter_by(name=server_name).first()
+        if not server:
+            error_msg = f"Сервер с именем {server_name} не найден"
+            logger.error(error_msg)
+            return False, error_msg, None
+
+        # Получаем информацию о приложении
+        app = ApplicationInstance.query.get(app_id)
+        image_url = None
+        if app and hasattr(app, 'deployment_type') and app.deployment_type == 'docker':
+            if hasattr(app, 'docker_image'):
+                image_url = app.docker_image
+
+        # Проверяем SSH-соединение
+        connection_ok, connection_msg = await self.test_connection()
+        if not connection_ok:
+            await self._create_event(
+                event_type='update',
+                description=f"Ошибка SSH-подключения при обновлении {app_name} на {server_name}: {connection_msg}",
+                status='failed',
+                server_id=server.id,
+                instance_id=app_id
+            )
+            return False, f"SSH-соединение не удалось: {connection_msg}", None
+
+        # Проверяем существование playbook
+        if not await self._remote_file_exists(playbook_full_path):
+            error_msg = f"Ansible playbook не найден на удаленном хосте: {playbook_full_path}"
+            logger.error(error_msg)
+            await self._create_event(
+                event_type='update',
+                description=f"Ошибка обновления {app_name} на {server_name}: {error_msg}",
+                status='failed',
+                server_id=server.id,
+                instance_id=app_id
+            )
+            return False, error_msg, None
+
+        # Формируем context_vars
+        context_vars = self.build_context_vars(
+            server_name=server_name,
+            app_name=app_name,
+            app_id=app_id,
+            server_id=server.id,
+            distr_url=distr_url,
+            mode=mode,
+            image_url=image_url,
+            orchestrator_app_instances=orchestrator_params.get('app_instances'),
+            orchestrator_drain_delay=orchestrator_params.get('drain_delay'),
+            orchestrator_update_playbook=orchestrator_params.get('update_playbook'),
+            orchestrator_haproxy_api_url=orchestrator_params.get('haproxy_api_url'),
+            orchestrator_haproxy_backend=orchestrator_params.get('haproxy_backend'),
+            orchestrator_wait_after_update=orchestrator_params.get('wait_after_update')
+        )
+
+        # Формируем extra_vars
+        extra_vars = self.build_extra_vars(playbook_config, context_vars)
+
+        # Формируем команду ansible
+        ansible_cmd = self.build_ansible_command(playbook_full_path, extra_vars, verbose=True)
+
+        return True, "", {
+            'server': server,
+            'app': app,
+            'ansible_cmd': ansible_cmd,
+            'playbook_full_path': playbook_full_path,
+        }
+
+    async def _finalize_update_result(
+        self,
+        success: bool,
+        output: str,
+        error_output: str,
+        server_name: str,
+        app_name: str,
+        server_id: int,
+        app_id: int
+    ) -> Tuple[bool, str, str]:
+        """
+        Финализирует результат обновления приложения.
+
+        Создает события в БД и формирует итоговое сообщение.
+
+        Args:
+            success: Результат выполнения команды
+            output: Вывод stdout
+            error_output: Вывод stderr
+            server_name: Имя сервера
+            app_name: Имя приложения
+            server_id: ID сервера
+            app_id: ID приложения
+
+        Returns:
+            Tuple[bool, str, str]: (успех, сообщение, вывод)
+        """
+        if success:
+            result_msg = f"Обновление приложения {app_name} на сервере {server_name} выполнено успешно"
+            logger.info(result_msg)
+
+            await self._create_event(
+                event_type='update',
+                description=f"Обновление {app_name} на {server_name} завершено успешно",
+                status='success',
+                server_id=server_id,
+                instance_id=app_id
+            )
+            return True, result_msg, output
+        else:
+            error_msg = f"Ошибка при обновлении {app_name} на {server_name}: {error_output}"
+            logger.error(error_msg)
+
+            await self._create_event(
+                event_type='update',
+                description=f"Ошибка обновления {app_name} на {server_name}: {error_output}",
+                status='failed',
+                server_id=server_id,
+                instance_id=app_id
+            )
+            return False, error_msg, output
+
+    async def update_application(
+        self,
+        server_name: str,
+        app_name: str,
+        app_id: int,
+        distr_url: str,
+        mode: str,
+        playbook_path: Optional[str] = None,
+        extra_params: Optional[Dict] = None,
+        task_id: Optional[str] = None
+    ) -> Tuple[bool, str, str]:
+        """
+        Запуск Ansible playbook для обновления приложения через SSH.
+
+        Orchestrates the update process:
+        1. Prepare - валидация, проверки, формирование команды
+        2. Execute - выполнение ansible команды
+        3. Finalize - обработка результата, создание событий
 
         Args:
             server_name: Имя сервера
@@ -482,76 +664,17 @@ class SSHAnsibleService:
         Returns:
             Tuple[bool, str, str]: (успех операции, информация о результате, вывод Ansible)
         """
-        # Извлекаем дополнительные параметры для orchestrator если они есть
-        orchestrator_app_instances = None
-        orchestrator_drain_delay = None
-        orchestrator_update_playbook = None
-        orchestrator_haproxy_api_url = None
-        orchestrator_haproxy_backend = None
-        orchestrator_wait_after_update = None
-
-        if extra_params:
-            orchestrator_app_instances = extra_params.get('app_instances')
-            orchestrator_drain_delay = extra_params.get('drain_delay')
-            orchestrator_update_playbook = extra_params.get('update_playbook')
-            orchestrator_haproxy_api_url = extra_params.get('haproxy_api_url')
-            orchestrator_haproxy_backend = extra_params.get('haproxy_backend')
-            orchestrator_wait_after_update = extra_params.get('wait_after_update')
-            logger.info(f"Получены extra_params для orchestrator: {extra_params}")
-
-        # Если путь к playbook не указан, используем playbook по умолчанию
-        if not playbook_path:
-            playbook_path = Config.DEFAULT_UPDATE_PLAYBOOK
-        
-        # Парсим конфигурацию playbook
-        playbook_config = self.parse_playbook_config(playbook_path)
-        
-        # Валидируем параметры
-        is_valid, invalid_params = self.validate_parameters(playbook_config.parameters)
-        if not is_valid:
-            error_msg = f"Недопустимые параметры в playbook path: {', '.join(invalid_params)}"
-            logger.error(error_msg)
-            return False, error_msg, ""
-        
-        # Формируем полный путь к playbook
-        playbook_full_path = os.path.join(
-            self.ssh_config.ansible_path, 
-            playbook_config.path.lstrip('/')
-        )
-        
         try:
-            # Получаем ID сервера по имени
-            from app.models.server import Server
-            from app.models.application_instance import ApplicationInstance
+            # 1. PREPARE: Подготовка контекста
+            prepare_ok, prepare_msg, context = await self._prepare_update_context(
+                server_name, app_name, app_id, distr_url, mode, playbook_path, extra_params
+            )
 
-            server = Server.query.filter_by(name=server_name).first()
-            if not server:
-                error_msg = f"Сервер с именем {server_name} не найден"
-                logger.error(error_msg)
-                return False, error_msg, ""
+            if not prepare_ok:
+                return False, prepare_msg, ""
 
-            # Получаем информацию о приложении
-            app = ApplicationInstance.query.get(app_id)
-            image_url = None
-            
-            # Проверяем, если это Docker приложение
-            if app and hasattr(app, 'deployment_type') and app.deployment_type == 'docker':
-                # Получаем image_url для Docker приложений
-                if hasattr(app, 'docker_image'):
-                    image_url = app.docker_image
-            
-            # Проверяем SSH-соединение
-            connection_ok, connection_msg = await self.test_connection()
-            if not connection_ok:
-                await self._create_event(
-                    event_type='update',
-                    description=f"Ошибка SSH-подключения при обновлении {app_name} на {server_name}: {connection_msg}",
-                    status='failed',
-                    server_id=server.id,
-                    instance_id=app_id
-                )
-                return False, f"SSH-соединение не удалось: {connection_msg}", ""
-            
+            server = context['server']
+
             # Записываем событие о начале обновления
             await self._create_event(
                 event_type='update',
@@ -560,82 +683,19 @@ class SSHAnsibleService:
                 server_id=server.id,
                 instance_id=app_id
             )
-            
-            # Проверяем существование playbook на удаленном хосте
-            if not await self._remote_file_exists(playbook_full_path):
-                error_msg = f"Ansible playbook не найден на удаленном хосте: {playbook_full_path}"
-                logger.error(error_msg)
 
-                await self._create_event(
-                    event_type='update',
-                    description=f"Ошибка обновления {app_name} на {server_name}: {error_msg}",
-                    status='failed',
-                    server_id=server.id,
-                    instance_id=app_id
-                )
-                return False, error_msg, ""
-            
-            # Формируем контекст переменных из параметров события
-            context_vars = self.build_context_vars(
-                server_name=server_name,
-                app_name=app_name,
-                app_id=app_id,
-                server_id=server.id,
-                distr_url=distr_url,
-                mode=mode,
-                image_url=image_url,
-                orchestrator_app_instances=orchestrator_app_instances,
-                orchestrator_drain_delay=orchestrator_drain_delay,
-                orchestrator_update_playbook=orchestrator_update_playbook,
-                orchestrator_haproxy_api_url=orchestrator_haproxy_api_url,
-                orchestrator_haproxy_backend=orchestrator_haproxy_backend,
-                orchestrator_wait_after_update=orchestrator_wait_after_update
-            )
-            
-            # Формируем extra_vars на основе конфигурации и контекста
-            extra_vars = self.build_extra_vars(playbook_config, context_vars)
-            
-            # Формируем команду для запуска Ansible
-            ansible_cmd = self.build_ansible_command(
-                playbook_full_path,
-                extra_vars,
-                verbose=True
-            )
-            
-            logger.info(f"Запуск Ansible через SSH: {' '.join(ansible_cmd)}")
+            logger.info(f"Запуск Ansible через SSH: {' '.join(context['ansible_cmd'])}")
 
-            # Выполняем команду
+            # 2. EXECUTE: Выполнение команды
             success, output, error_output = await self._execute_ansible_command(
-                ansible_cmd, server.id, app_id, app_name, server_name, 'update', task_id
+                context['ansible_cmd'], server.id, app_id, app_name, server_name, 'update', task_id
             )
-            
-            if success:
-                result_msg = f"Обновление приложения {app_name} на сервере {server_name} выполнено успешно"
-                logger.info(result_msg)
 
-                await self._create_event(
-                    event_type='update',
-                    description=f"Обновление {app_name} на {server_name} завершено успешно",
-                    status='success',
-                    server_id=server.id,
-                    instance_id=app_id
-                )
+            # 3. FINALIZE: Обработка результата
+            return await self._finalize_update_result(
+                success, output, error_output, server_name, app_name, server.id, app_id
+            )
 
-                return True, result_msg, output
-            else:
-                error_msg = f"Ошибка при обновлении {app_name} на {server_name}: {error_output}"
-                logger.error(error_msg)
-
-                await self._create_event(
-                    event_type='update',
-                    description=f"Ошибка обновления {app_name} на {server_name}: {error_output}",
-                    status='failed',
-                    server_id=server.id,
-                    instance_id=app_id
-                )
-
-                return False, error_msg, output
-                
         except Exception as e:
             error_msg = f"Исключение при обновлении {app_name} на {server_name}: {str(e)}"
             logger.error(error_msg)
@@ -645,7 +705,7 @@ class SSHAnsibleService:
                     event_type='update',
                     description=f"Критическая ошибка обновления {app_name} на {server_name}: {str(e)}",
                     status='failed',
-                    server_id=server.id if 'server' in locals() else None,
+                    server_id=context['server'].id if context and 'server' in context else None,
                     instance_id=app_id
                 )
             except:

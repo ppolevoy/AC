@@ -1,0 +1,13 @@
+services:
+  test-runner:
+    image: python:3.9-slim
+    container_name: fak-test-runner
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+    command: >
+      sh -c "pip install --quiet pytest Flask Flask-SQLAlchemy Flask-Migrate psycopg2-binary &&
+             python -m pytest tests/ -v --tb=short"
