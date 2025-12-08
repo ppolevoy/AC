@@ -361,9 +361,12 @@
 
             apps.forEach(app => {
                 const status = app.status?.toLowerCase();
-                const tags = app.tags || [];
-                const hasDisableTag = tags.some(t => t.name === 'disable' || t.name === 'disabled');
-                const hasCandidateTag = tags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
+                // Объединяем собственные теги и унаследованные от группы
+                const ownTags = app.tags || [];
+                const groupTags = app.group_tags || [];
+                const allTags = [...ownTags, ...groupTags];
+                const hasDisableTag = allTags.some(t => t.name === 'disable' || t.name === 'disabled');
+                const hasCandidateTag = allTags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
 
                 if (hasCandidateTag) {
                     stats.candidates++;
@@ -1836,9 +1839,12 @@
             if (statusFilter && statusFilter !== 'all') {
                 filtered = filtered.filter(app => {
                     const status = app.status?.toLowerCase();
-                    const tags = app.tags || [];
-                    const hasDisableTag = tags.some(t => t.name === 'disable' || t.name === 'disabled');
-                    const hasCandidateTag = tags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
+                    // Объединяем собственные теги и унаследованные от группы
+                    const ownTags = app.tags || [];
+                    const groupTags = app.group_tags || [];
+                    const allTags = [...ownTags, ...groupTags];
+                    const hasDisableTag = allTags.some(t => t.name === 'disable' || t.name === 'disabled');
+                    const hasCandidateTag = allTags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
 
                     switch (statusFilter) {
                         case 'online':

@@ -4,6 +4,10 @@
 
 {% block page_title %}Очередь задач{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tasks.css') }}">
+{% endblock %}
+
 {% block subheader %}
 <div class="subheader">
     <div class="last-updated">

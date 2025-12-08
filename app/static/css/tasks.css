@@ -1,0 +1,322 @@
+/**
+ * tasks.css
+ * Стили для страницы очереди задач
+ *
+ * Секции:
+ * 1. CONTAINER
+ * 2. HEADER CONTROLS
+ * 3. TABLE COLUMNS
+ * 4. ACTION BUTTONS
+ * 5. TASK DETAILS MODAL
+ * 6. ANSIBLE SUMMARY TABLE
+ * 7. DISPLAY SUMMARIES
+ * 8. ANIMATIONS
+ */
+
+/* =============================================================================
+   1. CONTAINER
+   ============================================================================= */
+
+.tasks-container {
+    margin-top: var(--space-xl);
+}
+
+.last-updated {
+    color: var(--text-muted);
+    font-size: var(--font-size-base);
+    text-align: right;
+}
+
+.current-task {
+    color: var(--color-success);
+    font-size: var(--font-size-base);
+    animation: pulse-task 1.5s infinite;
+}
+
+/* =============================================================================
+   2. HEADER CONTROLS
+   ============================================================================= */
+
+.tasks-container .table-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+}
+
+.tasks-container .table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--space-xl);
+}
+
+/* =============================================================================
+   3. TABLE COLUMNS
+   ============================================================================= */
+
+/* Возвращаем оригинальные размеры - только width без жёстких ограничений */
+.col-id {
+    width: 110px;
+}
+
+.col-type {
+    width: 120px;
+}
+
+.tasks-container .col-app,
+.data-table .col-app {
+    min-width: 180px;
+    max-width: 650px;
+    width: auto;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.col-server {
+    width: 160px;
+}
+
+/* Увеличена ширина для "ВЫПОЛНЯЕТСЯ" */
+.col-status {
+    width: 130px;
+    min-width: 130px;
+    max-width: 130px;
+}
+
+.col-actions {
+    width: 90px;
+    min-width: 90px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.col-progress {
+    max-width: 300px;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.data-table .col-created {
+    width: 185px;
+    max-width: 185px;
+    min-width: 185px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sort-icon {
+    font-size: var(--font-size-xs);
+    margin-left: var(--space-xs);
+    color: var(--text-disabled);
+}
+
+.task-id-cell {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+}
+
+/* =============================================================================
+   4. ACTION BUTTONS
+   ============================================================================= */
+
+.task-action-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    font-weight: bold;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 2px;
+    vertical-align: middle;
+}
+
+.view-task-btn {
+    background: var(--color-info-light);
+    color: var(--color-info);
+}
+
+.view-task-btn:hover {
+    background: var(--color-info);
+    color: white;
+}
+
+.cancel-task-btn {
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+}
+
+.cancel-task-btn:hover {
+    background: var(--color-danger);
+    color: white;
+}
+
+/* =============================================================================
+   5. TASK DETAILS MODAL
+   ============================================================================= */
+
+.task-info-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+}
+
+.task-info-section {
+    background-color: var(--surface-overlay);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+}
+
+.task-info-section h4 {
+    margin-top: 0;
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--border-default);
+    color: var(--color-primary);
+    font-size: var(--font-size-lg);
+    font-weight: 500;
+}
+
+.task-params {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.task-result {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.task-error {
+    background-color: var(--color-danger-light);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    color: var(--color-danger);
+    white-space: pre-wrap;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+/* =============================================================================
+   6. ANSIBLE SUMMARY TABLE
+   ============================================================================= */
+
+.ansible-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-base);
+    margin: var(--space-sm) 0;
+}
+
+.ansible-summary-table th,
+.ansible-summary-table td {
+    padding: var(--space-sm) var(--space-md);
+    text-align: center;
+    border: 1px solid var(--border-default);
+}
+
+.ansible-summary-table th {
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: var(--font-size-sm);
+}
+
+.ansible-summary-table td.col-host {
+    text-align: left;
+    font-family: var(--font-mono);
+}
+
+.ansible-summary-table .col-ok,
+.ansible-summary-table .col-changed,
+.ansible-summary-table .col-unreachable,
+.ansible-summary-table .col-failed,
+.ansible-summary-table .col-skipped {
+    width: 80px;
+}
+
+.ansible-summary-table .changed-value {
+    color: var(--color-warning);
+    font-weight: bold;
+}
+
+.ansible-summary-table .error-value {
+    color: var(--color-danger);
+    font-weight: bold;
+}
+
+.ansible-summary-table .summary-row-ok {
+    background: var(--color-success-light);
+}
+
+.ansible-summary-table .summary-row-error {
+    background: var(--color-danger-light);
+}
+
+/* =============================================================================
+   7. DISPLAY SUMMARIES
+   ============================================================================= */
+
+.display-summaries {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.display-summary-block {
+    background: var(--surface-sunken);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.display-summary-title {
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.display-summary-content {
+    margin: 0;
+    padding: var(--space-md);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--color-success);
+    font-family: var(--font-mono);
+}
+
+/* =============================================================================
+   8. ANIMATIONS
+   ============================================================================= */
+
+@keyframes pulse-task {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
