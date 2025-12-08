@@ -21,7 +21,7 @@
     border: none;
     color: var(--color-text-secondary);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     border-bottom: 2px solid transparent;
     transition: all var(--transition-fast);
@@ -57,7 +57,7 @@
 }
 
 .filter-group label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     font-weight: 500;
 }
@@ -71,7 +71,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 .filter-select option {
@@ -88,7 +88,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     margin-bottom: 6px;
 }
 
@@ -113,7 +113,7 @@
 
 .filter-summary:empty::before {
     content: 'Все';
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
     font-style: italic;
 }
@@ -125,7 +125,7 @@
     background: var(--color-primary);
     color: white;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -155,7 +155,7 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 .date-input::-webkit-calendar-picker-indicator {
@@ -181,7 +181,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     transition: all var(--transition-fast);
 }
@@ -228,7 +228,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--color-text-primary);
 }
 
@@ -254,7 +254,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
     border-radius: var(--radius-md);
     color: white;
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     transition: background var(--transition-fast);
 }
@@ -264,7 +264,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
 }
 
 .export-icon {
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* ===== ТАБЛИЦА ОТЧЁТА ===== */
@@ -291,7 +291,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
     background: var(--color-bg-tertiary);
     color: var(--color-text-secondary);
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     position: sticky;
@@ -301,7 +301,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
 
 .report-table td {
     color: var(--color-text-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* Сортируемые колонки */
@@ -318,7 +318,7 @@ body.light-theme .date-input::-webkit-calendar-picker-indicator {
 .sort-icon {
     display: inline-block;
     margin-left: 4px;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--color-text-tertiary);
 }
 
@@ -353,7 +353,7 @@ th.sortable.sort-desc .sort-icon::after {
     display: inline-block;
     padding: 4px 10px;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -377,7 +377,7 @@ th.sortable.sort-desc .sort-icon::after {
     display: inline-block;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     text-transform: uppercase;
 }
@@ -409,7 +409,7 @@ body.light-theme .type-service {
     display: inline-block;
     padding: 3px 8px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
 }
 
@@ -430,8 +430,8 @@ body.light-theme .type-service {
 
 /* Версии */
 .report-table code {
-    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     padding: 2px 6px;
     background: var(--color-bg-quaternary);
     border-radius: var(--radius-sm);
@@ -467,7 +467,7 @@ body.light-theme .type-service {
 }
 
 .expand-icon {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
     width: 16px;
 }
@@ -477,7 +477,7 @@ body.light-theme .type-service {
 }
 
 .app-count {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     font-weight: 400;
 }
@@ -500,7 +500,7 @@ body.light-theme .type-service {
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     border-top: 1px solid var(--color-border);
     color: var(--color-text-secondary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 /* ===== ИНДИКАТОР ЗАГРУЗКИ ===== */
@@ -646,7 +646,7 @@ body.light-theme .type-service {
 
 .modal-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--color-text-primary);
 }
@@ -654,7 +654,7 @@ body.light-theme .type-service {
 .modal-close {
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     color: var(--color-text-secondary);
     cursor: pointer;
     padding: 0;
@@ -690,7 +690,7 @@ body.light-theme .type-service {
 .form-group > label {
     display: block;
     margin-bottom: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     color: var(--color-text-secondary);
 }
@@ -702,7 +702,7 @@ body.light-theme .type-service {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     transition: border-color var(--transition-fast);
 }
 
@@ -718,7 +718,7 @@ body.light-theme .type-service {
 .form-hint {
     display: block;
     margin-top: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--color-text-tertiary);
 }
 
@@ -733,7 +733,7 @@ body.light-theme .type-service {
     align-items: center;
     gap: 8px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--color-text-primary);
 }
 
@@ -752,7 +752,7 @@ body.light-theme .type-service {
     border-radius: var(--radius-md);
     color: white;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     transition: background var(--transition-fast);
 }
@@ -773,7 +773,7 @@ body.light-theme .type-service {
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     transition: background var(--transition-fast);
 }
@@ -789,7 +789,7 @@ body.light-theme .type-service {
     border: 1px solid var(--color-danger);
     border-radius: var(--radius-md);
     color: var(--color-danger);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     margin-top: 12px;
 }
 
@@ -799,6 +799,6 @@ body.light-theme .type-service {
     border: 1px solid var(--color-success);
     border-radius: var(--radius-md);
     color: var(--color-success);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     margin-top: 12px;
 }

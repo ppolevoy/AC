@@ -28,7 +28,7 @@
 }
 
 .filter-group label {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: rgba(255, 255, 255, 0.7);
     font-weight: 500;
     white-space: nowrap;
@@ -44,7 +44,7 @@
     color: #ebe4da;
     padding: 8px 32px 8px 12px;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     appearance: none;
     min-width: 150px;
@@ -62,7 +62,7 @@
     transform: translateY(-50%);
     pointer-events: none;
     color: #6b7280;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
 }
 
 .search-group {
@@ -77,7 +77,7 @@
     color: #ebe4da;
     padding: 8px 12px 8px 36px;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     width: 100%;
     min-width: 250px;
 }
@@ -97,7 +97,7 @@
     top: 50%;
     transform: translateY(-50%);
     color: #6b7280;
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* Action Buttons */
@@ -112,7 +112,7 @@
     padding: 8px 16px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -197,7 +197,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: rgba(255, 255, 255, 0.6);
     margin-bottom: 4px;
     text-transform: uppercase;
@@ -205,9 +205,9 @@
 }
 
 .summary-value {
-    font-size: 22px;
-    font-weight: 600;
-    color: #e5e7eb;
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
 }
 
 .status-dot {
@@ -257,7 +257,7 @@
 .instances-table th {
     padding: 12px 15px;
     text-align: left;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     color: #fff;
     text-transform: uppercase;
@@ -280,13 +280,13 @@
 
 .instances-table td {
     padding: 15px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: #e5e7eb;
 }
 
 .instance-id {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     color: #9ca3af;
 }
 
@@ -296,8 +296,8 @@
 }
 
 .ip-address {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     color: #9ca3af;
 }
 
@@ -308,7 +308,7 @@
     gap: 6px;
     padding: 4px 10px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -351,7 +351,7 @@
     gap: 4px;
     padding: 3px 8px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
 }
 
@@ -387,7 +387,7 @@
     justify-content: center;
     cursor: pointer;
     color: #9ca3af;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     transition: all 0.2s;
 }
 
@@ -436,14 +436,14 @@
 }
 
 .empty-message h3 {
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
     color: #9ca3af;
     margin-bottom: 12px;
 }
 
 .empty-message p {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: #6b7280;
     max-width: 600px;
     margin: 0 auto;
@@ -486,7 +486,7 @@
 }
 
 .modal .modal-header h3 {
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: #e5e7eb;
     margin: 0;
@@ -496,7 +496,7 @@
     background: none;
     border: none;
     color: #9ca3af;
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     cursor: pointer;
     padding: 0;
     width: 30px;
@@ -525,7 +525,7 @@
 
 .modal .form-group label {
     display: block;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     color: #9ca3af;
     margin-bottom: 8px;
@@ -538,7 +538,7 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     color: #e5e7eb;
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 .modal .form-control:focus {
@@ -558,7 +558,7 @@
     padding: 8px 16px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
@@ -586,9 +586,9 @@
 
 /* Timestamp */
 .timestamp {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: #6b7280;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
 }
 
 /* ===== ERROR INDICATION STYLES ===== */
@@ -610,7 +610,7 @@
     gap: 4px;
     padding: 3px 8px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
 }
 
@@ -639,14 +639,14 @@
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: 4px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: #ef4444;
     line-height: 1.4;
 }
 
 .fetch-error-message i {
     color: #ef4444;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     flex-shrink: 0;
     margin-top: 1px;
 }
@@ -662,11 +662,11 @@
     align-items: center;
     gap: 6px;
     color: #ef4444;
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 .error-indicator i {
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* Server row with consecutive failures */
@@ -686,7 +686,7 @@
     gap: 4px;
     padding: 3px 8px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     background: rgba(245, 158, 11, 0.15);
     color: #f59e0b;
@@ -694,7 +694,7 @@
 }
 
 .failures-badge i {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 /* ===== LIGHT THEME SUPPORT ===== */
@@ -1043,7 +1043,7 @@ body.light-theme .failures-badge {
 }
 
 .server-error-icon {
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     flex-shrink: 0;
     line-height: 1;
 }
@@ -1054,7 +1054,7 @@ body.light-theme .failures-badge {
 
 .server-error-details strong {
     color: #ef4444;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     display: block;
     margin-bottom: 6px;
@@ -1062,20 +1062,20 @@ body.light-theme .failures-badge {
 
 .server-error-message {
     color: #fca5a5;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     line-height: 1.5;
     margin-bottom: 6px;
 }
 
 .server-error-failures {
     color: #f59e0b;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-bottom: 4px;
 }
 
 .server-error-time {
     color: rgba(255, 255, 255, 0.5);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
 }
 
 /* Summary banner variant */

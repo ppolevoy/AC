@@ -1,6 +1,34 @@
 /* app/static/css/styles.css - Refactored */
 
 /* =============================================================================
+   0. FONT FACES
+   ============================================================================= */
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* =============================================================================
    1. CSS CUSTOM PROPERTIES (VARIABLES)
    ============================================================================= */
 
@@ -92,6 +120,37 @@
     --space-2xl: 24px;
     --space-3xl: 32px;
 
+    /* --- Typography --- */
+    /* Font Families */
+    --font-sans: 'Arial', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', 'Courier New', monospace;
+
+    /* Font Sizes */
+    --font-size-xs: 10px;    /* Micro: sort icons, tiny badges */
+    --font-size-sm: 12px;    /* Small: tags, badges, code */
+    --font-size-base: 14px;  /* Base: main text, table content */
+    --font-size-md: 15px;    /* Medium: form labels */
+    --font-size-lg: 16px;    /* Large: section headers */
+    --font-size-xl: 18px;    /* XL: modal titles */
+    --font-size-2xl: 24px;   /* 2XL: page titles */
+    --font-size-3xl: 32px;   /* 3XL: hero elements */
+
+    /* Font Weights */
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* Line Heights */
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.75;
+
+    /* Letter Spacing */
+    --letter-spacing-tight: -0.02em;
+    --letter-spacing-normal: 0;
+    --letter-spacing-wide: 0.5px;
+
     /* --- Legacy Aliases (for module compatibility) --- */
     --color-bg-primary: var(--surface-base);
     --color-bg-secondary: var(--surface-raised);
@@ -150,14 +209,23 @@ body.light-theme {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Arial', sans-serif;
 }
 
 body {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-normal);
+    line-height: var(--line-height-normal);
     background-color: var(--surface-base);
     color: var(--text-primary);
     display: flex;
     min-height: 100vh;
+}
+
+/* Monospace text */
+code, pre, kbd, samp, .mono {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
 }
 
 /* =============================================================================
@@ -192,12 +260,12 @@ body {
 }
 
 .logo-text {
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     color: var(--text-muted);
 }
 
 .logo-title {
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     color: var(--text-primary);
     font-weight: bold;
 }
@@ -228,7 +296,7 @@ body {
 
 .menu-icon {
     margin-right: 10px;
-    font-size: 20px;
+    font-size: var(--font-size-xl);
 }
 
 /* --- 3.2 Main Content --- */
@@ -247,12 +315,12 @@ body {
 
 .page-title {
     color: var(--text-primary);
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
 }
 
 .date-time {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .header-actions {
@@ -314,7 +382,7 @@ body {
     border-radius: var(--radius-md);
     padding: 8px 12px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     transition: background-color var(--transition-normal);
 }
 
@@ -366,7 +434,7 @@ body {
     border-radius: var(--radius-lg);
     padding: 10px 20px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     transition: background-color var(--transition-fast);
 }
@@ -383,7 +451,7 @@ body {
     border-radius: var(--radius-lg);
     padding: 10px 20px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     transition: background-color var(--transition-fast);
 }
@@ -399,7 +467,7 @@ body {
     border-radius: var(--radius-lg);
     padding: 10px 20px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     transition: background-color var(--transition-fast);
 }
@@ -430,7 +498,7 @@ body {
     border-radius: var(--radius-md);
     padding: 6px 12px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     transition: background-color var(--transition-fast), transform var(--transition-fast);
     display: inline-flex;
     align-items: center;
@@ -479,7 +547,7 @@ body {
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: var(--font-size-md);
     transition: border-color var(--transition-normal), box-shadow var(--transition-normal), opacity var(--transition-fast);
 }
 
@@ -519,7 +587,7 @@ body {
     align-items: center;
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 15px;
+    font-size: var(--font-size-md);
 }
 
 .radio-label input {
@@ -593,7 +661,7 @@ body {
 .filter-group label {
     margin-right: 10px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .select-container {
@@ -621,7 +689,7 @@ body {
     transform: translateY(-50%);
     pointer-events: none;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
 }
 
 /* Checkbox */
@@ -715,7 +783,7 @@ th.sortable:hover {
 th.sortable::after {
     content: "\21C5";
     margin-left: 5px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     opacity: 0.5;
 }
 
@@ -899,7 +967,7 @@ body.light-theme .service-dot-badge {
 }
 
 .sort-icon {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     margin-left: 5px;
     color: var(--text-disabled);
 }
@@ -995,7 +1063,7 @@ body.light-theme .dropdown-content {
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     cursor: pointer;
     padding: 5px;
     border-radius: var(--radius-md);
@@ -1024,7 +1092,7 @@ body.light-theme .dropdown-content {
     padding: 12px 15px;
     text-decoration: none;
     display: block;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     transition: background-color var(--transition-fast);
 }
 
@@ -1072,7 +1140,7 @@ body.light-theme .dropdown-content {
     color: var(--text-primary);
     padding: 5px 10px;
     border-radius: var(--radius-md);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     white-space: nowrap;
     z-index: var(--z-tooltip);
     top: -30px;
@@ -1154,7 +1222,7 @@ body.light-theme .dropdown-content {
 
 .modal-header h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     color: var(--text-primary);
     font-weight: bold;
 }
@@ -1163,7 +1231,7 @@ body.light-theme .dropdown-content {
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     cursor: pointer;
     width: 32px;
     height: 32px;
@@ -1215,7 +1283,7 @@ body.light-theme .dropdown-content {
     padding: 15px 20px;
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 15px;
+    font-size: var(--font-size-md);
     border-bottom: 2px solid transparent;
     transition: all var(--transition-fast);
 }
@@ -1231,7 +1299,7 @@ body.light-theme .dropdown-content {
 }
 
 .modal-tab .app-count {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     opacity: 0.7;
     margin-left: 5px;
     font-weight: normal;
@@ -1272,7 +1340,7 @@ body.light-theme .dropdown-content {
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
     background-color: var(--surface-quaternary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     cursor: pointer;
     transition: border-color var(--transition-normal);
 }
@@ -1318,7 +1386,7 @@ body.light-theme .dropdown-content {
     margin-bottom: 15px;
     color: var(--color-primary);
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     padding-bottom: 10px;
     border-bottom: 1px solid var(--interactive-active);
 }
@@ -1341,7 +1409,7 @@ body.light-theme .dropdown-content {
 .info-label {
     color: var(--text-muted);
     width: 180px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .info-value {
@@ -1352,7 +1420,7 @@ body.light-theme .dropdown-content {
 /* Confirmation modal */
 .confirmation-text {
     margin-bottom: 20px;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     line-height: 1.5;
 }
 
@@ -1373,7 +1441,7 @@ body.light-theme .dropdown-content {
 .app-list li {
     padding: 8px 0;
     border-bottom: 1px solid var(--border-default);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .app-list li:last-child {
@@ -1385,7 +1453,7 @@ body.light-theme .dropdown-content {
     padding: 10px;
     background-color: var(--surface-quaternary);
     border-radius: var(--radius-md);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--color-warning);
 }
 
@@ -1429,7 +1497,7 @@ body.light-theme .dropdown-content {
 .notification-toast .notification-content {
     flex: 1;
     color: white;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     line-height: 1.5;
 }
 
@@ -1437,7 +1505,7 @@ body.light-theme .dropdown-content {
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.8);
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     line-height: 1;
     cursor: pointer;
     padding: 0;
@@ -1483,7 +1551,7 @@ body.light-theme .dropdown-content {
     align-items: center;
     margin-top: 20px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .pagination span {
@@ -1494,7 +1562,7 @@ body.light-theme .dropdown-content {
     display: flex;
     align-items: center;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .page-select {
@@ -1561,7 +1629,7 @@ body.light-theme .page-number {
 .pagination-info {
     margin: 0 10px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .pagination-btn {
@@ -1590,7 +1658,7 @@ body.light-theme .page-number {
 }
 
 .pagination-icon {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 /* --- 4.8 Cards --- */
@@ -1629,7 +1697,7 @@ body.light-theme .server-card {
 }
 
 .server-name {
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: bold;
     color: var(--text-primary);
 }
@@ -1655,7 +1723,7 @@ body.light-theme .server-card {
 }
 
 .status-text {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 .status-text.online {
@@ -1668,7 +1736,7 @@ body.light-theme .server-card {
 
 .server-info {
     margin-top: 15px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--text-secondary);
 }
 
@@ -1697,7 +1765,7 @@ body.light-theme .server-card {
     height: 26px;
     margin-left: 8px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1714,7 +1782,7 @@ body.light-theme .server-card {
     color: var(--text-primary);
     padding: 4px 8px;
     border-radius: var(--radius-md);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     white-space: nowrap;
     pointer-events: none;
     z-index: var(--z-dropdown);
@@ -1763,7 +1831,7 @@ body.light-theme .server-card {
 
 .empty-text {
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     margin-bottom: 20px;
 }
 
@@ -1776,7 +1844,7 @@ body.light-theme .server-card {
     cursor: pointer;
     display: flex;
     align-items: center;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     transition: all var(--transition-fast);
 }
 
@@ -1786,7 +1854,7 @@ body.light-theme .server-card {
 
 .add-icon {
     margin-right: 6px;
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* --- 4.9 Status Badges --- */
@@ -1794,7 +1862,7 @@ body.light-theme .server-card {
     display: inline-block;
     padding: 4px 8px;
     border-radius: var(--radius-md);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     text-transform: uppercase;
 }
@@ -1840,12 +1908,12 @@ body.light-theme .status-failed {
     text-align: center;
     padding: 40px 20px;
     color: var(--text-secondary);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
 }
 
 .loading-indicator::before {
     content: "\23F3 ";
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     animation: pulse 1.5s infinite;
 }
 
@@ -1908,7 +1976,7 @@ body.light-theme .status-failed {
 }
 
 .loader-text {
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     color: var(--text-secondary);
     margin-bottom: 8px;
     display: flex;
@@ -1932,7 +2000,7 @@ body.light-theme .status-failed {
 }
 
 .loader-details {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--text-disabled);
     font-style: italic;
 }
@@ -1953,13 +2021,13 @@ body.light-theme .status-failed {
 
 .skeleton-text {
     color: var(--text-disabled);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     animation: pulse-text 2s ease-in-out infinite;
 }
 
 .skeleton-arrow {
     color: var(--text-disabled);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
 }
 
 .skeleton-select::before {
@@ -2056,7 +2124,7 @@ body.light-theme .status-failed {
 }
 
 .group-loading-text {
-    font-size: 14px;
+    font-size: var(--font-size-base);
     color: var(--text-secondary);
 }
 
@@ -2085,7 +2153,7 @@ body.light-theme .status-failed {
 .loading-versions {
     display: inline-block;
     margin-left: 10px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-disabled);
 }
 
@@ -2118,7 +2186,7 @@ body.light-theme .status-failed {
     gap: 2px;
     padding: 5px 12px;
     border-radius: var(--radius-lg);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     letter-spacing: 0.2px;
     white-space: nowrap;
@@ -2136,7 +2204,7 @@ body.light-theme .status-failed {
 }
 
 .tag-icon {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     line-height: 1;
 }
 
@@ -2197,13 +2265,13 @@ body.light-theme .status-failed {
 
 .table-tags-container .tag {
     padding: 3px 8px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
 }
 
 .tags-more {
     padding: 2px 6px;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     color: var(--text-muted);
     background: var(--interactive-active);
     border-radius: var(--radius-md);
@@ -2236,7 +2304,7 @@ body.light-theme .status-failed {
     border-radius: var(--radius-md);
     padding: 8px 16px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .tag-filter-toggle:hover {
@@ -2265,7 +2333,7 @@ body.light-theme .tag-filter-panel {
 
 .tag-filter-group h4 {
     color: var(--color-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     margin-bottom: 10px;
 }
 
@@ -2313,7 +2381,7 @@ body.light-theme .tag-filter-panel {
 .tags-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--font-size-base);
 }
 
 .tags-table th,
@@ -2378,13 +2446,13 @@ body.light-theme .tag-filter-panel {
 
 .last-updated {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     text-align: right;
 }
 
 .current-task {
     color: #4CAF50;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     animation: pulse-task 1.5s infinite;
 }
 
@@ -2400,7 +2468,7 @@ body.light-theme .current-task {
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: bold;
     transition: all var(--transition-fast);
     display: inline-flex;
@@ -2447,8 +2515,8 @@ body.light-theme .cancel-task-btn:hover {
 }
 
 .task-id-cell {
-    font-family: monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
 }
 
 /* Task details */
@@ -2471,7 +2539,7 @@ body.light-theme .cancel-task-btn:hover {
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-default);
     color: var(--color-primary);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: 500;
 }
 
@@ -2479,8 +2547,8 @@ body.light-theme .cancel-task-btn:hover {
     background-color: var(--surface-raised);
     border-radius: var(--radius-md);
     padding: 10px;
-    font-family: monospace;
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
     white-space: pre-wrap;
     max-height: 150px;
     overflow-y: auto;
@@ -2517,7 +2585,7 @@ body.light-theme .task-result {
 .ansible-summary-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     margin: 8px 0;
 }
 
@@ -2533,12 +2601,12 @@ body.light-theme .task-result {
     color: var(--text-secondary);
     font-weight: 500;
     text-transform: uppercase;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
 }
 
 .ansible-summary-table td.col-host {
     text-align: left;
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 .ansible-summary-table .col-ok,
@@ -2584,7 +2652,7 @@ body.light-theme .task-result {
     background: var(--surface-raised);
     color: var(--text-secondary);
     padding: 6px 12px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
     border-bottom: 1px solid var(--border-default);
 }
@@ -2592,12 +2660,12 @@ body.light-theme .task-result {
 .display-summary-content {
     margin: 0;
     padding: 12px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
     color: #4caf50;
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 body.light-theme .display-summary-content {
@@ -2616,7 +2684,7 @@ body.light-theme .display-summary-content {
     padding: 12px;
     text-align: left;
     font-weight: 600;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     border-bottom: 2px solid var(--border-default);
 }
 
@@ -2653,7 +2721,7 @@ body.light-theme .display-summary-content {
 }
 
 .error-page-message {
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     margin-bottom: 30px;
 }
 
@@ -2671,7 +2739,7 @@ body.light-theme .display-summary-content {
     padding: 10px 20px;
     cursor: pointer;
     text-decoration: none;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
 }
 
 .back-button:hover {
@@ -2704,8 +2772,8 @@ body.light-theme .display-summary-content {
 }
 
 .artifact-select {
-    font-family: monospace;
-    font-size: 14px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
 }
 
 .artifact-select option[value="custom"] {
@@ -2724,7 +2792,7 @@ body.light-theme .display-summary-content {
     display: block;
     margin-bottom: 8px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 .artifact-loader {
@@ -2737,7 +2805,7 @@ body.light-theme .display-summary-content {
     display: inline-block;
     padding: 2px 6px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     margin-left: 8px;
     font-weight: 600;
 }
@@ -2757,7 +2825,7 @@ body.light-theme .display-summary-content {
     margin-left: 8px;
     padding: 2px 6px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -2783,13 +2851,13 @@ body.light-theme .display-summary-content {
 .version-load-error {
     display: block;
     margin-top: 5px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: #f44336;
     font-style: italic;
 }
 
 .version-count {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-disabled);
     font-weight: normal;
     margin-left: 4px;
@@ -2808,15 +2876,15 @@ body.light-theme .display-summary-content {
 }
 
 .playbook-info .playbook-label {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--text-muted);
 }
 
 .playbook-info .playbook-name {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--color-primary);
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 body.light-theme .playbook-info .playbook-name {
@@ -2831,13 +2899,13 @@ body.light-theme .playbook-info .playbook-name {
     background-color: var(--color-info-light);
     color: var(--color-info);
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
 }
 
 .cache-status {
     margin-top: 6px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -2896,7 +2964,7 @@ body.light-theme .playbook-info .playbook-name {
 
 .field-hint {
     margin-top: 6px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
 }
 
@@ -2913,7 +2981,7 @@ body.light-theme .playbook-info .playbook-name {
     border-left: 3px solid var(--color-danger);
     border-radius: var(--radius-md);
     color: var(--color-danger);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     animation: fadeIn var(--transition-normal);
 }
 
@@ -2934,7 +3002,7 @@ hr {
 /* Refresh icon */
 .refresh-icon {
     display: inline-block;
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-style: normal;
     transition: transform var(--transition-normal);
 }
@@ -3069,7 +3137,7 @@ hr {
     }
 
     .sidebar .menu-icon {
-        font-size: 24px;
+        font-size: var(--font-size-2xl);
         margin-right: 0;
     }
 

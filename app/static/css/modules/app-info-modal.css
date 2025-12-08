@@ -3,9 +3,23 @@
  * Стили для модального окна информации о приложении
  */
 
+/* Размер модального окна */
+.modal-content:has(.app-info-modal) {
+    max-width: 800px;
+    overflow-x: hidden;
+}
+
+.modal-content:has(.app-info-modal) .modal-header {
+    padding: 24px;
+}
+
+.modal-content:has(.app-info-modal) .modal-body {
+    overflow-x: hidden;
+}
+
 /* Основной контейнер */
 .app-info-modal {
-    margin: -20px -20px 0 -20px;
+    margin: -24px -24px 0 -24px;
 }
 
 /* Вкладки */
@@ -33,10 +47,10 @@
 }
 
 .info-tab {
-    padding: 10px 18px;
+    padding: 12px 22px;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     border-bottom: 2px solid transparent;
     transition: all 0.2s;
     white-space: nowrap;
@@ -58,7 +72,7 @@
 /* Контент вкладок */
 .info-tab-contents {
     background: var(--surface-overlay);
-    max-height: 445px;
+    max-height: 550px;
     overflow-y: auto;
 }
 
@@ -81,7 +95,7 @@
 
 .info-tab-content {
     display: none;
-    padding: 16px;
+    padding: 20px;
     animation: infoFadeIn 0.3s ease;
 }
 
@@ -104,8 +118,8 @@
 .info-columns {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 16px;
+    margin-bottom: 16px;
 }
 
 @media (max-width: 768px) {
@@ -116,8 +130,8 @@
 
 .info-column {
     background: var(--surface-quaternary);
-    padding: 12px;
-    border-radius: 6px;
+    padding: 16px;
+    border-radius: 8px;
     border: 1px solid var(--border-default);
 }
 
@@ -125,8 +139,8 @@
 .info-field {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    margin-bottom: 10px;
+    gap: 4px;
+    margin-bottom: 12px;
 }
 
 .info-field:last-child {
@@ -135,7 +149,7 @@
 
 .app-info-modal .info-label {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 600;
@@ -143,7 +157,7 @@
 
 .info-value {
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     word-break: break-word;
 }
@@ -153,7 +167,7 @@
     display: inline-block;
     padding: 2px 8px;
     border-radius: 10px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
 }
 
@@ -175,20 +189,20 @@
 /* Секция Docker */
 .docker-section {
     background: var(--surface-quaternary);
-    padding: 12px;
-    border-radius: 6px;
+    padding: 16px;
+    border-radius: 8px;
     border: 1px solid var(--border-default);
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 .docker-title {
     color: var(--color-primary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 600;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -196,7 +210,7 @@
 .docker-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 12px;
 }
 
 .docker-field {
@@ -211,7 +225,7 @@
 
 .docker-label {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 600;
@@ -219,7 +233,7 @@
 
 .docker-value {
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
 }
 
@@ -239,8 +253,8 @@ body.light-theme .docker-id-container {
 }
 
 .docker-id {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     color: var(--text-secondary);
     cursor: default;
 }
@@ -254,19 +268,19 @@ body.light-theme .docker-id-container {
 /* Секция путей */
 .paths-section {
     background: var(--surface-quaternary);
-    padding: 12px;
-    border-radius: 6px;
+    padding: 16px;
+    border-radius: 8px;
     border: 1px solid var(--border-default);
 }
 
 .paths-title {
     color: var(--color-primary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-weight: 600;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -274,7 +288,7 @@ body.light-theme .docker-id-container {
 .paths-grid {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .path-item {
@@ -284,7 +298,7 @@ body.light-theme .docker-id-container {
 }
 
 .path-label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -294,12 +308,12 @@ body.light-theme .docker-id-container {
 .path-container {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     background: rgba(0, 0, 0, 0.3);
-    padding: 6px 8px;
+    padding: 8px 10px;
     border-radius: 4px;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
     border: 1px solid var(--border-subtle);
     transition: all 0.2s;
 }
@@ -328,7 +342,7 @@ body.light-theme .path-container {
     padding: 4px 8px;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     transition: all 0.2s;
     flex-shrink: 0;
     font-weight: 600;
@@ -351,7 +365,7 @@ body.light-theme .path-container {
     border-radius: 6px;
     overflow: hidden;
     border: 1px solid var(--border-default);
-    font-size: 12px;
+    font-size: var(--font-size-base);
 }
 
 .events-table thead {
@@ -359,19 +373,19 @@ body.light-theme .path-container {
 }
 
 .events-table th {
-    padding: 8px 10px;
+    padding: 10px 12px;
     text-align: left;
     color: var(--text-secondary);
     font-weight: 600;
-    font-size: 11px;
+    font-size: var(--font-size-base);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .events-table td {
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-top: 1px solid var(--border-default);
-    font-size: 12px;
+    font-size: var(--font-size-base);
     color: var(--text-primary);
 }
 
@@ -385,9 +399,9 @@ body.light-theme .path-container {
 
 .event-status {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 8px;
-    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
 }
 
@@ -409,9 +423,9 @@ body.light-theme .path-container {
 /* Теги */
 .tags-section-title {
     color: var(--color-primary);
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -419,7 +433,7 @@ body.light-theme .path-container {
 .app-info-modal .tags-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
 }
 
 .app-info-modal .tag-item {
@@ -429,7 +443,7 @@ body.light-theme .path-container {
     border: 1px solid var(--border-default);
     border-radius: 4px;
     overflow: hidden;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     transition: all 0.2s;
 }
 
@@ -446,7 +460,7 @@ body.light-theme .path-container {
 .app-info-modal .tag-name {
     background: var(--border-subtle);
     color: var(--text-secondary);
-    padding: 6px 10px;
+    padding: 8px 12px;
     font-weight: 600;
 }
 
@@ -454,6 +468,6 @@ body.light-theme .path-container {
 .app-info-modal .no-data {
     text-align: center;
     color: var(--text-muted);
-    padding: 40px 20px;
-    font-size: 14px;
+    padding: 50px 24px;
+    font-size: var(--font-size-base);
 }

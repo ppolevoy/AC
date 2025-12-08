@@ -25,7 +25,7 @@
     color: white;
     padding: 2px 6px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     margin-left: 10px;
 }
 
@@ -75,7 +75,7 @@ body.light-theme .group-item.selected {
 }
 
 .group-icon {
-    font-size: 18px;
+    font-size: var(--font-size-xl);
 }
 
 .group-name {
@@ -85,7 +85,7 @@ body.light-theme .group-item.selected {
 
 .group-count {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* ===========================================
@@ -130,7 +130,7 @@ body.light-theme .instance-item.selected {
 }
 
 .instance-info {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-muted);
 }
 
@@ -145,7 +145,7 @@ body.light-theme .instance-item.selected {
 .status-badge {
     padding: 2px 6px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     text-transform: uppercase;
 }
 
@@ -170,7 +170,7 @@ body.light-theme .instance-item.selected {
 .detail-subsection h6 {
     margin-bottom: 10px;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: var(--font-size-base);
     text-transform: uppercase;
 }
 

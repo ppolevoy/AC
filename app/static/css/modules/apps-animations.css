@@ -89,7 +89,7 @@
     background: none;
     border: none;
     color: var(--text-disabled);
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     line-height: 1;
     cursor: pointer;
     width: 20px;
@@ -116,7 +116,7 @@
     text-align: center;
     padding: 40px;
     color: var(--text-disabled);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
 }
 
 /* ===========================================
@@ -171,7 +171,7 @@
 
 .unit-label {
     color: var(--text-disabled);
-    font-size: 14px;
+    font-size: var(--font-size-base);
 }
 
 /* ===========================================
@@ -188,7 +188,7 @@
 .quick-time-link {
     color: var(--color-info);
     text-decoration: none;
-    font-size: 14px;
+    font-size: var(--font-size-base);
     font-weight: 500;
     cursor: pointer;
     transition: color 0.2s;
@@ -212,7 +212,7 @@
 .form-help-text {
     display: block;
     margin-top: 8px;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     color: var(--text-muted);
     font-style: italic;
 }

@@ -165,7 +165,20 @@ class MappingsManagement {
 
         html += '</tr></thead><tbody>';
 
-        this.mappings.slice(0, 50).forEach(mapping => {
+        // Сортировка по колонке "Приложение"
+        const sortedMappings = [...this.mappings].sort((a, b) => {
+            const getAppDisplay = (m) => {
+                let display = m.application?.instance_name || `ID: ${m.application_id}`;
+                if (m.application?.server_name) {
+                    const shortHostname = m.application.server_name.split('.')[0];
+                    display = `${shortHostname}_${display}`;
+                }
+                return display.toLowerCase();
+            };
+            return getAppDisplay(a).localeCompare(getAppDisplay(b));
+        });
+
+        sortedMappings.slice(0, 50).forEach(mapping => {
             const manualBadge = mapping.is_manual
                 ? '<span class="badge badge-manual">Ручной</span>'
                 : '<span class="badge badge-auto">Авто</span>';

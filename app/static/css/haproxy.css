@@ -558,7 +558,7 @@ body.light-theme .data-table tbody tr:hover {
 
 .col-address {
     width: 15%;
-    font-family: 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 0.85em;
     text-align: center;
     white-space: nowrap;
@@ -1158,14 +1158,14 @@ body.light-theme .backend-accordion-item.has-error {
 
 .backend-error-indicator {
     color: #ef4444;
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     margin-left: 8px;
     cursor: help;
 }
 
 .backend-error-message {
     color: #ef4444;
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     margin-top: 4px;
     padding: 8px 12px;
     background: rgba(239, 68, 68, 0.1);
@@ -1178,7 +1178,7 @@ body.light-theme .backend-error-message {
 }
 
 .backend-error-time {
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     color: rgba(255, 255, 255, 0.5);
     margin-top: 2px;
 }
@@ -1210,7 +1210,7 @@ body.light-theme .instance-error-banner {
 }
 
 .instance-error-icon {
-    font-size: 24px;
+    font-size: var(--font-size-2xl);
     flex-shrink: 0;
 }
 
