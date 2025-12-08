@@ -135,6 +135,12 @@ class Config:
     AUTO_TAG_SMF_ENABLED = os.environ.get('AUTO_TAG_SMF_ENABLED', 'false').lower() == 'true'
     AUTO_TAG_SYSCTL_ENABLED = os.environ.get('AUTO_TAG_SYSCTL_ENABLED', 'false').lower() == 'true'
 
+    # Автоматическое удаление offline-приложений
+    APP_OFFLINE_REMOVAL_DAYS = int(os.environ.get('APP_OFFLINE_REMOVAL_DAYS', '7'))  # Soft delete через N дней offline
+    APP_OFFLINE_WARNING_DAYS_BEFORE = 3  # За сколько дней до удаления ставить тег (тег на 4-й день при default=7)
+    APP_HARD_DELETE_DAYS = int(os.environ.get('APP_HARD_DELETE_DAYS', '30'))  # Физическое удаление через N дней после soft delete
+    APP_REMOVAL_PROTECTED_TAGS = ['ver.lock', 'status.lock', 'disable']  # Теги, защищающие от автоудаления
+
     @staticmethod
     def init_app(app):
         # Создание директории для логов, если её нет

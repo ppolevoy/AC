@@ -16,6 +16,15 @@ class MonitoringTasks:
         self.loop = None
         self.stop_event = threading.Event()
         self.thread = None
+
+        # Время последнего выполнения каждой операции (для независимых интервалов)
+        self.last_servers_poll = 0
+        self.last_haproxy_sync = 0
+        self.last_eureka_sync = 0
+        # Отдельные поля для каждой cleanup операции (изоляция ошибок)
+        self.last_cleanup_events = 0
+        self.last_cleanup_tasks = 0
+        self.last_cleanup_stale = 0
     
     def start(self):
         """Запуск потока с циклом задач мониторинга"""
@@ -25,12 +34,21 @@ class MonitoringTasks:
         
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._run_monitoring, daemon=True)
+
+        # Логируем настроенные интервалы ДО запуска потока
+        from app.config import Config
+        logger.info(
+            f"Интервалы опроса: servers={Config.POLLING_INTERVAL}s, "
+            f"haproxy={Config.HAPROXY_POLLING_INTERVAL}s (enabled={Config.HAPROXY_ENABLED}), "
+            f"eureka={Config.EUREKA_POLLING_INTERVAL}s (enabled={Config.EUREKA_ENABLED})"
+        )
+
         self.thread.start()
-        
+
         # Запускаем обработчик очереди задач
         from app.tasks.queue import task_queue
         task_queue.start_processing()
-        
+
         logger.info("Задачи мониторинга и обработчик очереди задач запущены")
     
     def stop(self):
@@ -48,63 +66,110 @@ class MonitoringTasks:
         task_queue.stop_processing()
         
         logger.info("Задачи мониторинга и обработчик очереди задач остановлены")
-    
+
+    def _run_task_if_due(self, task_name: str, last_run_attr: str, interval: int,
+                         task_method, is_async: bool = True) -> None:
+        """
+        Выполняет задачу если прошёл интервал с последнего запуска.
+        Обновляет last_run только при успешном выполнении.
+
+        Args:
+            task_name: Имя задачи для логирования ошибок
+            last_run_attr: Имя атрибута для хранения времени последнего запуска
+            interval: Интервал в секундах между запусками
+            task_method: Метод для выполнения
+            is_async: True если метод асинхронный (требует run_until_complete)
+        """
+        now = time.time()
+        if now - getattr(self, last_run_attr) < interval:
+            return
+
+        with self.app.app_context():
+            try:
+                if is_async:
+                    self.loop.run_until_complete(task_method())
+                else:
+                    task_method()
+                # Обновляем время только при успехе - при ошибке retry через 1 сек
+                setattr(self, last_run_attr, now)
+            except Exception as e:
+                logger.error(f"Ошибка при {task_name}: {str(e)}")
+
     def _run_monitoring(self):
-        """Основной метод выполнения задач мониторинга"""
+        """
+        Основной метод выполнения задач мониторинга.
+
+        Каждая операция выполняется по своему интервалу:
+        - Опрос серверов: POLLING_INTERVAL
+        - Синхронизация HAProxy: HAPROXY_POLLING_INTERVAL
+        - Синхронизация Eureka: EUREKA_POLLING_INTERVAL
+        - Очистки: POLLING_INTERVAL
+
+        Config читается каждую итерацию для поддержки hot-reload интервалов.
+        """
+        from app.config import Config
+
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        
+
         try:
             logger.info("Цикл мониторинга запущен")
+
             while not self.stop_event.is_set():
-                # Запускаем основную задачу мониторинга
-                with self.app.app_context():
-                    try:
-                        self.loop.run_until_complete(self._poll_servers())
-                    except Exception as e:
-                        logger.error(f"Ошибка при опросе серверов: {str(e)}")
-                
-                # Запускаем задачу очистки старых событий
-                with self.app.app_context():
-                    try:
-                        self._clean_old_events()
-                    except Exception as e:
-                        logger.error(f"Ошибка при очистке старых событий: {str(e)}")
-                
-                # Запускаем задачу очистки старых задач в очереди
-                with self.app.app_context():
-                    try:
-                        from app.tasks.queue import task_queue
-                        from app.config import Config
-                        task_queue.clear_completed_tasks(days_old=Config.CLEAN_TASKS_OLDER_THAN)
-                    except Exception as e:
-                        logger.error(f"Ошибка при очистке старых задач: {str(e)}")
+                # Опрос серверов
+                self._run_task_if_due(
+                    task_name="опрос серверов",
+                    last_run_attr="last_servers_poll",
+                    interval=Config.POLLING_INTERVAL,
+                    task_method=self._poll_servers
+                )
 
-                # Запускаем задачу синхронизации HAProxy (если включена)
-                with self.app.app_context():
-                    try:
-                        from app.config import Config
-                        if Config.HAPROXY_ENABLED:
-                            self.loop.run_until_complete(self._sync_haproxy_instances())
-                    except Exception as e:
-                        logger.error(f"Ошибка при синхронизации HAProxy: {str(e)}")
+                # Синхронизация HAProxy
+                if Config.HAPROXY_ENABLED:
+                    self._run_task_if_due(
+                        task_name="синхронизация HAProxy",
+                        last_run_attr="last_haproxy_sync",
+                        interval=Config.HAPROXY_POLLING_INTERVAL,
+                        task_method=self._sync_haproxy_instances
+                    )
 
-                # Запускаем задачу синхронизации Eureka (если включена)
-                with self.app.app_context():
-                    try:
-                        from app.config import Config
-                        if Config.EUREKA_ENABLED:
-                            self.loop.run_until_complete(self._sync_eureka_servers())
-                    except Exception as e:
-                        logger.error(f"Ошибка при синхронизации Eureka: {str(e)}")
+                # Синхронизация Eureka
+                if Config.EUREKA_ENABLED:
+                    self._run_task_if_due(
+                        task_name="синхронизация Eureka",
+                        last_run_attr="last_eureka_sync",
+                        interval=Config.EUREKA_POLLING_INTERVAL,
+                        task_method=self._sync_eureka_servers
+                    )
 
-                # Ждем до следующего цикла опроса
-                from app.config import Config
-                logger.info(f"Следующий опрос через {Config.POLLING_INTERVAL} секунд")
-                for _ in range(Config.POLLING_INTERVAL):
-                    if self.stop_event.is_set():
-                        break
-                    time.sleep(1)
+                # Cleanup операции (каждая в своём контексте для изоляции ошибок)
+                self._run_task_if_due(
+                    task_name="очистка старых событий",
+                    last_run_attr="last_cleanup_events",
+                    interval=Config.POLLING_INTERVAL,
+                    task_method=self._clean_old_events,
+                    is_async=False
+                )
+
+                self._run_task_if_due(
+                    task_name="очистка старых задач",
+                    last_run_attr="last_cleanup_tasks",
+                    interval=Config.POLLING_INTERVAL,
+                    task_method=self._cleanup_old_tasks,
+                    is_async=False
+                )
+
+                self._run_task_if_due(
+                    task_name="очистка stale-приложений",
+                    last_run_attr="last_cleanup_stale",
+                    interval=Config.POLLING_INTERVAL,
+                    task_method=self._cleanup_stale_applications,
+                    is_async=False
+                )
+
+                # Проверка каждую секунду для быстрого реагирования на stop_event
+                time.sleep(1)
+
         except Exception as e:
             logger.error(f"Критическая ошибка в цикле мониторинга: {str(e)}")
             import traceback
@@ -113,6 +178,12 @@ class MonitoringTasks:
             if self.loop and not self.loop.is_closed():
                 self.loop.close()
             logger.info("Цикл мониторинга завершен")
+
+    def _cleanup_old_tasks(self):
+        """Очистка старых задач в очереди."""
+        from app.tasks.queue import task_queue
+        from app.config import Config
+        task_queue.clear_completed_tasks(days_old=Config.CLEAN_TASKS_OLDER_THAN)
     
     async def _poll_servers(self):
         """Опрос всех серверов"""
@@ -267,6 +338,99 @@ class MonitoringTasks:
             from app import db
             db.session.rollback()
             logger.error(f"Ошибка при очистке старых событий: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def _cleanup_stale_applications(self):
+        """
+        Обрабатывает приложения в статусе offline:
+        1. День 4: назначает тег 'pending_removal'
+        2. День 7: устанавливает deleted_at (soft delete) + Event
+        3. День 37: физическое удаление из БД (hard delete)
+        """
+        try:
+            from app import db
+            from app.models.application_instance import ApplicationInstance
+            from app.models.event import Event
+            from app.services.system_tags import SystemTagsService
+            from app.config import Config
+
+            now = datetime.utcnow()
+            warning_threshold = now - timedelta(
+                days=Config.APP_OFFLINE_REMOVAL_DAYS - Config.APP_OFFLINE_WARNING_DAYS_BEFORE
+            )
+            removal_threshold = now - timedelta(days=Config.APP_OFFLINE_REMOVAL_DAYS)
+            hard_delete_threshold = now - timedelta(
+                days=Config.APP_OFFLINE_REMOVAL_DAYS + Config.APP_HARD_DELETE_DAYS
+            )
+
+            protected_tags = set(Config.APP_REMOVAL_PROTECTED_TAGS)
+
+            def is_protected(app):
+                """Проверка защиты тегами ver.lock/status.lock/disable"""
+                app_tags = set(app.tags_cache.split(',')) if app.tags_cache else set()
+                return bool(app_tags & protected_tags)
+
+            # 1. Предупреждение (тег pending_removal на 4-й день)
+            apps_to_warn = ApplicationInstance.query.filter(
+                ApplicationInstance.status == 'offline',
+                ApplicationInstance.deleted_at.is_(None),
+                ApplicationInstance.last_seen <= warning_threshold,
+                ApplicationInstance.last_seen > removal_threshold
+            ).all()
+
+            warned_count = 0
+            for app in apps_to_warn:
+                if not is_protected(app):
+                    SystemTagsService.assign_tag(app.id, 'pending_removal')
+                    warned_count += 1
+
+            # 2. Soft delete (deleted_at на 7-й день)
+            apps_to_remove = ApplicationInstance.query.filter(
+                ApplicationInstance.status == 'offline',
+                ApplicationInstance.deleted_at.is_(None),
+                ApplicationInstance.last_seen <= removal_threshold
+            ).all()
+
+            removed_count = 0
+            for app in apps_to_remove:
+                if not is_protected(app):
+                    app.deleted_at = now
+                    SystemTagsService.remove_tag(app.id, 'pending_removal')
+                    # Event аудит
+                    event = Event(
+                        instance_id=app.id,
+                        server_id=app.server_id,
+                        event_type='auto_removed',
+                        status='success',
+                        details=f'Auto-removed after {Config.APP_OFFLINE_REMOVAL_DAYS} days offline'
+                    )
+                    db.session.add(event)
+                    removed_count += 1
+
+            # 3. Hard delete (физическое удаление через +30 дней после soft delete)
+            apps_to_hard_delete = ApplicationInstance.query.filter(
+                ApplicationInstance.deleted_at.isnot(None),
+                ApplicationInstance.deleted_at <= hard_delete_threshold
+            ).all()
+
+            hard_deleted_count = 0
+            for app in apps_to_hard_delete:
+                db.session.delete(app)
+                hard_deleted_count += 1
+
+            db.session.commit()
+
+            if warned_count or removed_count or hard_deleted_count:
+                logger.info(
+                    f"Stale apps cleanup: {warned_count} warned, "
+                    f"{removed_count} soft-deleted, {hard_deleted_count} hard-deleted"
+                )
+
+        except Exception as e:
+            from app import db
+            db.session.rollback()
+            logger.error(f"Ошибка при очистке stale-приложений: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
 

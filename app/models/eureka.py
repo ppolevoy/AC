@@ -1,6 +1,7 @@
 # app/models/eureka.py
 from app import db
 from datetime import datetime
+from app.utils import format_datetime_utc
 
 
 class EurekaServer(db.Model):
@@ -77,12 +78,12 @@ class EurekaServer(db.Model):
             'eureka_host': self.eureka_host,
             'eureka_port': self.eureka_port,
             'is_active': self.is_active,
-            'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'last_sync': format_datetime_utc(self.last_sync),
             'last_error': self.last_error,
             'consecutive_failures': self.consecutive_failures or 0,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'removed_at': self.removed_at.isoformat() if self.removed_at else None,
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at),
+            'removed_at': format_datetime_utc(self.removed_at),
             'is_removed': self.is_removed(),
             'applications_count': apps_count,
             'instances_count': instances_count
@@ -167,12 +168,12 @@ class EurekaApplication(db.Model):
             'instances_up': self.instances_up,
             'instances_down': self.instances_down,
             'instances_paused': self.instances_paused,
-            'last_sync': self.last_sync.isoformat() if self.last_sync else None,
+            'last_sync': format_datetime_utc(self.last_sync),
             'last_fetch_status': self.last_fetch_status,
             'last_fetch_error': self.last_fetch_error,
-            'last_fetch_at': self.last_fetch_at.isoformat() if self.last_fetch_at else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'last_fetch_at': format_datetime_utc(self.last_fetch_at),
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at)
         }
 
         if include_instances:
@@ -305,7 +306,7 @@ class EurekaInstance(db.Model):
             'port': self.port,
             'service_name': self.service_name,
             'status': self.status,
-            'last_heartbeat': self.last_heartbeat.isoformat() if self.last_heartbeat else None,
+            'last_heartbeat': format_datetime_utc(self.last_heartbeat),
             'metadata': self.instance_metadata,
             'health_check_url': self.health_check_url,
             'home_page_url': self.home_page_url,
@@ -313,12 +314,12 @@ class EurekaInstance(db.Model):
             'application_id': application_id,
             'is_manual_mapping': is_manual_mapping,
             'mapped_by': mapped_by,
-            'mapped_at': mapped_at.isoformat() if mapped_at else None,
+            'mapped_at': format_datetime_utc(mapped_at),
             'mapping_notes': mapping_notes,
-            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'removed_at': self.removed_at.isoformat() if self.removed_at else None,
+            'last_seen': format_datetime_utc(self.last_seen),
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at),
+            'removed_at': format_datetime_utc(self.removed_at),
             'is_removed': self.is_removed()
         }
 
@@ -330,7 +331,7 @@ class EurekaInstance(db.Model):
                 'eureka_server_id': self.eureka_application.eureka_server_id,
                 'last_fetch_status': self.eureka_application.last_fetch_status,
                 'last_fetch_error': self.eureka_application.last_fetch_error,
-                'last_fetch_at': self.eureka_application.last_fetch_at.isoformat() if self.eureka_application.last_fetch_at else None
+                'last_fetch_at': format_datetime_utc(self.eureka_application.last_fetch_at)
             }
 
         # Include mapped AC Application if exists
@@ -387,7 +388,7 @@ class EurekaInstanceStatusHistory(db.Model):
             'old_status': self.old_status,
             'new_status': self.new_status,
             'reason': self.reason,
-            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'changed_at': format_datetime_utc(self.changed_at),
             'changed_by': self.changed_by
         }
 
@@ -452,8 +453,8 @@ class EurekaInstanceAction(db.Model):
             'result': self.result,
             'error_message': self.error_message,
             'user_id': self.user_id,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'started_at': format_datetime_utc(self.started_at),
+            'completed_at': format_datetime_utc(self.completed_at)
         }
 
     def __repr__(self):

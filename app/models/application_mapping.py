@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from app import db
+from app.utils import format_datetime_utc
 
 
 class MappingType(str, Enum):
@@ -60,12 +61,12 @@ class ApplicationMapping(db.Model):
             'entity_id': self.entity_id,
             'is_manual': self.is_manual,
             'mapped_by': self.mapped_by,
-            'mapped_at': self.mapped_at.isoformat() if self.mapped_at else None,
+            'mapped_at': format_datetime_utc(self.mapped_at),
             'notes': self.notes,
             'is_active': self.is_active,
             'metadata': self.mapping_metadata,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at)
         }
 
         if include_application and self.application:
@@ -126,7 +127,7 @@ class ApplicationMappingHistory(db.Model):
             'old_values': self.old_values,
             'new_values': self.new_values,
             'changed_by': self.changed_by,
-            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'changed_at': format_datetime_utc(self.changed_at),
             'reason': self.reason
         }
 

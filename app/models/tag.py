@@ -4,6 +4,7 @@
 from app import db
 from datetime import datetime
 from sqlalchemy import event
+from app.utils import format_datetime_utc
 
 
 class Tag(db.Model):
@@ -59,7 +60,7 @@ class Tag(db.Model):
             'text_color': self.text_color,
             'is_system': self.is_system,
             'show_in_table': self.show_in_table,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': format_datetime_utc(self.created_at)
         }
 
         # usage_count только если запрошен (дорогая операция)

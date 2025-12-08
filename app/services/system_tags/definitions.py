@@ -157,6 +157,17 @@ def _register_system_tags():
             border_color='#ffc107',
             text_color='#856404'
         ),
+
+        # === Автоматические теги мониторинга ===
+        'pending_removal': SystemTagDefinition(
+            name='pending_removal',
+            display_name='DEL',
+            description='Приложение будет удалено (offline > N дней)',
+            trigger_type=TriggerType.MANUAL,  # Назначается автоматически из monitoring
+            show_in_table=True,
+            border_color='#dc3545',
+            text_color='#dc3545'
+        ),
     }
 
 

@@ -3,6 +3,7 @@
 
 from app import db
 from datetime import datetime
+from app.utils import format_datetime_utc
 
 
 class ApplicationVersionHistory(db.Model):
@@ -72,7 +73,7 @@ class ApplicationVersionHistory(db.Model):
             'new_tag': self.new_tag,
             'old_image': self.old_image,
             'new_image': self.new_image,
-            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'changed_at': format_datetime_utc(self.changed_at),
             'changed_by': self.changed_by,
             'change_source': self.change_source,
             'task_id': self.task_id,

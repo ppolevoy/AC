@@ -1,6 +1,7 @@
 # app/models/haproxy.py
 from app import db
 from datetime import datetime
+from app.utils import format_datetime_utc
 
 
 class HAProxyInstance(db.Model):
@@ -59,12 +60,12 @@ class HAProxyInstance(db.Model):
             'server_name': self.server.name if self.server else None,
             'is_active': self.is_active,
             'socket_path': self.socket_path,
-            'last_sync': self.last_sync.isoformat() if self.last_sync else None,
-            'last_sync_at': self.last_sync.isoformat() if self.last_sync else None,  # Alias for frontend
+            'last_sync': format_datetime_utc(self.last_sync),
+            'last_sync_at': format_datetime_utc(self.last_sync),  # Alias for frontend
             'last_sync_status': self.last_sync_status,
             'last_sync_error': self.last_sync_error,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at),
             'backends_count': backends_count
         }
 
@@ -146,9 +147,9 @@ class HAProxyBackend(db.Model):
             'enable_polling': self.enable_polling,
             'last_fetch_status': self.last_fetch_status,
             'last_fetch_error': self.last_fetch_error,
-            'last_fetch_at': self.last_fetch_at.isoformat() if self.last_fetch_at else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'removed_at': self.removed_at.isoformat() if self.removed_at else None,
+            'last_fetch_at': format_datetime_utc(self.last_fetch_at),
+            'created_at': format_datetime_utc(self.created_at),
+            'removed_at': format_datetime_utc(self.removed_at),
             'is_removed': self.is_removed(),
             'servers_count': servers_count
         }
@@ -292,11 +293,11 @@ class HAProxyServer(db.Model):
             'application_id': application_id,
             'is_manual_mapping': is_manual_mapping,
             'mapped_by': mapped_by,
-            'mapped_at': mapped_at.isoformat() if mapped_at else None,
+            'mapped_at': format_datetime_utc(mapped_at),
             'mapping_notes': mapping_notes,
-            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'removed_at': self.removed_at.isoformat() if self.removed_at else None,
+            'last_seen': format_datetime_utc(self.last_seen),
+            'created_at': format_datetime_utc(self.created_at),
+            'removed_at': format_datetime_utc(self.removed_at),
             'is_removed': self.is_removed()
         }
 
@@ -350,7 +351,7 @@ class HAProxyServerStatusHistory(db.Model):
             'haproxy_server_id': self.haproxy_server_id,
             'old_status': self.old_status,
             'new_status': self.new_status,
-            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'changed_at': format_datetime_utc(self.changed_at),
             'change_reason': self.change_reason
         }
 
@@ -393,7 +394,7 @@ class HAProxyMappingHistory(db.Model):
             'haproxy_server_id': self.haproxy_server_id,
             'old_application_id': self.old_application_id,
             'new_application_id': self.new_application_id,
-            'changed_at': self.changed_at.isoformat() if self.changed_at else None,
+            'changed_at': format_datetime_utc(self.changed_at),
             'change_reason': self.change_reason,
             'mapped_by': self.mapped_by,
             'notes': self.notes

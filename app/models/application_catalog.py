@@ -2,6 +2,7 @@
 from app import db
 from datetime import datetime
 from sqlalchemy import event
+from app.utils import format_datetime_utc
 
 class ApplicationCatalog(db.Model):
     """
@@ -61,8 +62,8 @@ class ApplicationCatalog(db.Model):
             'default_playbook_path': self.default_playbook_path,
             'default_artifact_url': self.default_artifact_url,
             'default_artifact_extension': self.default_artifact_extension,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at)
         }
 
         if include_stats:

@@ -5,6 +5,7 @@
 from app import db
 from datetime import datetime
 from sqlalchemy import event
+from app.utils import format_datetime_utc
 import re
 
 class ApplicationInstance(db.Model):
@@ -317,15 +318,15 @@ class ApplicationInstance(db.Model):
             'ip': self.ip,
             'port': self.port,
             'pid': self.pid,
-            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'start_time': format_datetime_utc(self.start_time),
             'server_id': self.server_id,
             'server_name': self.server.name if self.server else None,
             'catalog_id': self.catalog_id,
             'catalog_name': self.catalog.name if self.catalog else None,
             'group_id': self.group_id,
-            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'last_seen': format_datetime_utc(self.last_seen),
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at)
         }
 
         if include_group and self.group:

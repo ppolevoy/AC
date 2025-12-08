@@ -111,6 +111,8 @@
 .apps-header .apps-col.sortable {
     cursor: pointer;
     white-space: nowrap;
+    flex-direction: row;
+    align-items: center;
 }
 
 .apps-header .apps-col.sortable:hover {

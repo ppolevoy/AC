@@ -1,6 +1,7 @@
 # app/models/orchestrator_playbook.py
 from app import db
 from datetime import datetime
+from app.utils import format_datetime_utc
 
 class OrchestratorPlaybook(db.Model):
     __tablename__ = 'orchestrator_playbooks'
@@ -38,5 +39,5 @@ class OrchestratorPlaybook(db.Model):
             'required_params': self.required_params or {},
             'optional_params': self.optional_params or {},
             'is_active': self.is_active,
-            'last_scanned': self.last_scanned.isoformat() if self.last_scanned else None
+            'last_scanned': format_datetime_utc(self.last_scanned)
         }

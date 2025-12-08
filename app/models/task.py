@@ -5,6 +5,7 @@
 """
 from app import db
 from datetime import datetime
+from app.utils import format_datetime_utc
 
 
 class Task(db.Model):
@@ -81,9 +82,9 @@ class Task(db.Model):
             'server_id': self.server_id,
             'instance_id': self.instance_id,
             'application_id': self.instance_id,  # обратная совместимость
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_at': format_datetime_utc(self.created_at),
+            'started_at': format_datetime_utc(self.started_at),
+            'completed_at': format_datetime_utc(self.completed_at),
             'result': self.result,
             'error': self.error,
             'progress': self.progress or {},

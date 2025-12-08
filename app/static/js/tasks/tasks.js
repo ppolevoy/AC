@@ -368,9 +368,9 @@ document.addEventListener('DOMContentLoaded', function() {
 					title: 'Временные метки',
 					type: 'table',
 					rows: [
-						{ label: 'Создана:', value: task.created_at ? formatDate(new Date(task.created_at)) : '-' },
-						{ label: 'Начата:', value: task.started_at ? formatDate(new Date(task.started_at)) : '-' },
-						{ label: 'Завершена:', value: task.completed_at ? formatDate(new Date(task.completed_at)) : '-' }
+						{ label: 'Создана:', value: formatDateTimeLocal(task.created_at) },
+						{ label: 'Начата:', value: formatDateTimeLocal(task.started_at) },
+						{ label: 'Завершена:', value: formatDateTimeLocal(task.completed_at) }
 					]
 				}
 			];

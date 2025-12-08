@@ -1531,24 +1531,24 @@
 
         initSorting() {
             // Обработчики сортировки по клику на заголовки
-            document.querySelectorAll('th.sortable').forEach(th => {
-                th.addEventListener('click', function() {
+            document.querySelectorAll('.apps-header .apps-col.sortable').forEach(col => {
+                col.addEventListener('click', function() {
                     const currentSortColumn = StateManager.state.sortColumn;
                     StateManager.state.sortColumn = this.getAttribute('data-sort');
-                    
+
                     if (currentSortColumn === StateManager.state.sortColumn) {
                         StateManager.state.sortDirection = StateManager.state.sortDirection === 'asc' ? 'desc' : 'asc';
                     } else {
                         StateManager.state.sortDirection = 'asc';
                     }
-                    
+
                     // Обновляем классы для отображения направления
-                    document.querySelectorAll('th.sortable').forEach(header => {
+                    document.querySelectorAll('.apps-header .apps-col.sortable').forEach(header => {
                         header.classList.remove('sorted-asc', 'sorted-desc');
                     });
-                    
+
                     this.classList.add(`sorted-${StateManager.state.sortDirection}`);
-                    
+
                     EventHandlers.filterAndDisplayApplications();
                 });
             });

@@ -26,6 +26,25 @@ def _sync_system_tags(instance):
     except Exception as e:
         logger.warning(f"Failed to sync system tags for {instance.instance_name}: {e}")
 
+
+def _restore_if_recovered(instance):
+    """
+    Восстанавливает приложение, если оно снова появилось после пометки на удаление.
+    Снимает тег pending_removal и сбрасывает deleted_at.
+    """
+    try:
+        if instance.status != 'offline':
+            # Снимаем тег pending_removal если был
+            from app.services.system_tags import SystemTagsService
+            SystemTagsService.remove_tag(instance.id, 'pending_removal')
+
+            # Восстанавливаем если было помечено на удаление
+            if instance.deleted_at:
+                logger.info(f"Восстановление приложения {instance.instance_name} (было помечено на удаление)")
+                instance.deleted_at = None
+    except Exception as e:
+        logger.warning(f"Failed to restore {instance.instance_name}: {e}")
+
 # Разрешённые статусы для ApplicationInstance (соответствуют CHECK constraint в БД)
 ALLOWED_STATUSES = {'online', 'offline', 'unknown', 'starting', 'stopping', 'no_data'}
 
@@ -469,6 +488,9 @@ class AgentService:
                     # Синхронизация системных тегов (docker tag)
                     _sync_system_tags(instance)
 
+                    # Восстановление приложения, если оно вернулось после пометки на удаление
+                    _restore_if_recovered(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
 
@@ -534,6 +556,9 @@ class AgentService:
                     # Синхронизация системных тегов
                     _sync_system_tags(instance)
 
+                    # Восстановление приложения, если оно вернулось после пометки на удаление
+                    _restore_if_recovered(instance)
+
                     if instance.id:
                         updated_app_ids.add(instance.id)
 
@@ -598,6 +623,9 @@ class AgentService:
 
                     # Синхронизация системных тегов
                     _sync_system_tags(instance)
+
+                    # Восстановление приложения, если оно вернулось после пометки на удаление
+                    _restore_if_recovered(instance)
 
                     if instance.id:
                         updated_app_ids.add(instance.id)

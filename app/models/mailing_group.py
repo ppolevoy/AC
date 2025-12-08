@@ -4,6 +4,7 @@
 from app import db
 from datetime import datetime
 from typing import List
+from app.utils import format_datetime_utc
 import re
 
 
@@ -80,8 +81,8 @@ class MailingGroup(db.Model):
             'emails_list': self.get_emails_list(),
             'emails_count': self.emails_count,
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': format_datetime_utc(self.created_at),
+            'updated_at': format_datetime_utc(self.updated_at)
         }
 
     @classmethod
