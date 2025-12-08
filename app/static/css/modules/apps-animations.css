@@ -88,7 +88,7 @@
     transform: translateY(-50%);
     background: none;
     border: none;
-    color: #999;
+    color: var(--text-disabled);
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
@@ -104,8 +104,8 @@
 
 .tab-remove-btn:hover {
     opacity: 1;
-    background-color: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
+    background-color: var(--color-danger-light);
+    color: var(--color-danger);
 }
 
 .modal-tab:hover .tab-remove-btn {
@@ -115,7 +115,7 @@
 .no-groups-message {
     text-align: center;
     padding: 40px;
-    color: #999;
+    color: var(--text-disabled);
     font-size: 16px;
 }
 
@@ -126,21 +126,21 @@
 #immediate-mode-fields {
     margin-top: 15px;
     padding: 15px;
-    background-color: rgba(52, 152, 219, 0.05);
-    border-left: 3px solid #3498db;
+    background-color: var(--color-info-light);
+    border-left: 3px solid var(--color-info);
     border-radius: 4px;
 }
 
-/* Стиль для select оркестратора - темный фон */
+/* Стиль для select оркестратора */
 #immediate-mode-fields select#orchestrator-playbook {
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    border: 1px solid #34495e;
+    background-color: var(--surface-quaternary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
 }
 
 #immediate-mode-fields select#orchestrator-playbook option {
-    background-color: #2c3e50;
-    color: #ecf0f1;
+    background-color: var(--surface-quaternary);
+    color: var(--text-primary);
 }
 
 /* ===========================================
@@ -170,7 +170,7 @@
 }
 
 .unit-label {
-    color: #666;
+    color: var(--text-disabled);
     font-size: 14px;
 }
 
@@ -186,7 +186,7 @@
 }
 
 .quick-time-link {
-    color: #3498db;
+    color: var(--color-info);
     text-decoration: none;
     font-size: 14px;
     font-weight: 500;
@@ -196,12 +196,12 @@
 }
 
 .quick-time-link:hover {
-    color: #2980b9;
+    color: var(--color-info-dark);
     text-decoration: underline;
 }
 
 .quick-time-link.active {
-    color: #27ae60;
+    color: var(--color-success);
     font-weight: 600;
 }
 
@@ -213,6 +213,6 @@
     display: block;
     margin-top: 8px;
     font-size: 12px;
-    color: #7f8c8d;
+    color: var(--text-muted);
     font-style: italic;
 }

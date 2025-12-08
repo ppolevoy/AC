@@ -592,30 +592,21 @@
     }
 
     .settings-panel {
-        background-color: #2a2a2b;
+        background-color: var(--surface-overlay);
         border-radius: 8px;
         padding: 20px;
-        border: 1px solid #333336;
-    }
-
-    body.light-theme .settings-panel {
-        background-color: #f9f9f9;
-        border: 1px solid #eee;
+        border: 1px solid var(--border-default);
     }
 
     .panel-title {
         margin-bottom: 15px;
-        color: #5ca5e1;
+        color: var(--color-primary);
         font-size: 18px;
         font-weight: 600;
     }
 
     .panel-content {
-        color: #ebe4da;
-    }
-
-    body.light-theme .panel-content {
-        color: #333;
+        color: var(--text-primary);
     }
 
     .settings-section {
@@ -628,26 +619,17 @@
 
     .settings-section h4 {
         margin-bottom: 15px;
-        color: #aaa;
+        color: var(--text-secondary);
         font-size: 16px;
         font-weight: 500;
     }
 
-    body.light-theme .settings-section h4 {
-        color: #666;
-    }
-
     /* SSH Status Compact Styles */
     .ssh-status-compact {
-        border: 1px solid #333336;
+        border: 1px solid var(--border-default);
         border-radius: 6px;
         overflow: hidden;
-        background-color: #252528;
-    }
-
-    body.light-theme .ssh-status-compact {
-        border: 1px solid #ddd;
-        background-color: #f5f5f5;
+        background-color: var(--surface-raised);
     }
 
     .status-line {
@@ -659,20 +641,12 @@
     }
 
     .status-line:hover {
-        background-color: #2e2e30;
-    }
-
-    body.light-theme .status-line:hover {
-        background-color: #f0f0f0;
+        background-color: var(--surface-overlay);
     }
 
     .status-label {
         font-weight: 500;
-        color: #ebe4da;
-    }
-
-    body.light-theme .status-label {
-        color: #333;
+        color: var(--text-primary);
     }
 
     .status-spacer {
@@ -690,28 +664,24 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background-color: #e74c3c;
+        background-color: var(--color-danger);
     }
 
     .status-dot.connected {
-        background-color: #2ecc71;
+        background-color: var(--color-success);
     }
 
     .status-dot.loading {
-        background-color: #f39c12;
+        background-color: var(--color-warning);
     }
 
     .status-text {
         font-size: 14px;
-        color: #aaa;
-    }
-
-    body.light-theme .status-text {
-        color: #666;
+        color: var(--text-secondary);
     }
 
     .expand-arrow {
-        color: #666;
+        color: var(--text-disabled);
         font-size: 12px;
         transition: transform 0.3s;
         user-select: none;
@@ -723,12 +693,9 @@
 
     /* SSH Details Styles */
     .ssh-details {
-        border-top: 1px solid #333336;
+        border-top: 1px solid var(--border-default);
         animation: slideDown 0.3s ease-out;
     }
-
-    body.light-theme .ssh-details {
-        border-top: 1px solid #ddd;
 
     .playbooks-simple-list {
         display: flex;
@@ -741,23 +708,14 @@
         align-items: center;
         gap: 10px;
         padding: 8px 12px;
-        background-color: #333336;
+        background-color: var(--surface-quaternary);
         border-radius: 4px;
-        border: 1px solid #444;
+        border: 1px solid var(--border-subtle);
         transition: background-color 0.2s;
     }
 
-    body.light-theme .playbook-item-simple {
-        background-color: #f5f5f5;
-        border: 1px solid #ddd;
-    }
-
     .playbook-item-simple:hover {
-        background-color: #3a3a3d;
-    }
-
-    body.light-theme .playbook-item-simple:hover {
-        background-color: #ebebeb;
+        background-color: var(--interactive-hover);
     }
 
     .playbook-icon {
@@ -768,17 +726,12 @@
     .playbook-name {
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 14px;
-        color: #ebe4da;
-    }
-
-    body.light-theme .playbook-name {
-        color: #333;
+        color: var(--text-primary);
     }
 
     /* Убираем старые стили со статусом, если они конфликтуют */
     .playbook-status {
         display: none;
-    }
     }
 
     @keyframes slideDown {
@@ -806,7 +759,7 @@
 
     .detail-section h5 {
         margin-bottom: 10px;
-        color: #5ca5e1;
+        color: var(--color-primary);
         font-size: 14px;
         font-weight: 500;
     }
@@ -815,13 +768,9 @@
         display: grid;
         grid-template-columns: 1fr 2fr;
         gap: 10px;
-        background-color: #333336;
+        background-color: var(--surface-quaternary);
         padding: 15px;
         border-radius: 4px;
-    }
-
-    body.light-theme .config-details {
-        background-color: #f0f0f0;
     }
 
     .config-item {
@@ -832,20 +781,12 @@
     }
 
     .config-label {
-        color: #aaa;
-    }
-
-    body.light-theme .config-label {
-        color: #666;
+        color: var(--text-secondary);
     }
 
     .config-value {
         font-family: monospace;
-        color: #ebe4da;
-    }
-
-    body.light-theme .config-value {
-        color: #333;
+        color: var(--text-primary);
     }
 
     .key-details {
@@ -859,21 +800,13 @@
         justify-content: space-between;
         align-items: center;
         padding: 8px 12px;
-        background-color: #333336;
+        background-color: var(--surface-quaternary);
         border-radius: 4px;
         font-size: 14px;
     }
 
-    body.light-theme .key-status-item {
-        background-color: #f0f0f0;
-    }
-
     .key-status-label {
-        color: #aaa;
-    }
-
-    body.light-theme .key-status-label {
-        color: #666;
+        color: var(--text-secondary);
     }
 
     .key-status-value {
@@ -883,13 +816,9 @@
     }
 
     .playbooks-list {
-        background-color: #333336;
+        background-color: var(--surface-quaternary);
         border-radius: 4px;
         padding: 15px;
-    }
-
-    body.light-theme .playbooks-list {
-        background-color: #f0f0f0;
     }
 
     .playbook-item {
@@ -897,12 +826,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 8px 0;
-        border-bottom: 1px solid #444;
+        border-bottom: 1px solid var(--border-subtle);
         font-size: 14px;
-    }
-
-    body.light-theme .playbook-item {
-        border-bottom: 1px solid #ddd;
     }
 
     .playbook-item:last-child {
@@ -911,22 +836,18 @@
 
     .playbook-name {
         font-family: monospace;
-        color: #ebe4da;
-    }
-
-    body.light-theme .playbook-name {
-        color: #333;
+        color: var(--text-primary);
     }
 
     .playbook-path {
-        color: #666;
+        color: var(--text-disabled);
         font-size: 12px;
     }
 
     .info-loading {
         text-align: center;
         padding: 15px;
-        color: #666;
+        color: var(--text-disabled);
         font-style: italic;
     }
 
@@ -936,7 +857,7 @@
     }
 
     .action-btn {
-        background-color: #5ca5e1;
+        background-color: var(--color-primary);
         color: white;
         border: none;
         border-radius: 4px;
@@ -948,11 +869,11 @@
     }
 
     .action-btn:hover {
-        background-color: #4b8ec9;
+        background-color: var(--color-primary-hover);
     }
 
     .action-btn:disabled {
-        background-color: #666;
+        background-color: var(--text-disabled);
         cursor: not-allowed;
     }
 
