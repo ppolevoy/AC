@@ -327,11 +327,11 @@
         updateSelectAllState() {
             const selectAllCheckbox = document.getElementById('select-all');
             if (!selectAllCheckbox) return;
-            
+
             // Используем контекст таблицы вместо всего документа
             const allCheckboxes = DOMUtils.querySelectorInTable('.app-checkbox');
             const checkedCheckboxes = DOMUtils.querySelectorInTable('.app-checkbox:checked');
-            
+
             if (checkedCheckboxes.length === 0) {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
@@ -342,7 +342,62 @@
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = true;
             }
-        }     
+        },
+
+        /**
+         * Обновляет счётчики в карточках статуса
+         */
+        updateStatusCards() {
+            const apps = StateManager.state.allApplications;
+
+            // Подсчитываем статистику
+            const stats = {
+                total: apps.length,
+                online: 0,
+                offline: 0,
+                disabled: 0,
+                candidates: 0
+            };
+
+            apps.forEach(app => {
+                const status = app.status?.toLowerCase();
+                const tags = app.tags || [];
+                const hasDisableTag = tags.some(t => t.name === 'disable' || t.name === 'disabled');
+                const hasCandidateTag = tags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
+
+                if (hasCandidateTag) {
+                    stats.candidates++;
+                } else if (hasDisableTag) {
+                    stats.disabled++;
+                } else if (status === 'online' || status === 'running') {
+                    stats.online++;
+                } else if (status === 'offline' || status === 'stopped' || status === 'error') {
+                    stats.offline++;
+                }
+            });
+
+            // Обновляем DOM
+            const elements = {
+                total: document.getElementById('status-total'),
+                online: document.getElementById('status-online'),
+                offline: document.getElementById('status-offline'),
+                disabled: document.getElementById('status-disabled'),
+                candidates: document.getElementById('status-candidates')
+            };
+
+            Object.entries(elements).forEach(([key, el]) => {
+                if (el) {
+                    el.textContent = stats[key];
+                }
+            });
+
+            // Обновляем активную карточку
+            const activeFilter = StateManager.state.statusFilter;
+            document.querySelectorAll('.status-card').forEach(card => {
+                const filter = card.dataset.filter;
+                card.classList.toggle('active', filter === activeFilter);
+            });
+        }
     };
 
     // ========================================
@@ -1375,6 +1430,7 @@
             this.initTableActions();
             this.initRefreshButton();
             this.initTagFilter();
+            this.initStatusCards();
         },
 
         initRefreshButton() {
@@ -1384,6 +1440,40 @@
                     EventHandlers.loadApplications();
                 });
             }
+        },
+
+        /**
+         * Инициализация карточек статуса
+         */
+        initStatusCards() {
+            const statusCards = document.getElementById('status-cards');
+            if (!statusCards) return;
+
+            statusCards.addEventListener('click', (e) => {
+                const card = e.target.closest('.status-card');
+                if (!card) return;
+
+                const filter = card.dataset.filter;
+                if (!filter) return;
+
+                // Устанавливаем фильтр (toggle если уже активен)
+                if (StateManager.state.statusFilter === filter) {
+                    StateManager.state.statusFilter = 'all';
+                } else {
+                    StateManager.state.statusFilter = filter;
+                }
+
+                // Сбрасываем на первую страницу
+                StateManager.state.currentPage = 1;
+
+                // Обновляем активную карточку
+                statusCards.querySelectorAll('.status-card').forEach(c => {
+                    c.classList.toggle('active', c.dataset.filter === StateManager.state.statusFilter);
+                });
+
+                // Применяем фильтр
+                this.filterAndDisplayApplications();
+            });
         },
 
         async initTagFilter() {
@@ -1741,6 +1831,30 @@
         getFilteredApplications() {
             let filtered = [...StateManager.state.allApplications];
 
+            // Применяем фильтр по статусу (из карточек)
+            const statusFilter = StateManager.state.statusFilter;
+            if (statusFilter && statusFilter !== 'all') {
+                filtered = filtered.filter(app => {
+                    const status = app.status?.toLowerCase();
+                    const tags = app.tags || [];
+                    const hasDisableTag = tags.some(t => t.name === 'disable' || t.name === 'disabled');
+                    const hasCandidateTag = tags.some(t => t.name === 'candidate' || t.name === 'to_delete' || t.name === 'к удалению');
+
+                    switch (statusFilter) {
+                        case 'online':
+                            return (status === 'online' || status === 'running') && !hasDisableTag && !hasCandidateTag;
+                        case 'offline':
+                            return (status === 'offline' || status === 'stopped' || status === 'error') && !hasDisableTag && !hasCandidateTag;
+                        case 'disabled':
+                            return hasDisableTag && !hasCandidateTag;
+                        case 'candidates':
+                            return hasCandidateTag;
+                        default:
+                            return true;
+                    }
+                });
+            }
+
             // Применяем поиск
             if (StateManager.state.searchQuery) {
                 filtered = filtered.filter(app =>
@@ -1854,10 +1968,13 @@
             if (listBody) {
                 listBody.innerHTML = '<div class="apps-list-loading">Загрузка приложений...</div>';
             }
-            
+
             const applications = await ApiService.loadApplications(StateManager.state.selectedServerId);
             StateManager.state.allApplications = applications;
-            
+
+            // Обновляем карточки статуса
+            UIRenderer.updateStatusCards();
+
             this.filterAndDisplayApplications();
         },
 

@@ -12,15 +12,48 @@
 
 {% block content %}
 <div class="cluster-info">
-    <div class="server-dropdown">
-        <button class="dropdown-button" id="server-selected">Выберите сервер <span>▾</span></button>
-        <div class="dropdown-content" id="server-list">
-            <a href="#" data-server-id="all">Все серверы</a>
-            <!-- Список серверов будет загружен динамически -->
+    <div class="apps-header-row">
+        <div class="server-dropdown">
+            <button class="dropdown-button" id="server-selected">Выберите сервер <span>▾</span></button>
+            <div class="dropdown-content" id="server-list">
+                <a href="#" data-server-id="all">Все серверы</a>
+                <!-- Список серверов будет загружен динамически -->
+            </div>
+        </div>
+
+        <div class="status-cards" id="status-cards">
+            <div class="status-card total" data-filter="all" title="Показать все приложения">
+                <div class="status-info">
+                    <span class="status-value" id="status-total">0</span>
+                    <span class="status-label">Всего</span>
+                </div>
+            </div>
+            <div class="status-card online" data-filter="online" title="Показать онлайн">
+                <div class="status-info">
+                    <span class="status-value" id="status-online">0</span>
+                    <span class="status-label">Онлайн</span>
+                </div>
+            </div>
+            <div class="status-card offline" data-filter="offline" title="Показать офлайн">
+                <div class="status-info">
+                    <span class="status-value" id="status-offline">0</span>
+                    <span class="status-label">Офлайн</span>
+                </div>
+            </div>
+            <div class="status-card disabled" data-filter="disabled" title="Показать отключённые">
+                <div class="status-info">
+                    <span class="status-value" id="status-disabled">0</span>
+                    <span class="status-label">Отключены</span>
+                </div>
+            </div>
+            <div class="status-card candidates" data-filter="candidates" title="Показать кандидатов на удаление">
+                <div class="status-info">
+                    <span class="status-value" id="status-candidates">0</span>
+                    <span class="status-label">К удалению</span>
+                </div>
+            </div>
         </div>
     </div>
-    
-    <hr>
     
 <div class="search-container">
     <div class="search-bar">

@@ -32,7 +32,8 @@
             groupingEnabled: false,
             selectedTags: [],
             tagOperator: 'OR',
-            availableTags: []
+            availableTags: [],
+            statusFilter: 'all' // Фильтр по статусу: all, online, offline, disabled, candidates
         },
 
         // Кэш артефактов
