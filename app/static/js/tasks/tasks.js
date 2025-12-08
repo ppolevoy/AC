@@ -181,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // can_cancel = true для pending задач и для processing задач с PID
             const canCancel = task.can_cancel;
             const cancelBtn = canCancel
-                ? `<button class="task-action-btn cancel-task-btn" data-task-id="${task.id}" title="Отменить задачу">×</button>`
+                ? `<button class="task-action-btn cancel-task-btn" data-task-id="${task.id}" title="Отменить задачу">✖</button>`
                 : '';
 
             // Форматируем текущий этап для processing задач

@@ -99,6 +99,19 @@
     white-space: normal;
 }
 
+/* Убираем закругления у строк таблицы, кроме заголовка и последней строки */
+.tasks-container .data-table tbody tr td {
+    border-radius: 0;
+}
+
+.tasks-container .data-table tbody tr:last-child td:first-child {
+    border-bottom-left-radius: var(--radius-lg);
+}
+
+.tasks-container .data-table tbody tr:last-child td:last-child {
+    border-bottom-right-radius: var(--radius-lg);
+}
+
 .data-table .col-created {
     width: 185px;
     max-width: 185px;
@@ -163,29 +176,6 @@
 /* =============================================================================
    5. TASK DETAILS MODAL
    ============================================================================= */
-
-.task-info-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xl);
-}
-
-.task-info-section {
-    background-color: var(--surface-overlay);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-}
-
-.task-info-section h4 {
-    margin-top: 0;
-    margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-md);
-    border-bottom: 1px solid var(--border-default);
-    color: var(--color-primary);
-    font-size: var(--font-size-lg);
-    font-weight: 500;
-}
 
 .task-params {
     background-color: var(--surface-raised);

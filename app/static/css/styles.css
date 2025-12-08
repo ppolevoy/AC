@@ -1411,6 +1411,11 @@ body.light-theme .dropdown-content {
     font-size: var(--font-size-base);
 }
 
+/* Для модалки деталей задачи */
+.app-info-section .info-label {
+    width: 110px !important;
+}
+
 .info-value {
     word-break: break-word;
     overflow-wrap: break-word;
