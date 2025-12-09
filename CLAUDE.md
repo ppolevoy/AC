@@ -6,9 +6,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AC (Application Control)** is a Flask-based application management platform that provides centralized control over distributed applications across multiple servers. It monitors application states, orchestrates updates, and manages deployment workflows through Ansible integration with HAProxy and Eureka service discovery support.
 
+## Deployment Environment
+
+The application runs in a containerized environment:
+
+| Component | Container Name | External Port | Internal Port |
+|-----------|----------------|---------------|---------------|
+| Application | `fak-apps` | 17071 | 5000 |
+| Database | `pg-fak` | - | 5432 |
+
+### Container Commands
+```bash
+# View application logs
+docker logs fak-apps
+
+# Restart application
+docker restart fak-apps
+
+# Access application shell
+docker exec -it fak-apps /bin/bash
+
+# Access database
+docker exec -it pg-fak psql -U <user> -d <database>
+```
+
+### Access URL
+- Local: http://localhost:17071
+- Network: http://<host-ip>:17071
+
 ## Running the Application
 
-### Development
+### Development (outside container)
 ```bash
 # Run the Flask application
 python main.py --config development --debug
@@ -20,7 +48,7 @@ python init-db.py --config development
 python init-db.py --config development --demo
 ```
 
-### Production
+### Production (in container)
 ```bash
 # Run without debug mode
 python main.py --config production --host 0.0.0.0 --port 5000

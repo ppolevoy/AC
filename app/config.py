@@ -43,20 +43,12 @@ class Config:
     LOG_DIR = os.environ.get('LOG_DIR') or 'logs'
     LOG_LEVEL = os.environ.get('LOG_LEVEL') or 'INFO'
     
-    # Пути для шаблонов и статических файлов
-    TEMPLATES_DIR = 'templates'
-    STATIC_DIR = 'static'
-    
     # Настройки для хранения информации о серверах и приложениях
-    MAX_EVENTS_PER_APP = int(os.environ.get('MAX_EVENTS_PER_APP') or 100)
+    # MAX_EVENTS_PER_APP = int(os.environ.get('MAX_EVENTS_PER_APP') or 100)  # NOT USED
     CLEAN_EVENTS_OLDER_THAN = int(os.environ.get('CLEAN_EVENTS_OLDER_THAN') or 30)  # в днях
     CLEAN_TASKS_OLDER_THAN = int(os.environ.get('CLEAN_TASKS_OLDER_THAN') or 365)  # в днях
 
-    # Настройки для группировки приложений
-    APP_GROUP_PATTERN = r'(.+)_(\d+)$'  # Шаблон для определения группы и номера экземпляра
-
     # Настройки Ansible
-    ANSIBLE_DIR = os.environ.get('ANSIBLE_DIR') or '/etc/ansible'
     DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
     APP_CONTROL_PLAYBOOK = os.environ.get('APP_CONTROL_PLAYBOOK') or '/etc/ansible/app_control.yml'
 
@@ -81,20 +73,20 @@ class Config:
 
     # Настройки для Docker
     DOCKER_UPDATE_PLAYBOOK = os.environ.get('DOCKER_UPDATE_PLAYBOOK', '/etc/ansible/docker_update_playbook.yaml')
-    DOCKER_REGISTRY_URL = os.environ.get('DOCKER_REGISTRY_URL', 'nexus.bankplus.ru')
-    DOCKER_REGISTRY_PATH = os.environ.get('DOCKER_REGISTRY_PATH', 'repository/docker-local')
-    
+    # DOCKER_REGISTRY_URL = os.environ.get('DOCKER_REGISTRY_URL', 'nexus.bankplus.ru')  # NOT USED
+    # DOCKER_REGISTRY_PATH = os.environ.get('DOCKER_REGISTRY_PATH', 'repository/docker-local')  # NOT USED
+
     # Настройки для отображения версий
-    MAX_DOCKER_IMAGES_DISPLAY = int(os.environ.get('MAX_DOCKER_IMAGES_DISPLAY', '30'))
-    INCLUDE_DEV_IMAGES = os.environ.get('INCLUDE_DEV_IMAGES', 'false').lower() == 'true'
-    INCLUDE_SNAPSHOT_IMAGES = os.environ.get('INCLUDE_SNAPSHOT_IMAGES', 'false').lower() == 'true'
+    # MAX_DOCKER_IMAGES_DISPLAY = int(os.environ.get('MAX_DOCKER_IMAGES_DISPLAY', '30'))  # NOT USED
+    # INCLUDE_DEV_IMAGES = os.environ.get('INCLUDE_DEV_IMAGES', 'false').lower() == 'true'  # NOT USED
+    # INCLUDE_SNAPSHOT_IMAGES = os.environ.get('INCLUDE_SNAPSHOT_IMAGES', 'false').lower() == 'true'  # NOT USED
 
     # Настройки HAProxy интеграции (Фаза 1: Мониторинг)
     HAPROXY_ENABLED = os.environ.get('HAPROXY_ENABLED', 'true').lower() == 'true'
     HAPROXY_POLLING_INTERVAL = int(os.environ.get('HAPROXY_POLLING_INTERVAL', '60'))  # секунды
     HAPROXY_CACHE_TTL = int(os.environ.get('HAPROXY_CACHE_TTL', '30'))  # секунды
-    HAPROXY_HISTORY_RETENTION_DAYS = int(os.environ.get('HAPROXY_HISTORY_RETENTION_DAYS', '30'))  # дней
-    HAPROXY_DEFAULT_INSTANCE_NAME = os.environ.get('HAPROXY_DEFAULT_INSTANCE_NAME', 'default')
+    # HAPROXY_HISTORY_RETENTION_DAYS = int(os.environ.get('HAPROXY_HISTORY_RETENTION_DAYS', '30'))  # NOT USED
+    # HAPROXY_DEFAULT_INSTANCE_NAME = os.environ.get('HAPROXY_DEFAULT_INSTANCE_NAME', 'default')  # NOT USED
     HAPROXY_REQUEST_TIMEOUT = int(os.environ.get('HAPROXY_REQUEST_TIMEOUT', '10'))  # секунды
     HAPROXY_MAX_RETRIES = int(os.environ.get('HAPROXY_MAX_RETRIES', '3'))  # количество попыток
 
@@ -108,21 +100,21 @@ class Config:
 
     # Интервалы синхронизации
     EUREKA_POLLING_INTERVAL = int(os.environ.get('EUREKA_POLLING_INTERVAL', '60'))  # секунды опроса
-    EUREKA_HEALTH_CHECK_INTERVAL = int(os.environ.get('EUREKA_HEALTH_CHECK_INTERVAL', '30'))  # секунды для health check
+    # EUREKA_HEALTH_CHECK_INTERVAL = int(os.environ.get('EUREKA_HEALTH_CHECK_INTERVAL', '30'))  # NOT USED
 
     # Кэширование
     EUREKA_CACHE_TTL = int(os.environ.get('EUREKA_CACHE_TTL', '30'))  # секунды
-    EUREKA_CACHE_MAX_SIZE = int(os.environ.get('EUREKA_CACHE_MAX_SIZE', '1000'))  # максимальный размер кэша
+    # EUREKA_CACHE_MAX_SIZE = int(os.environ.get('EUREKA_CACHE_MAX_SIZE', '1000'))  # NOT USED
 
     # Хранение истории
-    EUREKA_HISTORY_RETENTION_DAYS = int(os.environ.get('EUREKA_HISTORY_RETENTION_DAYS', '30'))  # дней хранения истории
-    EUREKA_MAX_HISTORY_RECORDS = int(os.environ.get('EUREKA_MAX_HISTORY_RECORDS', '10000'))  # максимальное количество записей
+    # EUREKA_HISTORY_RETENTION_DAYS = int(os.environ.get('EUREKA_HISTORY_RETENTION_DAYS', '30'))  # NOT USED
+    # EUREKA_MAX_HISTORY_RECORDS = int(os.environ.get('EUREKA_MAX_HISTORY_RECORDS', '10000'))  # NOT USED
 
     # Настройки рассылки отчётов по email
     REPORT_EMAIL_ENABLED = os.environ.get('REPORT_EMAIL_ENABLED', 'true').lower() == 'true'
     REPORT_EMAIL_FROM = os.environ.get('REPORT_EMAIL_FROM', 'ac-reports@localhost')
     REPORT_EMAIL_SUBJECT_PREFIX = os.environ.get('REPORT_EMAIL_SUBJECT_PREFIX', '[AC Report]')
-    REPORT_DEFAULT_RECIPIENTS = os.environ.get('REPORT_DEFAULT_RECIPIENTS', '')  # email-адреса или группы через запятую
+    # REPORT_DEFAULT_RECIPIENTS = os.environ.get('REPORT_DEFAULT_RECIPIENTS', '')  # NOT USED
     SENDMAIL_PATH = os.environ.get('SENDMAIL_PATH', '/usr/sbin/sendmail')
 
     # Настройки системных тегов
@@ -170,7 +162,7 @@ class OrchestratorDefaults:
     NAME_MAX_LENGTH = int(os.environ.get('ORCHESTRATOR_NAME_MAX_LENGTH', '128'))
 
     # Время ожидания после обновления в секундах (по умолчанию)
-    WAIT_AFTER_UPDATE_SECONDS = int(os.environ.get('ORCHESTRATOR_WAIT_AFTER_UPDATE', '60'))
+    # WAIT_AFTER_UPDATE_SECONDS = int(os.environ.get('ORCHESTRATOR_WAIT_AFTER_UPDATE', '60'))  # NOT USED
 
 
 class TaskQueueDefaults:
@@ -185,7 +177,7 @@ class TaskQueueDefaults:
     HISTORY_RETENTION_DAYS = int(os.environ.get('TASK_QUEUE_HISTORY_RETENTION_DAYS', '365'))
 
     # Интервал проверки очереди (секунды)
-    POLL_INTERVAL = int(os.environ.get('TASK_QUEUE_POLL_INTERVAL', '1'))
+    # POLL_INTERVAL = int(os.environ.get('TASK_QUEUE_POLL_INTERVAL', '1'))  # NOT USED
 
 
 class DevelopmentConfig(Config):
