@@ -111,3 +111,7 @@ scripts/init-db.py
 scripts/migrate_to_v2.sql
 scripts/seed_data.sql
 scripts/verify_schema.sql
+docs/API_DOCUMENTATION.md
+docs/ORCHESTRATOR_ARCHITECTURE_ANALYSIS.md
+docs/REFACTORING_TODO.md
+docs/UNUSED_API_METHODS.md
