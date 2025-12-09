@@ -115,7 +115,11 @@ class Config:
     REPORT_EMAIL_FROM = os.environ.get('REPORT_EMAIL_FROM', 'ac-reports@localhost')
     REPORT_EMAIL_SUBJECT_PREFIX = os.environ.get('REPORT_EMAIL_SUBJECT_PREFIX', '[AC Report]')
     # REPORT_DEFAULT_RECIPIENTS = os.environ.get('REPORT_DEFAULT_RECIPIENTS', '')  # NOT USED
-    SENDMAIL_PATH = os.environ.get('SENDMAIL_PATH', '/usr/sbin/sendmail')
+    # SMTP Configuration
+    SMTP_HOST = os.environ.get('SMTP_HOST', 'localhost')
+    SMTP_PORT = int(os.environ.get('SMTP_PORT', '25'))
+    SMTP_TIMEOUT = int(os.environ.get('SMTP_TIMEOUT', '30'))
+    SMTP_MAX_RETRIES = int(os.environ.get('SMTP_MAX_RETRIES', '3'))
 
     # Настройки системных тегов
     SYSTEM_TAGS_ENABLED = os.environ.get('SYSTEM_TAGS_ENABLED', 'true').lower() == 'true'

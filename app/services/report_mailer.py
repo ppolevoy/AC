@@ -1,7 +1,8 @@
 # app/services/report_mailer.py
 # Сервис рассылки отчётов по email
 
-import subprocess
+import smtplib
+import time
 import csv
 import io
 import logging
@@ -415,7 +416,7 @@ class ReportMailerService:
         attachments: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
-        Отправить email через sendmail.
+        Отправить email через SMTP.
 
         Args:
             to: Список email-адресов получателей
@@ -433,68 +434,57 @@ class ReportMailerService:
             }
 
         email_from = current_app.config.get('REPORT_EMAIL_FROM', 'ac-reports@localhost')
-        sendmail_path = current_app.config.get('SENDMAIL_PATH', '/usr/sbin/sendmail')
+        smtp_host = current_app.config.get('SMTP_HOST', 'localhost')
+        smtp_port = current_app.config.get('SMTP_PORT', 25)
+        timeout = current_app.config.get('SMTP_TIMEOUT', 30)
+        max_retries = current_app.config.get('SMTP_MAX_RETRIES', 3)
 
-        try:
-            # Создаём сообщение
-            msg = MIMEMultipart('mixed')
-            msg['From'] = email_from
-            msg['To'] = ', '.join(to)
-            msg['Subject'] = subject
-            msg['Content-Type'] = 'text/html; charset=utf-8'
+        # Формируем сообщение
+        msg = MIMEMultipart('mixed')
+        msg['From'] = email_from
+        msg['To'] = ', '.join(to)
+        msg['Subject'] = subject
 
-            # Добавляем HTML тело
-            html_part = MIMEText(html_body, 'html', 'utf-8')
-            msg.attach(html_part)
+        # Добавляем HTML тело
+        html_part = MIMEText(html_body, 'html', 'utf-8')
+        msg.attach(html_part)
 
-            # Добавляем вложения
-            if attachments:
-                for attachment in attachments:
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(attachment['content'].encode('utf-8'))
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename="{attachment["filename"]}"'
-                    )
-                    msg.attach(part)
+        # Добавляем вложения
+        if attachments:
+            for attachment in attachments:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment['content'].encode('utf-8'))
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename="{attachment["filename"]}"'
+                )
+                msg.attach(part)
 
-            # Отправляем через sendmail
-            process = subprocess.Popen(
-                [sendmail_path, '-t', '-oi'],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+        # Отправка с retry
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+                    server.sendmail(email_from, to, msg.as_string())
 
-            stdout, stderr = process.communicate(msg.as_string().encode('utf-8'))
-
-            if process.returncode != 0:
-                error_msg = stderr.decode('utf-8') if stderr else 'Unknown error'
-                logger.error(f"Sendmail error: {error_msg}")
+                logger.info(f"Email sent successfully via SMTP to {len(to)} recipients")
                 return {
-                    'success': False,
-                    'error': f'Ошибка отправки: {error_msg}'
+                    'success': True,
+                    'message': f'Отчёт отправлен {len(to)} получателям'
                 }
 
-            logger.info(f"Email sent successfully to {len(to)} recipients")
-            return {
-                'success': True,
-                'message': f'Отчёт отправлен {len(to)} получателям'
-            }
+            except (smtplib.SMTPException, OSError) as e:
+                last_error = str(e)
+                logger.warning(f"SMTP error (attempt {attempt + 1}/{max_retries}): {last_error}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 * (attempt + 1))  # Linear backoff: 2s, 4s, 6s
 
-        except FileNotFoundError:
-            logger.error(f"Sendmail not found at {sendmail_path}")
-            return {
-                'success': False,
-                'error': f'Sendmail не найден: {sendmail_path}'
-            }
-        except Exception as e:
-            logger.error(f"Email sending error: {str(e)}")
-            return {
-                'success': False,
-                'error': f'Ошибка отправки: {str(e)}'
-            }
+        logger.error(f"Failed to send email after {max_retries} attempts: {last_error}")
+        return {
+            'success': False,
+            'error': f'Ошибка отправки после {max_retries} попыток: {last_error}'
+        }
 
     def _escape_html(self, text: str) -> str:
         """Экранирование HTML символов"""

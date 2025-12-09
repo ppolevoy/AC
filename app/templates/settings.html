@@ -2142,6 +2142,169 @@
         color: #ffc107;
         font-size: 13px;
     }
+
+    /* Edit Mailing Group Modal Styles */
+    .edit-mailing-group-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s, visibility 0.2s;
+    }
+
+    .edit-mailing-group-modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .edit-mailing-group-modal {
+        background: #2a2a2b;
+        border-radius: 8px;
+        padding: 24px;
+        width: 500px;
+        max-width: 90vw;
+        border: 1px solid #444;
+        transform: scale(0.9);
+        transition: transform 0.2s;
+    }
+
+    .edit-mailing-group-modal-overlay.active .edit-mailing-group-modal {
+        transform: scale(1);
+    }
+
+    body.light-theme .edit-mailing-group-modal {
+        background: #fff;
+        border: 1px solid #ddd;
+    }
+
+    .edit-mailing-group-modal h3 {
+        margin: 0 0 20px 0;
+        color: #5ca5e1;
+        font-size: 18px;
+    }
+
+    .edit-mailing-group-modal .form-group {
+        margin-bottom: 16px;
+    }
+
+    .edit-mailing-group-modal label {
+        display: block;
+        margin-bottom: 6px;
+        color: #aaa;
+        font-size: 13px;
+    }
+
+    body.light-theme .edit-mailing-group-modal label {
+        color: #666;
+    }
+
+    .edit-mailing-group-modal input[type="text"],
+    .edit-mailing-group-modal textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #1e1e1f;
+        color: #ebe4da;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    body.light-theme .edit-mailing-group-modal input[type="text"],
+    body.light-theme .edit-mailing-group-modal textarea {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+
+    .edit-mailing-group-modal input[type="text"]:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .edit-mailing-group-modal textarea {
+        min-height: 100px;
+        resize: vertical;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    }
+
+    .edit-mailing-group-modal .group-name-display {
+        padding: 10px 12px;
+        background: #1e1e1f;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #5ca5e1;
+        font-weight: 500;
+    }
+
+    body.light-theme .edit-mailing-group-modal .group-name-display {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        color: #2980b9;
+    }
+
+    .edit-mailing-group-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid #333;
+    }
+
+    body.light-theme .edit-mailing-group-modal-actions {
+        border-top: 1px solid #ddd;
+    }
+
+    .edit-mailing-group-modal-actions button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .edit-mailing-group-modal-actions .btn-cancel {
+        background: #444;
+        color: #ebe4da;
+    }
+
+    .edit-mailing-group-modal-actions .btn-cancel:hover {
+        background: #555;
+    }
+
+    body.light-theme .edit-mailing-group-modal-actions .btn-cancel {
+        background: #e0e0e0;
+        color: #333;
+    }
+
+    .edit-mailing-group-modal-actions .btn-save {
+        background: #5ca5e1;
+        color: #fff;
+    }
+
+    .edit-mailing-group-modal-actions .btn-save:hover {
+        background: #4a94d0;
+    }
+
+    .edit-mailing-group-modal .email-hint {
+        font-size: 12px;
+        color: #888;
+        margin-top: 6px;
+    }
+
+    body.light-theme .edit-mailing-group-modal .email-hint {
+        color: #666;
+    }
 </style>
 
 <!-- Edit Tag Modal -->
@@ -2198,6 +2361,34 @@
         <div class="edit-tag-modal-actions">
             <button class="btn-cancel" onclick="tagsManagement.closeEditModal()">Отмена</button>
             <button class="btn-save" onclick="tagsManagement.saveTag()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Mailing Group Modal -->
+<div id="edit-mailing-group-modal-overlay" class="edit-mailing-group-modal-overlay">
+    <div class="edit-mailing-group-modal">
+        <h3>Редактирование группы рассылки</h3>
+
+        <div class="form-group">
+            <label>Имя группы:</label>
+            <div class="group-name-display" id="edit-mailing-group-name"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="edit-mailing-group-emails">Email адреса:</label>
+            <textarea id="edit-mailing-group-emails" placeholder="user1@example.com, user2@example.com"></textarea>
+            <div class="email-hint">Введите email-адреса через запятую или каждый на новой строке</div>
+        </div>
+
+        <div class="form-group">
+            <label for="edit-mailing-group-description">Описание:</label>
+            <input type="text" id="edit-mailing-group-description" placeholder="Описание группы (опционально)">
+        </div>
+
+        <div class="edit-mailing-group-modal-actions">
+            <button class="btn-cancel" onclick="mailingGroupsManagement.closeEditModal()">Отмена</button>
+            <button class="btn-save" onclick="mailingGroupsManagement.saveGroup()">Сохранить</button>
         </div>
     </div>
 </div>
@@ -2677,6 +2868,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Mailing Groups Management Object
 const mailingGroupsManagement = {
+    groups: [], // Кэш загруженных групп
+    editingGroupId: null, // ID редактируемой группы
+
     async loadGroups() {
         const container = document.getElementById('mailing-groups-list-container');
         const statusText = document.querySelector('#mailing-groups-status-indicator .status-text');
@@ -2685,6 +2879,7 @@ const mailingGroupsManagement = {
             const data = await response.json();
 
             if (data.success && data.groups) {
+                this.groups = data.groups; // Сохраняем для редактирования
                 this.renderGroupsList(data.groups);
                 if (statusText) {
                     const activeCount = data.groups.filter(g => g.is_active).length;
@@ -2785,21 +2980,73 @@ const mailingGroupsManagement = {
         }
     },
 
-    async editGroup(groupId) {
-        const newEmails = prompt('Введите новый список email-адресов (через запятую):');
-        if (!newEmails) return;
+    editGroup(groupId) {
+        // Находим группу в кэше
+        const group = this.groups.find(g => g.id === groupId);
+        if (!group) {
+            showError('Группа не найдена');
+            return;
+        }
+
+        // Открываем модальное окно
+        this.openEditModal(group);
+    },
+
+    openEditModal(group) {
+        this.editingGroupId = group.id;
+
+        // Заполняем поля
+        document.getElementById('edit-mailing-group-name').textContent = group.name;
+        document.getElementById('edit-mailing-group-emails').value = group.emails || '';
+        document.getElementById('edit-mailing-group-description').value = group.description || '';
+
+        // Показываем модалку
+        document.getElementById('edit-mailing-group-modal-overlay').classList.add('active');
+
+        // Фокус на textarea
+        setTimeout(() => {
+            document.getElementById('edit-mailing-group-emails').focus();
+        }, 100);
+    },
+
+    closeEditModal() {
+        this.editingGroupId = null;
+        document.getElementById('edit-mailing-group-modal-overlay').classList.remove('active');
+    },
+
+    async saveGroup() {
+        if (!this.editingGroupId) return;
+
+        const emails = document.getElementById('edit-mailing-group-emails').value.trim();
+        const description = document.getElementById('edit-mailing-group-description').value.trim();
+
+        if (!emails) {
+            showError('Введите хотя бы один email-адрес');
+            return;
+        }
+
+        // Нормализуем email-адреса (заменяем переносы строк на запятые)
+        const normalizedEmails = emails
+            .split(/[\n,]+/)
+            .map(e => e.trim())
+            .filter(e => e)
+            .join(', ');
 
         try {
-            const response = await fetch(`/api/mailing-groups/${groupId}`, {
+            const response = await fetch(`/api/mailing-groups/${this.editingGroupId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ emails: newEmails })
+                body: JSON.stringify({
+                    emails: normalizedEmails,
+                    description: description || null
+                })
             });
 
             const data = await response.json();
 
             if (data.success) {
                 showNotification('Группа обновлена');
+                this.closeEditModal();
                 this.loadGroups();
             } else {
                 showError(data.error || 'Ошибка обновления');
@@ -2854,10 +3101,31 @@ const mailingGroupsManagement = {
             console.error('Error deleting mailing group:', error);
             showError('Ошибка удаления группы');
         }
+    },
+
+    initEditModalEvents() {
+        // Закрытие по клику на оверлей
+        document.getElementById('edit-mailing-group-modal-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-mailing-group-modal-overlay') {
+                this.closeEditModal();
+            }
+        });
+
+        // Закрытие по Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('edit-mailing-group-modal-overlay').classList.contains('active')) {
+                this.closeEditModal();
+            }
+        });
     }
 };
 
 window.mailingGroupsManagement = mailingGroupsManagement;
+
+// Инициализация событий модального окна редактирования группы рассылки
+document.addEventListener('DOMContentLoaded', () => {
+    mailingGroupsManagement.initEditModalEvents();
+});
 
 async function loadSSHStatus() {
     try {
