@@ -597,6 +597,15 @@ code, pre, kbd, samp, .mono {
     height: 18px;
 }
 
+.radio-label.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.radio-label.disabled input {
+    cursor: not-allowed;
+}
+
 /* Search */
 .search-container {
     display: flex;

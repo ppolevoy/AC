@@ -228,6 +228,9 @@ def get_tasks():
             else:
                 task_data['orchestrator_playbook'] = None
 
+            # Добавляем режим обновления (для отображения "в рестарт")
+            task_data['mode'] = params.get('mode')
+
             # Добавляем текущий TASK для выполняющихся задач
             if task.status == 'processing':
                 progress = SSHAnsibleService.get_task_progress(task.id)
@@ -293,6 +296,9 @@ def get_task(task_id):
             task_data['orchestrator_playbook'] = orchestrator
         else:
             task_data['orchestrator_playbook'] = None
+
+        # Добавляем режим обновления (для отображения "в рестарт")
+        task_data['mode'] = params.get('mode')
 
         # Добавляем текущий TASK для выполняющихся задач
         if task.status == 'processing':

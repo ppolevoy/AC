@@ -316,7 +316,7 @@ body.light-theme .status-card:hover {
 }
 
 .apps-row:hover {
-    background-color: var(--surface-quaternary);
+    background-color: #2e2e30;
 }
 
 /* Контейнер имени и тегов */

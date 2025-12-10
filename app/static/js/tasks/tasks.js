@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             row.innerHTML = `
                 <td class="col-id task-id-cell">${shortId}</td>
-                <td class="col-type">${formatTaskType(task.task_type, task.orchestrator_playbook)}</td>
+                <td class="col-type">${formatTaskType(task.task_type, task.orchestrator_playbook, task.mode)}</td>
                 <td class="col-app">${task.application_name || '-'}</td>
                 <td class="col-server">${task.server_name || '-'}</td>
                 <td class="col-status"><span class="status-badge ${statusClass}">${statusText}${task.cancelled ? ' (отменена)' : ''}</span></td>
@@ -355,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					type: 'table',
 					rows: [
 						{ label: 'ID:', value: task.id },
-						{ label: 'Тип:', value: formatTaskType(task.task_type, task.orchestrator_playbook) },
+						{ label: 'Тип:', value: formatTaskType(task.task_type, task.orchestrator_playbook, task.mode) },
 						{ 
 							label: 'Статус:', 
 							value: `<span class="status-badge ${getStatusClass(task.status)}">${formatTaskStatus(task.status)}</span>` 
@@ -424,7 +424,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			}
 			
 			// Отображаем модальное окно
-			ModalUtils.showInfoModal(`Детали задачи: ${formatTaskType(task.task_type, task.orchestrator_playbook)}`, sections);
+			ModalUtils.showInfoModal(`Детали задачи: ${formatTaskType(task.task_type, task.orchestrator_playbook, task.mode)}`, sections);
 		} catch (error) {
 			console.error('Ошибка при получении информации о задаче:', error);
 			showError('Не удалось получить информацию о задаче');
@@ -432,7 +432,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	// Вспомогательные функции для форматирования данных
-	function formatTaskType(type, orchestratorPlaybook) {
+	function formatTaskType(type, orchestratorPlaybook, mode) {
 		const types = {
 			'start': 'Запуск',
 			'stop': 'Остановка',
@@ -442,16 +442,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		let result = types[type] || type;
 
-		// Если это обновление через оркестратор - добавляем режим в скобках
-		if (type === 'update' && orchestratorPlaybook) {
-			// Извлекаем короткое имя: "/etc/ansible/orchestrator-50-50.yml" -> "50-50"
-			const shortName = orchestratorPlaybook
-				.replace(/^.*\//, '')           // убираем путь
-				.replace(/^orchestrator[-_]?/, '') // убираем префикс orchestrator
-				.replace(/\.ya?ml$/, '');       // убираем расширение
+		// Для обновлений добавляем модификатор режима
+		if (type === 'update') {
+			if (mode === 'night-restart') {
+				// Режим "В рестарт" (ночное обновление)
+				result += ' (в рестарт)';
+			} else if (orchestratorPlaybook) {
+				// Если это обновление через оркестратор - добавляем режим в скобках
+				// Извлекаем короткое имя: "/etc/ansible/orchestrator-50-50.yml" -> "50-50"
+				const shortName = orchestratorPlaybook
+					.replace(/^.*\//, '')           // убираем путь
+					.replace(/^orchestrator[-_]?/, '') // убираем префикс orchestrator
+					.replace(/\.ya?ml$/, '');       // убираем расширение
 
-			if (shortName) {
-				result += ` (${shortName})`;
+				if (shortName) {
+					result += ` (${shortName})`;
+				}
 			}
 		}
 

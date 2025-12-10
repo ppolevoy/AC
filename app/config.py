@@ -73,6 +73,9 @@ class Config:
 
     # Настройки для Docker
     DOCKER_UPDATE_PLAYBOOK = os.environ.get('DOCKER_UPDATE_PLAYBOOK', '/etc/ansible/docker_update_playbook.yaml')
+
+    # Плейбук для обновления в ночной рестарт
+    NIGHT_RESTART_PLAYBOOK = os.environ.get('NIGHT_RESTART_PLAYBOOK') or '/etc/ansible/night_restart_update.yaml'
     # DOCKER_REGISTRY_URL = os.environ.get('DOCKER_REGISTRY_URL', 'nexus.bankplus.ru')  # NOT USED
     # DOCKER_REGISTRY_PATH = os.environ.get('DOCKER_REGISTRY_PATH', 'repository/docker-local')  # NOT USED
 

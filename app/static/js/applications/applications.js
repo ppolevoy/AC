@@ -446,6 +446,9 @@
             const appIds = apps.map(app => app.id);
             const firstApp = apps[0];
 
+            // Проверяем, есть ли Docker-приложения (для них night-restart недоступен)
+            const hasDockerApps = apps.some(app => app.app_type === 'docker');
+
             // Создаем содержимое модального окна с анимированным загрузчиком
             const modalContent = document.createElement('div');
             modalContent.className = 'update-modal-content';
@@ -515,8 +518,8 @@
                             <label class="radio-label">
                                 <input type="radio" name="mode" value="update"> Сейчас
                             </label>
-                            <label class="radio-label">
-                                <input type="radio" name="mode" value="night-restart"> В рестарт
+                            <label class="radio-label ${hasDockerApps ? 'disabled' : ''}" ${hasDockerApps ? 'title="Недоступно для Docker-приложений"' : ''}>
+                                <input type="radio" name="mode" value="night-restart" ${hasDockerApps ? 'disabled' : ''}> В рестарт
                             </label>
                         </div>
                     </div>
@@ -746,6 +749,9 @@
                 const state = groupStates[groupName];
                 const apps = appGroups[groupName];
                 const firstApp = apps[0];
+
+                // Проверяем, есть ли Docker-приложения в этой группе (для них night-restart недоступен)
+                const hasDockerApps = apps.some(app => app.app_type === 'docker');
                 
                 // Проверяем кэш и восстанавливаем состояние
                 if (!force && this.groupContentLoaded[groupName] && this.groupContentCache[groupName]) {
@@ -897,8 +903,8 @@
                             <label class="radio-label">
                                 <input type="radio" name="mode" value="update" ${state.restartMode === 'update' ? 'checked' : ''}> Сейчас
                             </label>
-                            <label class="radio-label">
-                                <input type="radio" name="mode" value="night-restart" ${state.restartMode === 'night-restart' ? 'checked' : ''}> В рестарт
+                            <label class="radio-label ${hasDockerApps ? 'disabled' : ''}" ${hasDockerApps ? 'title="Недоступно для Docker-приложений"' : ''}>
+                                <input type="radio" name="mode" value="night-restart" ${state.restartMode === 'night-restart' && !hasDockerApps ? 'checked' : ''} ${hasDockerApps ? 'disabled' : ''}> В рестарт
                             </label>
                         </div>
                     </div>

@@ -4,6 +4,7 @@ from collections import defaultdict
 from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
+from app.config import Config
 from app.models.server import Server
 from app.models.application_instance import ApplicationInstance
 from app.models.application_group import ApplicationGroup
@@ -217,6 +218,13 @@ def update_application(app_id):
         # Получаем параметры обновления
         mode = data.get('mode', data.get('restart_mode', 'immediate'))  # Поддержка старого параметра restart_mode
 
+        # Валидация: night-restart не поддерживается для Docker
+        if mode == 'night-restart' and app.app_type == 'docker':
+            return jsonify({
+                'success': False,
+                'error': 'Режим "В рестарт" не поддерживается для Docker-приложений'
+            }), 400
+
         # Определяем URL/имя дистрибутива в зависимости от типа приложения
         if app.app_type == 'docker':
             # Для Docker приложений используем image_name
@@ -248,12 +256,16 @@ def update_application(app_id):
             }), 404
 
         # Определяем путь к playbook (app уже является ApplicationInstance после рефакторинга)
-        playbook_path = app.get_effective_playbook_path()
-        logger.info(f"Используется playbook: {playbook_path}")
+        # Для режима night-restart используем специальный плейбук
+        if mode == 'night-restart':
+            playbook_path = Config.NIGHT_RESTART_PLAYBOOK
+            logger.info(f"Режим night-restart: используется плейбук {playbook_path}")
+        else:
+            playbook_path = app.get_effective_playbook_path()
+            logger.info(f"Используется playbook: {playbook_path}")
 
         # Приоритет 3: Дефолтный путь в зависимости от типа приложения
         if not playbook_path:
-            from app.config import Config
             if app.app_type == 'docker':
                 # Используем специальный playbook для Docker
                 playbook_path = getattr(Config, 'DOCKER_UPDATE_PLAYBOOK', '/site/ansible/fmcc/docker_update_playbook.yaml')
@@ -381,13 +393,29 @@ def batch_update_applications():
                 'error': "Некоторые приложения не найдены"
             }), 404
 
+        # Валидация: night-restart не поддерживается для Docker
+        if mode == 'night-restart':
+            docker_apps = [a for a in applications if a.app_type == 'docker']
+            if docker_apps:
+                docker_names = [a.name for a in docker_apps]
+                return jsonify({
+                    'success': False,
+                    'error': f'Режим "В рестарт" не поддерживается для Docker-приложений: {docker_names}'
+                }), 400
+
         # Группируем приложения согласно стратегии группы
         groups = defaultdict(list)
+
+        # Определяем playbook_path для режима night-restart один раз
+        night_restart_playbook = Config.NIGHT_RESTART_PLAYBOOK if mode == 'night-restart' else None
 
         for app in applications:
             # app уже является ApplicationInstance после рефакторинга
             # Определяем playbook_path
-            playbook_path = app.get_effective_playbook_path()
+            if night_restart_playbook:
+                playbook_path = night_restart_playbook
+            else:
+                playbook_path = app.get_effective_playbook_path()
 
             # Определяем ключ группировки на основе стратегии
             group = app.group
@@ -442,7 +470,11 @@ def batch_update_applications():
             # Получаем playbook_path и server_id из первого приложения группы
             first_app = apps_in_group[0]
             # first_app уже является ApplicationInstance после рефакторинга
-            playbook_path = first_app.get_effective_playbook_path()
+            # playbook_path уже определён в цикле группировки выше
+            if night_restart_playbook:
+                playbook_path = night_restart_playbook
+            else:
+                playbook_path = first_app.get_effective_playbook_path()
 
             # Создаем задачу для группы
             task = Task(
