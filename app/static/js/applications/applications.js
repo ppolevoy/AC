@@ -447,7 +447,7 @@
             const firstApp = apps[0];
 
             // Проверяем, есть ли Docker-приложения (для них night-restart недоступен)
-            const hasDockerApps = apps.some(app => app.app_type === 'docker');
+            const hasDockerApps = apps.some(app => app.type === 'docker');
 
             // Создаем содержимое модального окна с анимированным загрузчиком
             const modalContent = document.createElement('div');
@@ -751,7 +751,7 @@
                 const firstApp = apps[0];
 
                 // Проверяем, есть ли Docker-приложения в этой группе (для них night-restart недоступен)
-                const hasDockerApps = apps.some(app => app.app_type === 'docker');
+                const hasDockerApps = apps.some(app => app.type === 'docker');
                 
                 // Проверяем кэш и восстанавливаем состояние
                 if (!force && this.groupContentLoaded[groupName] && this.groupContentCache[groupName]) {
