@@ -39,6 +39,10 @@ class ApplicationInstance(db.Model):
     version = db.Column(db.String(128), nullable=True)
     distr_path = db.Column(db.String(255), nullable=True)
 
+    # Информация об артефактах (от агента)
+    artifact_size_bytes = db.Column(db.BigInteger, nullable=True)  # Размер артефакта в байтах
+    artifact_type = db.Column(db.String(32), nullable=True)  # Тип артефакта (war, jar, etc)
+
     # Docker-специфичные поля
     container_id = db.Column(db.String(128), nullable=True)
     container_name = db.Column(db.String(128), nullable=True)
@@ -47,8 +51,13 @@ class ApplicationInstance(db.Model):
     tag = db.Column(db.String(64), nullable=True)  # Версия образа
     eureka_registered = db.Column(db.Boolean, default=False, nullable=True)  # Флаг регистрации в Eureka
 
-    # Eureka-специфичные поля
+    # Eureka-специфичные поля (расширенные)
     eureka_url = db.Column(db.String(255), nullable=True)
+    eureka_instance_id = db.Column(db.String(255), nullable=True)  # ID экземпляра в Eureka
+    eureka_app_name = db.Column(db.String(128), nullable=True)  # Имя приложения в Eureka
+    eureka_status = db.Column(db.String(32), nullable=True)  # Статус в Eureka (UP, DOWN, etc)
+    eureka_health_url = db.Column(db.String(512), nullable=True)  # URL health-check
+    eureka_vip = db.Column(db.String(128), nullable=True)  # VIP адрес в Eureka
 
     # Сетевые параметры
     ip = db.Column(db.String(45), nullable=True)  # Поддержка IPv6
@@ -315,6 +324,13 @@ class ApplicationInstance(db.Model):
             'tag': self.tag,
             'eureka_registered': self.eureka_registered,
             'eureka_url': self.eureka_url,
+            'eureka_instance_id': self.eureka_instance_id,
+            'eureka_app_name': self.eureka_app_name,
+            'eureka_status': self.eureka_status,
+            'eureka_health_url': self.eureka_health_url,
+            'eureka_vip': self.eureka_vip,
+            'artifact_size_bytes': self.artifact_size_bytes,
+            'artifact_type': self.artifact_type,
             'ip': self.ip,
             'port': self.port,
             'pid': self.pid,

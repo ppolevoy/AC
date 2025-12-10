@@ -115,3 +115,9 @@ docs/API_DOCUMENTATION.md
 docs/ORCHESTRATOR_ARCHITECTURE_ANALYSIS.md
 docs/REFACTORING_TODO.md
 docs/UNUSED_API_METHODS.md
+photo_2025-12-10_15-32-10.jpg
+tests/test_agent_service_integration.py
+tests/test_agent_service.py
+tests/__pycache__/test_agent_service_integration.cpython-39-pytest-8.4.2.pyc
+tests/__pycache__/test_agent_service.cpython-39-pytest-8.4.2.pyc
+migrations/add_agent_new_fields.py

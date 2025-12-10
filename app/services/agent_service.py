@@ -293,11 +293,26 @@ class AgentService:
                             # Логируем только первые 200 символов данных, чтобы не засорять логи
                             data_str = str(server_data)[:200] + "..." if len(str(server_data)) > 200 else str(server_data)
                             logger.debug(f"Данные с сервера {server.name}: {data_str}")
-                                                        
+
+                            # Логируем информацию о кэше агента (новый формат)
+                            if 'meta' in server_data and 'cache' in server_data['meta']:
+                                cache_info = server_data['meta']['cache']
+                                cache_status = cache_info.get('status', 'unknown')
+                                cache_age = cache_info.get('age_seconds', 0)
+                                scan_duration = cache_info.get('scan_duration_ms', 0)
+                                cache_error = cache_info.get('error')
+
+                                if cache_error:
+                                    logger.warning(f"Кэш агента {server.name}: ошибка - {cache_error}")
+                                elif cache_status in ('stale', 'expired'):
+                                    logger.warning(f"Кэш агента {server.name}: {cache_status}, возраст {cache_age:.1f}с")
+                                else:
+                                    logger.debug(f"Кэш агента {server.name}: {cache_status}, возраст {cache_age:.1f}с, сканирование {scan_duration}мс")
+
                             server_info = server_data['server']
                             sections = ['docker-app', 'site-app', 'service-app']
                             found_sections = [s for s in sections if s in server_info]
-                            
+
                             if found_sections:
                                 logger.info(f"Найдены секции данных: {', '.join(found_sections)}")
                                 return server_info
@@ -465,6 +480,13 @@ class AgentService:
                     instance.tag = new_tag
                     instance.eureka_registered = app_data.get('eureka_registered', False)
 
+                    # Расширенные Eureka-поля (новый формат агента)
+                    instance.eureka_instance_id = app_data.get('eureka_instance_id')
+                    instance.eureka_app_name = app_data.get('eureka_app_name')
+                    instance.eureka_status = app_data.get('eureka_status')
+                    instance.eureka_health_url = app_data.get('eureka_health_url')
+                    instance.eureka_vip = app_data.get('eureka_vip')
+
                     # Устанавливаем version из tag (версия Docker образа)
                     instance.version = new_tag
 
@@ -535,20 +557,34 @@ class AgentService:
                         )
 
                     # Обновляем данные экземпляра
-                    instance.path = app_data.get('path')
+                    # app_path имеет приоритет над path (новый формат агента)
+                    instance.path = app_data.get('app_path') or app_data.get('path')
                     instance.log_path = app_data.get('log_path')
                     instance.version = new_version
                     instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
+                    instance.pid = app_data.get('pid')
                     instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
+
+                    # Информация об артефактах (новый формат агента)
+                    instance.artifact_size_bytes = app_data.get('artifact_size_bytes')
+                    instance.artifact_type = app_data.get('artifact_type')
 
                     if 'start_time' in app_data and app_data['start_time']:
                         try:
                             instance.start_time = datetime.fromisoformat(app_data['start_time'])
                         except ValueError:
-                            logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
+                            # Попытка парсинга альтернативного формата: "Dec_09 14:30:00"
+                            try:
+                                from datetime import datetime as dt
+                                # Добавляем текущий год для парсинга
+                                year = dt.now().year
+                                parsed = dt.strptime(f"{year} {app_data['start_time']}", "%Y %b_%d %H:%M:%S")
+                                instance.start_time = parsed
+                            except ValueError:
+                                logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
 
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
@@ -603,20 +639,33 @@ class AgentService:
                         )
 
                     # Обновляем данные экземпляра
-                    instance.path = app_data.get('path')
+                    # app_path имеет приоритет над path (новый формат агента)
+                    instance.path = app_data.get('app_path') or app_data.get('path')
                     instance.log_path = app_data.get('log_path')
                     instance.version = new_version
                     instance.distr_path = new_distr_path
                     instance.ip = app_data.get('ip')
                     instance.port = app_data.get('port')
+                    instance.pid = app_data.get('pid')
                     instance.status = _normalize_status(app_data.get('status'))
                     instance.last_seen = datetime.utcnow()
+
+                    # Информация об артефактах (новый формат агента)
+                    instance.artifact_size_bytes = app_data.get('artifact_size_bytes')
+                    instance.artifact_type = app_data.get('artifact_type')
 
                     if 'start_time' in app_data and app_data['start_time']:
                         try:
                             instance.start_time = datetime.fromisoformat(app_data['start_time'])
                         except ValueError:
-                            logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
+                            # Попытка парсинга альтернативного формата: "Dec_09 14:30:00"
+                            try:
+                                from datetime import datetime as dt
+                                year = dt.now().year
+                                parsed = dt.strptime(f"{year} {app_data['start_time']}", "%Y %b_%d %H:%M:%S")
+                                instance.start_time = parsed
+                            except ValueError:
+                                logger.warning(f"Некорректный формат времени запуска для экземпляра {name}: {app_data['start_time']}")
 
                     # Определяем группу и каталог для экземпляра
                     ApplicationGroupService.resolve_application_group(instance)
