@@ -149,8 +149,16 @@ class UpdateTaskContextProvider:
             missing_ids = set(app_ids) - set(found_ids)
             logger.warning(f"Некоторые приложения не найдены: {missing_ids}")
 
-        # Формируем список имен через запятую
-        app_name = ','.join([app.instance_name for app in apps])
+        # Загружаем общие параметры заранее для определения режима
+        params = task.params or {}
+        mode = params.get("mode", params.get("restart_mode", "immediate"))
+
+        # Для night-restart используем catalog_name как app_name (оригинальное имя из каталога)
+        if mode == 'night-restart' and params.get('catalog_name'):
+            app_name = params['catalog_name']
+        else:
+            # Формируем список имен через запятую
+            app_name = ','.join([app.instance_name for app in apps])
 
         # Берем данные из первого приложения
         first_app = apps[0]
@@ -158,13 +166,11 @@ class UpdateTaskContextProvider:
         if not server:
             raise ValueError(f"Сервер для приложения {first_app.instance_name} не найден")
 
-        # Загружаем общие параметры
-        params = task.params or {}
+        # Загружаем остальные параметры (params и mode уже загружены выше)
         distr_url = params.get("distr_url")
         if not distr_url:
             raise ValueError("URL дистрибутива не указан")
 
-        mode = params.get("mode", params.get("restart_mode", "immediate"))
         playbook_path = params.get("playbook_path")
 
         if not playbook_path:

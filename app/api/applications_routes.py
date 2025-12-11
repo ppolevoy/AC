@@ -409,6 +409,58 @@ def batch_update_applications():
         # Определяем playbook_path для режима night-restart один раз
         night_restart_playbook = Config.NIGHT_RESTART_PLAYBOOK if mode == 'night-restart' else None
 
+        # Для night-restart: специальная группировка по catalog_name (base_name)
+        # Создаётся одна задача на каждое уникальное имя приложения из каталога
+        if mode == 'night-restart':
+            night_restart_groups = defaultdict(list)
+            for app in applications:
+                catalog_name = app.base_name  # Использует catalog.name или парсит из instance_name
+                night_restart_groups[catalog_name].append(app)
+
+            # Создаём задачи для night-restart
+            created_tasks = []
+            for catalog_name, apps_in_group in night_restart_groups.items():
+                grouped_app_ids = [app.id for app in apps_in_group]
+                first_app = apps_in_group[0]
+
+                task = Task(
+                    task_type='update',
+                    params={
+                        'app_ids': grouped_app_ids,
+                        'catalog_name': catalog_name,  # Оригинальное имя для плейбука
+                        'distr_url': distr_url,
+                        'mode': mode,
+                        'playbook_path': night_restart_playbook
+                    },
+                    server_id=first_app.server_id,
+                    instance_id=grouped_app_ids[0]
+                )
+
+                task_queue.add_task(task)
+                created_tasks.append(task.id)
+
+                # Логируем события для каждого приложения
+                for app in apps_in_group:
+                    event = Event(
+                        event_type='update',
+                        description=f"Добавлено в рестарт: {catalog_name} (версия: {distr_url})",
+                        status='pending',
+                        server_id=app.server_id,  # Исправлено: используем server_id конкретного приложения
+                        instance_id=app.id
+                    )
+                    db.session.add(event)
+
+                logger.info(f"Создана задача night-restart для {catalog_name} (IDs: {grouped_app_ids}, task_id: {task.id})")
+
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': f"Создано задач: {len(created_tasks)} для {len(applications)} приложений",
+                'task_ids': created_tasks,
+                'groups_count': len(night_restart_groups)
+            })
+
         for app in applications:
             # app уже является ApplicationInstance после рефакторинга
             # Определяем playbook_path
