@@ -49,8 +49,8 @@ class Config:
     CLEAN_TASKS_OLDER_THAN = int(os.environ.get('CLEAN_TASKS_OLDER_THAN') or 365)  # в днях
 
     # Настройки Ansible
-    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or '/etc/ansible/update-app.yml'
-    APP_CONTROL_PLAYBOOK = os.environ.get('APP_CONTROL_PLAYBOOK') or '/etc/ansible/app_control.yml'
+    DEFAULT_UPDATE_PLAYBOOK = os.environ.get('DEFAULT_UPDATE_PLAYBOOK') or 'update-app.yml'
+    APP_CONTROL_PLAYBOOK = os.environ.get('APP_CONTROL_PLAYBOOK') or 'app_control.yml'
 
     # Настройки для Orchestrator Playbooks
     # Используется тот же ANSIBLE_PATH что и для обычных playbook-ов
@@ -72,10 +72,11 @@ class Config:
     INCLUDE_SNAPSHOT_VERSIONS = os.environ.get('INCLUDE_SNAPSHOT_VERSIONS', 'true').lower() == 'true'
 
     # Настройки для Docker
-    DOCKER_UPDATE_PLAYBOOK = os.environ.get('DOCKER_UPDATE_PLAYBOOK', '/etc/ansible/docker_update_playbook.yaml')
+    DOCKER_UPDATE_PLAYBOOK = os.environ.get('DOCKER_UPDATE_PLAYBOOK', 'docker_update_playbook.yaml')
 
     # Плейбук для обновления в ночной рестарт
-    NIGHT_RESTART_PLAYBOOK = os.environ.get('NIGHT_RESTART_PLAYBOOK') or '/etc/ansible/night_restart_update.yaml'
+    # Формат: путь {параметры} - например: playbook.yaml {app_name} {distr_url}
+    NIGHT_RESTART_PLAYBOOK = os.environ.get('NIGHT_RESTART_PLAYBOOK') or 'night_restart_update.yaml {server} {app_name} {distr_url}'
     # DOCKER_REGISTRY_URL = os.environ.get('DOCKER_REGISTRY_URL', 'nexus.bankplus.ru')  # NOT USED
     # DOCKER_REGISTRY_PATH = os.environ.get('DOCKER_REGISTRY_PATH', 'repository/docker-local')  # NOT USED
 

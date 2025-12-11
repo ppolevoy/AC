@@ -407,6 +407,7 @@ def batch_update_applications():
         groups = defaultdict(list)
 
         # Определяем playbook_path для режима night-restart один раз
+        # Параметры {app_name} {distr_url} должны быть указаны в Config.NIGHT_RESTART_PLAYBOOK
         night_restart_playbook = Config.NIGHT_RESTART_PLAYBOOK if mode == 'night-restart' else None
 
         # Для night-restart: специальная группировка по catalog_name (base_name)
