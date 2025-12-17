@@ -13,11 +13,12 @@
     <script src="{{ url_for('static', filename='js/common/base.js') }}"></script>
 	<script src="{{ url_for('static', filename='js/common/modal-utils.js') }}"></script>
     <!-- Глобальная конфигурация приложения -->
-    <script>        
+    <script>
         window.APP_CONFIG = {
             MAX_ARTIFACTS_DISPLAY: {{ config.MAX_ARTIFACTS_DISPLAY | default(20) }},
             INCLUDE_SNAPSHOT_VERSIONS: {{ config.INCLUDE_SNAPSHOT_VERSIONS | tojson }},
-            POLLING_INTERVAL: {{ config.POLLING_INTERVAL | default(60) }}
+            POLLING_INTERVAL: {{ config.POLLING_INTERVAL | default(60) }},
+            AUTO_REFRESH_INTERVAL: {{ config.AUTO_REFRESH_INTERVAL | default(20) }}
         };
     </script>    
     {% block extra_head %}{% endblock %}

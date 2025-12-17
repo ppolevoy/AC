@@ -1510,6 +1510,10 @@
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', function() {
                     EventHandlers.loadApplications();
+                    // Перезапускаем таймер автообновления при ручном обновлении
+                    if (window.AutoRefresh) {
+                        window.AutoRefresh.restart();
+                    }
                 });
             }
         },
@@ -2083,6 +2087,109 @@
     };
 
     // ========================================
+    // МОДУЛЬ АВТООБНОВЛЕНИЯ
+    // ========================================
+    const AutoRefresh = {
+        intervalId: null,
+        intervalSeconds: window.APP_CONFIG?.AUTO_REFRESH_INTERVAL || 20, // 🔧 FIX: Конфиг из APP_CONFIG
+        isEnabled: true,
+        skippedUpdates: 0,
+        maxSkippedUpdates: 10,
+        isLoading: false, // 🔧 FIX: Защита от race condition
+
+        start() {
+            if (this.intervalId) {
+                this.stop();
+            }
+
+            if (this.isEnabled) {
+                console.log(`🔄 Автообновление запущено (каждые ${this.intervalSeconds}с)`);
+
+                this.intervalId = setInterval(async () => {
+                    // 🔧 FIX: Page Visibility API - не обновляем неактивные вкладки
+                    if (document.hidden) {
+                        console.log('👁️ Пропуск обновления: вкладка неактивна');
+                        return;
+                    }
+
+                    // 🔧 FIX: Race condition - проверяем, не идет ли уже загрузка
+                    if (this.isLoading) {
+                        console.log('⏭️ Пропуск обновления: предыдущее обновление еще выполняется');
+                        return;
+                    }
+
+                    // 🔧 FIX: getComputedStyle вместо inline styles
+                    const modalContainer = document.getElementById('modal-container');
+                    const isModalOpen = modalContainer &&
+                                       window.getComputedStyle(modalContainer).display !== 'none';
+
+                    if (isModalOpen && this.skippedUpdates < this.maxSkippedUpdates) {
+                        this.skippedUpdates++;
+                        console.log(`⏸️ Пропуск обновления ${this.skippedUpdates}/${this.maxSkippedUpdates}: открыто модальное окно`);
+                        return;
+                    }
+
+                    // Принудительное обновление если достигнут лимит пропусков
+                    if (this.skippedUpdates >= this.maxSkippedUpdates) {
+                        console.log('⚠️ Принудительное обновление: превышен лимит пропусков');
+                    }
+
+                    // Сбрасываем счетчик
+                    this.skippedUpdates = 0;
+
+                    // 🔧 FIX: Обработка ошибок + флаг isLoading
+                    try {
+                        this.isLoading = true;
+                        console.log('🔄 Автоматическое обновление данных...');
+                        await EventHandlers.loadApplications();
+                    } catch (error) {
+                        console.error('❌ Ошибка при автообновлении:', error);
+                    } finally {
+                        this.isLoading = false;
+                    }
+                }, this.intervalSeconds * 1000);
+
+                // 🔧 FIX: Cleanup при уходе со страницы
+                window.addEventListener('beforeunload', () => this.stop(), { once: true });
+
+                // 🔧 FIX: Обновление при возвращении на вкладку
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && this.isEnabled && !this.isLoading) {
+                        console.log('👁️ Вкладка стала активной, запускаем обновление');
+                        this.restart();
+                    }
+                });
+            }
+        },
+
+        stop() {
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+                this.skippedUpdates = 0; // Сбрасываем счетчик при остановке
+                console.log('⏸️ Автообновление остановлено');
+            }
+        },
+
+        restart() {
+            console.log('🔄 Перезапуск таймера автообновления');
+            this.skippedUpdates = 0; // Сбрасываем счетчик при перезапуске
+            this.stop();
+            this.start();
+        },
+
+        toggle() {
+            this.isEnabled = !this.isEnabled;
+            if (this.isEnabled) {
+                this.start();
+            } else {
+                this.stop();
+            }
+            return this.isEnabled;
+        }
+    };
+
+    // ========================================
     // ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
     // ========================================
     document.addEventListener('DOMContentLoaded', () => {
@@ -2099,6 +2206,9 @@
 
         // Загрузка начальных данных
         EventHandlers.loadApplications();
+
+        // Запуск автообновления
+        AutoRefresh.start();
     });
 
     // Экспорт модулей в глобальную область для доступа извне
@@ -2121,5 +2231,6 @@
     window.EventHandlers = EventHandlers;
     window.UIRenderer = UIRenderer;
     window.ModalManager = ModalManager;
+    window.AutoRefresh = AutoRefresh;
 
 })();
