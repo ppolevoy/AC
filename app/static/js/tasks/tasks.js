@@ -415,10 +415,53 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			// Добавляем секцию с ошибкой, если она есть
 			if (task.error) {
+				let errorContent = '';
+
+				if (task.parsed_error && task.parsed_error.summary) {
+					// Показываем распарсенную ошибку
+					errorContent += `<div class="error-summary">${escapeHtml(task.parsed_error.summary)}</div>`;
+
+					// Детали ошибок по хостам (если есть)
+					if (task.parsed_error.details && task.parsed_error.details.length > 0) {
+						errorContent += '<div class="error-details">';
+						errorContent += '<div class="error-details-header">Детали ошибки</div>';
+						errorContent += '<div class="error-details-content">';
+						for (const detail of task.parsed_error.details) {
+							errorContent += '<div class="error-detail-item">';
+							if (detail.host) {
+								errorContent += `<span class="error-host">[${escapeHtml(detail.host)}]</span> `;
+							}
+							errorContent += `<span class="error-message">${escapeHtml(detail.message)}</span>`;
+							errorContent += '</div>';
+						}
+						errorContent += '</div></div>';
+					}
+
+					// Предупреждения (свёрнуты по умолчанию)
+					if (task.parsed_error.warnings && task.parsed_error.warnings.length > 0) {
+						errorContent += '<div class="error-warnings collapsed">';
+						errorContent += `<div class="error-warnings-header" onclick="this.parentElement.classList.toggle('collapsed')">Предупреждения (${task.parsed_error.warnings.length})</div>`;
+						errorContent += '<div class="error-warnings-content">';
+						for (const warning of task.parsed_error.warnings) {
+							errorContent += `<div class="error-warning-item">${escapeHtml(warning)}</div>`;
+						}
+						errorContent += '</div></div>';
+					}
+
+					// Полный вывод (свёрнут по умолчанию)
+					errorContent += '<div class="error-raw collapsed">';
+					errorContent += '<div class="error-raw-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">Полный вывод</div>';
+					errorContent += `<pre class="error-raw-content">${escapeHtml(task.error)}</pre>`;
+					errorContent += '</div>';
+				} else {
+					// Fallback: показываем как раньше, если парсинг не удался
+					errorContent = `<div class="task-error">${escapeHtml(task.error)}</div>`;
+				}
+
 				const errorSection = {
 					title: 'Ошибка',
 					type: 'html',
-					content: `<div class="task-error">${task.error}</div>`
+					content: errorContent
 				};
 				sections.push(errorSection);
 			}

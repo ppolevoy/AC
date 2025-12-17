@@ -374,7 +374,8 @@
                     stats.disabled++;
                 } else if (status === 'online' || status === 'running') {
                     stats.online++;
-                } else if (status === 'offline' || status === 'stopped' || status === 'error') {
+                } else {
+                    // Все остальные статусы: offline, stopped, error, unknown, starting, stopping, no_data
                     stats.offline++;
                 }
             });
@@ -842,7 +843,7 @@
                     }
 
                     // Восстанавливаем обработчики
-                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators);
+                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators, apps);
                     return;
                 }
                 
@@ -996,7 +997,7 @@
                     dynamicContent.style.opacity = '1';
 
                     // Обработчики событий
-                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators);
+                    this.attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators, apps);
                 }, 200);
             };
             
@@ -1217,7 +1218,17 @@
             }
         },
 
-        attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators) {
+        attachFormEventHandlers(groupName, groupStates, groupArtifacts, updateFormContent, orchestrators, apps) {
+            // Получаем первое приложение из группы
+            const firstApp = apps[0];
+
+            // Функция для извлечения имени плейбука из пути
+            const getPlaybookNameFromPath = (path) => {
+                if (!path) return 'не задан';
+                const fileName = path.split('/').pop();
+                return fileName.replace(/\.(yml|yaml)$/i, '');
+            };
+
             // Обработчик селектора версий
             const select = document.getElementById('distr-url');
             const customGroup = document.getElementById('custom-url-group');

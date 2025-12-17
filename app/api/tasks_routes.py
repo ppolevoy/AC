@@ -1,4 +1,5 @@
 from flask import jsonify, request
+import json
 import logging
 import re
 
@@ -12,6 +13,15 @@ from app.api import bp
 from app.services.ssh_ansible_service import SSHAnsibleService
 
 logger = logging.getLogger(__name__)
+
+# Regex паттерны для парсинга ошибок Ansible (компилируются один раз)
+_SSH_WARNING_PATTERN = re.compile(r'^Warning:\s*Permanently\s+added.+$', re.MULTILINE | re.IGNORECASE)
+_ANSIBLE_WARNING_PATTERN = re.compile(r'^\[WARNING\]:\s*.+$', re.MULTILINE)
+_FATAL_JSON_PATTERN = re.compile(
+    r'fatal:\s*\[([^\]]+)\](?:\s*->\s*[^\]]+\])?\s*:\s*FAILED!\s*=>\s*(\{.+?\})(?=\s*$|\s*fatal:|\s*PLAY|\s*TASK)',
+    re.MULTILINE | re.DOTALL
+)
+_ERROR_PATTERN = re.compile(r'ERROR!\s*(.+?)(?=\n\n|\nThe error|\nPLAY|\Z)', re.DOTALL)
 
 
 def parse_ansible_summary(output: str) -> list:
@@ -183,6 +193,107 @@ def _parse_msg_content(msg_content: str) -> str:
         return ""
 
 
+def parse_ansible_error(error_text: str) -> dict:
+    """
+    Парсит вывод ошибки Ansible и извлекает полезную информацию.
+
+    Извлекает:
+    - fatal: [host]: FAILED! => {"msg": "..."}
+    - ERROR! message text
+
+    Фильтрует предупреждения:
+    - Warning: Permanently added... (SSH)
+    - [WARNING]: ... (Ansible)
+
+    Args:
+        error_text: Сырой текст ошибки из task.error
+
+    Returns:
+        dict с ключами:
+            - summary: Краткое сообщение об ошибке
+            - details: Список детальных ошибок [{host, message, type}]
+            - warnings: Список отфильтрованных предупреждений
+            - raw: Оригинальный текст
+    """
+    if not error_text:
+        return None
+
+    result = {
+        'summary': '',
+        'details': [],
+        'warnings': [],
+        'raw': error_text
+    }
+
+    # Извлекаем предупреждения (используем константы модуля)
+    for match in _SSH_WARNING_PATTERN.finditer(error_text):
+        result['warnings'].append(match.group().strip())
+    for match in _ANSIBLE_WARNING_PATTERN.finditer(error_text):
+        result['warnings'].append(match.group().strip())
+
+    error_messages = []
+
+    # Ищем fatal ошибки с JSON (используем константу модуля)
+    for match in _FATAL_JSON_PATTERN.finditer(error_text):
+        host = match.group(1).strip()
+        json_str = match.group(2).strip()
+
+        try:
+            data = json.loads(json_str)
+            # Приоритет: msg > stderr > module_stderr
+            msg = data.get('msg', '')
+            if not msg or msg == 'MODULE FAILURE':
+                msg = data.get('stderr', '') or data.get('module_stderr', '') or str(data)
+
+            # Очищаем msg от лишних пробелов и переносов
+            if isinstance(msg, str):
+                msg = ' '.join(msg.split())
+
+            result['details'].append({
+                'host': host,
+                'message': msg,
+                'type': 'fatal'
+            })
+            error_messages.append(msg)
+        except json.JSONDecodeError:
+            # Если JSON невалидный, используем как есть
+            result['details'].append({
+                'host': host,
+                'message': json_str,
+                'type': 'fatal'
+            })
+            error_messages.append(json_str)
+
+    # Ищем ERROR! сообщения (используем константу модуля)
+    for match in _ERROR_PATTERN.finditer(error_text):
+        msg = match.group(1).strip()
+        # Очищаем от лишних пробелов
+        msg = ' '.join(msg.split())
+        result['details'].append({
+            'host': '',
+            'message': msg,
+            'type': 'error'
+        })
+        error_messages.append(msg)
+
+    # Формируем summary
+    if error_messages:
+        if len(error_messages) == 1:
+            result['summary'] = error_messages[0][:500]  # Ограничиваем длину
+        else:
+            # Берём первую ошибку и добавляем счётчик
+            result['summary'] = f"{error_messages[0][:300]}... (+{len(error_messages)-1} ошибок)"
+    else:
+        # Fallback: убираем warnings и берём первые 200 символов
+        clean_text = error_text
+        for warning in result['warnings']:
+            clean_text = clean_text.replace(warning, '')
+        clean_text = ' '.join(clean_text.split())[:200]
+        result['summary'] = clean_text if clean_text else error_text[:200]
+
+    return result
+
+
 @bp.route('/tasks', methods=['GET'])
 def get_tasks():
     """Получение списка задач"""
@@ -317,6 +428,12 @@ def get_task(task_id):
         else:
             task_data['ansible_summary'] = []
             task_data['display_summaries'] = []
+
+        # Парсим сообщение об ошибке для лучшего отображения
+        if task.error:
+            task_data['parsed_error'] = parse_ansible_error(task.error)
+        else:
+            task_data['parsed_error'] = None
 
         # Добавляем параметры запуска для start/stop/restart задач
         if task.task_type in ['start', 'stop', 'restart']:

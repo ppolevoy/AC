@@ -310,3 +310,106 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }
 }
+
+/* =============================================================================
+   9. PARSED ERROR DISPLAY
+   ============================================================================= */
+
+.error-summary {
+    background-color: var(--color-danger-light);
+    border-left: 4px solid var(--color-danger);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    color: var(--color-danger);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    word-break: break-word;
+}
+
+.error-details,
+.error-warnings,
+.error-raw {
+    margin-bottom: var(--space-sm);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.error-details-header,
+.error-warnings-header,
+.error-raw-header {
+    background: var(--surface-raised);
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    user-select: none;
+}
+
+.error-details-header:hover,
+.error-warnings-header:hover,
+.error-raw-header:hover {
+    background: var(--surface-sunken);
+}
+
+.error-warnings-header::before,
+.error-raw-header::before {
+    content: '\25BC';
+    margin-right: var(--space-sm);
+    font-size: 10px;
+    transition: transform var(--transition-fast);
+}
+
+.error-warnings.collapsed .error-warnings-header::before,
+.error-raw.collapsed .error-raw-header::before {
+    transform: rotate(-90deg);
+}
+
+.error-details-content,
+.error-warnings-content,
+.error-raw-content {
+    padding: var(--space-md);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.error-warnings.collapsed .error-warnings-content,
+.error-raw.collapsed .error-raw-content {
+    display: none;
+}
+
+.error-detail-item {
+    margin-bottom: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--color-danger-light);
+    border-radius: var(--radius-sm);
+    word-break: break-word;
+}
+
+.error-host {
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.error-message {
+    color: var(--color-danger);
+}
+
+.error-warning-item {
+    color: var(--color-warning);
+    margin-bottom: var(--space-xs);
+    font-size: var(--font-size-sm);
+    word-break: break-word;
+}
+
+.error-raw-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--surface-sunken);
+    margin: 0;
+    color: var(--text-secondary);
+}
