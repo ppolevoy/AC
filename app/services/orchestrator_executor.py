@@ -218,6 +218,8 @@ class OrchestratorExecutor(ABC):
 
             if len(sorted_instances) >= 2:
                 # Парные экземпляры - чередуем распределение для балансировки
+                # Сохраняем initial_toggle для распределения 3+ элементов
+                initial_toggle = toggle
                 if toggle:
                     even_list.append(sorted_instances[1])
                     odd_list.append(sorted_instances[0])
@@ -227,11 +229,14 @@ class OrchestratorExecutor(ABC):
                 toggle = not toggle
 
                 # Если больше 2 экземпляров, распределяем остальные
-                for i, inst in enumerate(sorted_instances[2:], start=2):
-                    if i % 2 == 0:
-                        even_list.append(inst)
-                    else:
+                # Формула: (i % 2 == 0) XOR initial_toggle определяет целевой список
+                # Это гарантирует чередование между группами для балансировки по серверам
+                # Работает корректно для любого N серверов (3, 5, 7, 10, ...)
+                for i, inst in enumerate(sorted_instances[2:]):
+                    if (i % 2 == 0) != initial_toggle:
                         odd_list.append(inst)
+                    else:
+                        even_list.append(inst)
             else:
                 # Один экземпляр - кладём в менее заполненный список
                 if len(even_list) <= len(odd_list):

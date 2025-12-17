@@ -592,14 +592,27 @@
             // Обработчики для режимов обновления
             const modeRadios = document.querySelectorAll('input[name="mode"]');
             const immediateModeFields = document.getElementById('immediate-mode-fields');
+            const playbookNameEl = document.querySelector('.playbook-info .playbook-name');
+
+            // Сохраняем пути к плейбукам для разных режимов
+            const updatePlaybookPath = firstApp.effective_playbook_path;
+            const nightRestartPlaybookPath = firstApp.night_restart_playbook_path;
 
             modeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
-                    if (this.value === 'update') {
-                        immediateModeFields.style.display = 'block';
+                    const isUpdate = this.value === 'update';
+                    const isNightRestart = this.value === 'night-restart';
+
+                    // Показываем/скрываем поля orchestrator (только для режима 'update')
+                    immediateModeFields.style.display = isUpdate ? 'block' : 'none';
+                    if (isUpdate) {
                         immediateModeFields.classList.add('animated-slide-down');
-                    } else {
-                        immediateModeFields.style.display = 'none';
+                    }
+
+                    // Обновляем отображаемый плейбук
+                    if (playbookNameEl) {
+                        const path = isNightRestart ? nightRestartPlaybookPath : updatePlaybookPath;
+                        playbookNameEl.textContent = getPlaybookNameFromPath(path);
                     }
                 });
             });
@@ -1225,14 +1238,27 @@
             // Обработчики для режимов обновления
             const modeRadios = document.querySelectorAll('input[name="mode"]');
             const immediateModeFields = document.getElementById('immediate-mode-fields');
+            const playbookNameEl = document.querySelector('.playbook-info .playbook-name');
+
+            // Сохраняем пути к плейбукам для разных режимов
+            const updatePlaybookPath = firstApp.effective_playbook_path;
+            const nightRestartPlaybookPath = firstApp.night_restart_playbook_path;
 
             modeRadios.forEach(radio => {
                 radio.addEventListener('change', function() {
-                    if (this.value === 'update') {
-                        immediateModeFields.style.display = 'block';
+                    const isUpdate = this.value === 'update';
+                    const isNightRestart = this.value === 'night-restart';
+
+                    // Показываем/скрываем поля orchestrator (только для режима 'update')
+                    immediateModeFields.style.display = isUpdate ? 'block' : 'none';
+                    if (isUpdate) {
                         immediateModeFields.classList.add('animated-slide-down');
-                    } else {
-                        immediateModeFields.style.display = 'none';
+                    }
+
+                    // Обновляем отображаемый плейбук
+                    if (playbookNameEl) {
+                        const path = isNightRestart ? nightRestartPlaybookPath : updatePlaybookPath;
+                        playbookNameEl.textContent = getPlaybookNameFromPath(path);
                     }
                 });
             });

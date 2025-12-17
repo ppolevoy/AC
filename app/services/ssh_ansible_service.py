@@ -71,6 +71,7 @@ class SSHAnsibleService:
         'server': 'Имя сервера',
         'app': 'Имя приложения',
         'app_name': 'Имя приложения (алиас для app)',
+        'catalog_name': 'Имя приложения из каталога (для night-restart)',
         'action': 'Действие для управления приложением (start, stop, restart)',
         'image_url': 'URL до docker image (для docker-приложений, алиас для distr_url если не указан явно)',
         'distr_url': 'URL артефакта/дистрибутива',
@@ -279,6 +280,7 @@ class SSHAnsibleService:
                           distr_url: Optional[str] = None,
                           mode: Optional[str] = None,
                           image_url: Optional[str] = None,
+                          catalog_name: Optional[str] = None,
                           orchestrator_app_instances: Optional[str] = None,
                           orchestrator_drain_delay: Optional[int] = None,
                           orchestrator_update_playbook: Optional[str] = None,
@@ -296,6 +298,7 @@ class SSHAnsibleService:
             distr_url: URL дистрибутива (опционально)
             mode: Режим обновления (deliver, immediate, night-restart) (опционально)
             image_url: URL docker образа (опционально)
+            catalog_name: Имя приложения из каталога для night-restart (опционально)
             orchestrator_app_instances: Список составных имен server::app для orchestrator (опционально)
             orchestrator_drain_delay: Время ожидания после drain в секундах (опционально)
             orchestrator_update_playbook: Имя playbook для обновления (опционально)
@@ -325,6 +328,11 @@ class SSHAnsibleService:
             # Если image_url не задан явно, используем distr_url как алиас
             context_vars['image_url'] = distr_url
             logger.info(f"image_url установлен как алиас для distr_url: {distr_url}")
+
+        # Для night-restart: имя приложения из каталога
+        if catalog_name:
+            context_vars['catalog_name'] = catalog_name
+            logger.info(f"catalog_name для night-restart: {catalog_name}")
 
         # Добавляем параметры для orchestrator playbook
         if orchestrator_app_instances:
@@ -450,7 +458,8 @@ class SSHAnsibleService:
         distr_url: str,
         mode: str,
         playbook_path: Optional[str],
-        extra_params: Optional[Dict]
+        extra_params: Optional[Dict],
+        catalog_name: Optional[str] = None
     ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
         Подготавливает контекст для обновления приложения.
@@ -559,6 +568,7 @@ class SSHAnsibleService:
             distr_url=distr_url,
             mode=mode,
             image_url=image_url,
+            catalog_name=catalog_name,
             orchestrator_app_instances=orchestrator_params.get('app_instances'),
             orchestrator_drain_delay=orchestrator_params.get('drain_delay'),
             orchestrator_update_playbook=orchestrator_params.get('update_playbook'),
@@ -641,7 +651,8 @@ class SSHAnsibleService:
         mode: str,
         playbook_path: Optional[str] = None,
         extra_params: Optional[Dict] = None,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        catalog_name: Optional[str] = None
     ) -> Tuple[bool, str, str]:
         """
         Запуск Ansible playbook для обновления приложения через SSH.
@@ -660,6 +671,7 @@ class SSHAnsibleService:
             playbook_path: Путь к playbook с параметрами (опционально)
             extra_params: Дополнительные параметры для orchestrator (опционально)
             task_id: ID задачи для возможности отмены (опционально)
+            catalog_name: Имя приложения из каталога для night-restart (опционально)
 
         Returns:
             Tuple[bool, str, str]: (успех операции, информация о результате, вывод Ansible)
@@ -667,7 +679,8 @@ class SSHAnsibleService:
         try:
             # 1. PREPARE: Подготовка контекста
             prepare_ok, prepare_msg, context = await self._prepare_update_context(
-                server_name, app_name, app_id, distr_url, mode, playbook_path, extra_params
+                server_name, app_name, app_id, distr_url, mode, playbook_path, extra_params,
+                catalog_name=catalog_name
             )
 
             if not prepare_ok:

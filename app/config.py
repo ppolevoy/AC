@@ -75,8 +75,9 @@ class Config:
     DOCKER_UPDATE_PLAYBOOK = os.environ.get('DOCKER_UPDATE_PLAYBOOK', 'docker_update_playbook.yaml')
 
     # Плейбук для обновления в ночной рестарт
-    # Формат: путь {параметры} - например: playbook.yaml {app_name} {distr_url}
-    NIGHT_RESTART_PLAYBOOK = os.environ.get('NIGHT_RESTART_PLAYBOOK') or 'night_restart_update.yaml {server} {app_name} {distr_url}'
+    # Формат: путь {параметры} - например: playbook.yaml {catalog_name} {distr_url}
+    # catalog_name - имя приложения из каталога (например 'jurws'), а не имя экземпляра ('jurws_1')
+    NIGHT_RESTART_PLAYBOOK = os.environ.get('NIGHT_RESTART_PLAYBOOK') or 'night_restart_update.yaml {server} {catalog_name} {distr_url}'
     # DOCKER_REGISTRY_URL = os.environ.get('DOCKER_REGISTRY_URL', 'nexus.bankplus.ru')  # NOT USED
     # DOCKER_REGISTRY_PATH = os.environ.get('DOCKER_REGISTRY_PATH', 'repository/docker-local')  # NOT USED
 

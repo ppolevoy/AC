@@ -13,11 +13,52 @@ from app.models.tag import Tag, ApplicationInstanceTag, ApplicationGroupTag
 from app.tasks.queue import task_queue
 from app.models.task import Task
 from app.api import bp
+from app.core.playbook_parameters import PlaybookParameterParser
 
 # Алиас для обратной совместимости
 Application = ApplicationInstance
 
 logger = logging.getLogger(__name__)
+
+
+def build_night_restart_playbook_path(update_playbook_path: str = None) -> str:
+    """
+    Формирует путь к плейбуку для night-restart с явными параметрами.
+
+    Args:
+        update_playbook_path: Путь к update playbook группы (опционально)
+
+    Returns:
+        str: Путь к плейбуку с добавленными явными параметрами
+    """
+    base_playbook = Config.NIGHT_RESTART_PLAYBOOK
+
+    if update_playbook_path:
+        parsed = PlaybookParameterParser.parse(update_playbook_path)
+        explicit_params = parsed.get_explicit_params()
+        if explicit_params:
+            for name, value in explicit_params.items():
+                base_playbook = f"{base_playbook} {{{name}={value}}}"
+
+    return base_playbook
+
+
+def build_night_restart_paths_cache(groups: dict) -> dict:
+    """
+    Строит кэш night_restart_playbook_path для групп.
+
+    Args:
+        groups: Dict[group_id, ApplicationGroup]
+
+    Returns:
+        Dict[group_id, str]: Кэш путей по group_id (None для приложений без группы)
+    """
+    cache = {None: build_night_restart_playbook_path()}  # Базовый путь для apps без группы
+
+    for group_id, group in groups.items():
+        cache[group_id] = build_night_restart_playbook_path(group.update_playbook_path)
+
+    return cache
 
 
 @bp.route('/applications', methods=['GET'])
@@ -44,6 +85,10 @@ def get_applications():
         applications = query.all()
         app_ids = [app.id for app in applications]
         group_ids = {app.group_id for app in applications if app.group_id}
+
+        # Собираем группы для кэширования night_restart_playbook_path
+        groups_map = {app.group_id: app.group for app in applications if app.group}
+        night_restart_paths = build_night_restart_paths_cache(groups_map)
 
         # Предзагружаем теги приложений одним запросом
         app_tags_map = defaultdict(list)
@@ -91,7 +136,8 @@ def get_applications():
                 'start_time': app.start_time.isoformat() if app.start_time else None,
                 'tags': tags,
                 'group_tags': group_tags,
-                'effective_playbook_path': app.get_effective_playbook_path()
+                'effective_playbook_path': app.get_effective_playbook_path(),
+                'night_restart_playbook_path': night_restart_paths.get(app.group_id, night_restart_paths[None])
             })
 
         return jsonify({
@@ -406,23 +452,37 @@ def batch_update_applications():
         # Группируем приложения согласно стратегии группы
         groups = defaultdict(list)
 
-        # Определяем playbook_path для режима night-restart один раз
-        # Параметры {app_name} {distr_url} должны быть указаны в Config.NIGHT_RESTART_PLAYBOOK
-        night_restart_playbook = Config.NIGHT_RESTART_PLAYBOOK if mode == 'night-restart' else None
-
-        # Для night-restart: специальная группировка по catalog_name (base_name)
-        # Создаётся одна задача на каждое уникальное имя приложения из каталога
+        # Для night-restart: группировка по (server_id, catalog_name)
+        # Создаётся отдельная задача для каждого сервера и типа приложения
         if mode == 'night-restart':
+            from app.core.playbook_parameters import PlaybookParameterParser
+
             night_restart_groups = defaultdict(list)
             for app in applications:
                 catalog_name = app.base_name  # Использует catalog.name или парсит из instance_name
-                night_restart_groups[catalog_name].append(app)
+                # Группируем по серверу И catalog_name
+                group_key = (app.server_id, catalog_name)
+                night_restart_groups[group_key].append(app)
 
             # Создаём задачи для night-restart
             created_tasks = []
-            for catalog_name, apps_in_group in night_restart_groups.items():
+            for (server_id, catalog_name), apps_in_group in night_restart_groups.items():
                 grouped_app_ids = [app.id for app in apps_in_group]
                 first_app = apps_in_group[0]
+
+                # Базовый playbook из конфига
+                playbook_path = Config.NIGHT_RESTART_PLAYBOOK
+
+                # Извлекаем явные параметры из group.update_playbook_path
+                group = first_app.group
+                if group and group.update_playbook_path:
+                    parsed = PlaybookParameterParser.parse(group.update_playbook_path)
+                    explicit_params = parsed.get_explicit_params()
+                    if explicit_params:
+                        # Добавляем явные параметры к базовому playbook
+                        for name, value in explicit_params.items():
+                            playbook_path = f"{playbook_path} {{{name}={value}}}"
+                        logger.info(f"Night-restart для {catalog_name}@server_{server_id}: добавлены параметры {explicit_params}")
 
                 task = Task(
                     task_type='update',
@@ -431,9 +491,9 @@ def batch_update_applications():
                         'catalog_name': catalog_name,  # Оригинальное имя для плейбука
                         'distr_url': distr_url,
                         'mode': mode,
-                        'playbook_path': night_restart_playbook
+                        'playbook_path': playbook_path
                     },
-                    server_id=first_app.server_id,
+                    server_id=server_id,
                     instance_id=grouped_app_ids[0]
                 )
 
@@ -446,12 +506,12 @@ def batch_update_applications():
                         event_type='update',
                         description=f"Добавлено в рестарт: {catalog_name} (версия: {distr_url})",
                         status='pending',
-                        server_id=app.server_id,  # Исправлено: используем server_id конкретного приложения
+                        server_id=app.server_id,
                         instance_id=app.id
                     )
                     db.session.add(event)
 
-                logger.info(f"Создана задача night-restart для {catalog_name} (IDs: {grouped_app_ids}, task_id: {task.id})")
+                logger.info(f"Создана задача night-restart для {catalog_name}@server_{server_id} (IDs: {grouped_app_ids}, task_id: {task.id})")
 
             db.session.commit()
 
@@ -464,11 +524,8 @@ def batch_update_applications():
 
         for app in applications:
             # app уже является ApplicationInstance после рефакторинга
-            # Определяем playbook_path
-            if night_restart_playbook:
-                playbook_path = night_restart_playbook
-            else:
-                playbook_path = app.get_effective_playbook_path()
+            # Определяем playbook_path (night-restart обрабатывается выше с return)
+            playbook_path = app.get_effective_playbook_path()
 
             # Определяем ключ группировки на основе стратегии
             group = app.group
@@ -523,11 +580,7 @@ def batch_update_applications():
             # Получаем playbook_path и server_id из первого приложения группы
             first_app = apps_in_group[0]
             # first_app уже является ApplicationInstance после рефакторинга
-            # playbook_path уже определён в цикле группировки выше
-            if night_restart_playbook:
-                playbook_path = night_restart_playbook
-            else:
-                playbook_path = first_app.get_effective_playbook_path()
+            playbook_path = first_app.get_effective_playbook_path()
 
             # Создаем задачу для группы
             task = Task(

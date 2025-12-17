@@ -679,7 +679,8 @@ class TaskQueue:
                         mode=context.mode,
                         playbook_path=playbook_path,
                         extra_params=extra_params if extra_params else None,
-                        task_id=task_id
+                        task_id=task_id,
+                        catalog_name=context.params.get('catalog_name')
                     )
                 )
 

@@ -115,6 +115,7 @@ class PlaybookParameterParser:
         'server': 'Имя сервера',
         'app': 'Имя приложения',
         'app_name': 'Имя приложения (алиас для app)',
+        'catalog_name': 'Имя приложения из каталога (для night-restart)',
         'action': 'Действие для управления приложением (start, stop, restart)',
         'image_url': 'URL до docker image',
         'distr_url': 'URL артефакта/дистрибутива',
