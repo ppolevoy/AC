@@ -30,7 +30,8 @@ def get_database_url():
 class Config:
     # Базовая конфигурация
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'сложный-ключ-для-разработки'
-    
+    DEBUG = os.environ.get('FLASK_ENV') == 'development' or os.environ.get('DEBUG', 'false').lower() == 'true'
+
     # Настройки базы данных PostgreSQL
     SQLALCHEMY_DATABASE_URI = get_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
